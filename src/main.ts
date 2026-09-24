@@ -10,6 +10,9 @@ import { Player } from "./player";
 import { Sound, type Surface } from "./audio";
 import { Lifts } from "./lifts";
 import { makePost } from "./post";
+import { ART_URLS } from "./artImages";
+import { isTouch, setupTouch } from "./touch";
+import { takePhoto } from "./photo";
 import { Quests } from "./quests";
 
 const params = new URLSearchParams(location.search);
@@ -18,24 +21,34 @@ const seed = seedParam ? (/^\d+$/.test(seedParam) ? Number(seedParam) : hash(...
 setSeed(seed);
 const startFloor = params.has("floor") ? Math.max(FLOOR_MIN, Math.min(FLOOR_MAX, Number(params.get("floor")))) : 3 + (seed % 7);
 const debug = params.has("debug");
+const touch = isTouch() || params.has("touch");
+if (touch) document.body.classList.add("touch");
 
 const $ = (id: string) => document.getElementById(id)!;
 
 // --- renderer
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
 renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setPixelRatio(touch ? 1 : Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.info.autoReset = false;
 document.body.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.05, 2000);
-const atlas = makeTextureArray(renderer);
+const loadImg = (u: string) =>
+  new Promise<HTMLImageElement | null>((res) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => res(null);
+    i.src = u;
+  });
+const artImgs = await Promise.all(ART_URLS.map(loadImg));
+const atlas = makeTextureArray(renderer, artImgs, touch ? 256 : 512);
 const mat = makeWorldMaterial(atlas);
 const glassMat = makeGlassMaterial(mat);
 const workerUrl = (document.querySelector('meta[name="worker"]') as HTMLMetaElement | null)?.content || "/worker.js";
-const world = new World(workerUrl, seed, mat, glassMat);
+const world = new World(workerUrl, seed, mat, glassMat, touch ? 1 : 2);
 scene.add(world.root);
 const sky = makeSky();
 scene.add(sky);
@@ -82,6 +95,7 @@ function surfaceAt(f: number, gx: number, gz: number): { s: Surface; wet: number
   const i = (gz - cz * CH) * CH + (gx - cx * CH);
   switch (p.kind[i]) {
     case K.CORR:
+      if (p.zone[i] && p.st.atrium?.kind === "garden") return p.zone[i] === 2 ? { s: "tile", wet: 0.6 } : { s: "carpet", wet: 0.4 };
       if (p.zone[i] === 1 || p.zone[i] === 2) return { s: "wood", wet: 0.55 };
       return p.style === 0 ? { s: "tile", wet: 0.5 } : { s: "carpet", wet: 0.28 };
     case K.ROOM: {
@@ -117,6 +131,7 @@ let locked = false;
 let started = false;
 let interact = false;
 let lampTarget = 0;
+let photoRequested = false;
 let hudOn = true;
 let zoom = 0;
 const canvas = renderer.domElement;
@@ -130,6 +145,7 @@ document.addEventListener("keydown", (e) => {
   }
   if (e.code === "KeyF") lampTarget = lampTarget ? 0 : 1;
   if (e.code === "KeyM") sound.setMuted(!sound.muted);
+  if (e.code === "KeyP") photoRequested = true;
   if (e.code === "KeyH") {
     hudOn = !hudOn;
     $("hud").style.display = hudOn ? "" : "none";
@@ -151,12 +167,30 @@ document.addEventListener("pointerlockchange", () => {
     player.keys.clear();
   }
 });
+let playing = false; // touch devices: no pointer lock, the overlay decides
+const touchUi = touch
+  ? setupTouch(player, {
+      use: () => (interact = true),
+      quest: () => quests.cycle(),
+      lamp: () => (lampTarget = lampTarget ? 0 : 1),
+      photo: () => (photoRequested = true),
+      pause: () => {
+        playing = false;
+        touchUi?.reset();
+        $("overlay").classList.remove("hidden");
+        $("overlay").classList.add("paused");
+      },
+    })
+  : null;
 $("overlay").addEventListener("click", () => {
   if (!ready) return;
   started = true;
   sound.start();
   quests.start();
-  canvas.requestPointerLock();
+  if (touch) {
+    playing = true;
+    $("overlay").classList.add("hidden");
+  } else canvas.requestPointerLock?.();
 });
 $("seed").textContent = String(seed);
 ($("seedlink") as HTMLAnchorElement).href = `?seed=${seed}`;
@@ -252,7 +286,7 @@ function frame() {
   }
 
   if (ready) {
-    const active = locked || api.auto;
+    const active = locked || playing || api.auto;
     player.update(dt, world, active && !lifts.ride?.phase.startsWith("clos"));
     const used = quests.update(dt, interact && active);
     lifts.update(t, dt, interact && !used);
@@ -285,10 +319,21 @@ function frame() {
   post.cam.uniforms.time!.value = t;
   post.cam.uniforms.glitch!.value = lifts.ride?.phase === "moving" ? 0.15 + Math.random() * 0.1 : Math.random() < 0.002 ? 0.6 : 0;
   post.composer.render(dt);
+  if (photoRequested) {
+    // read the canvas right after rendering, before the browser clears it
+    photoRequested = false;
+    const gx = Math.floor(player.pos.x / CELL), gz = Math.floor(player.pos.z / CELL);
+    takePhoto(renderer.domElement, { hud: hudOn, tc: timecode(recT), floor: floorName(player.floor), loc: cellLabel(player.floor, gx, gz) });
+    sound.shutter();
+    const fl = $("flash");
+    fl.classList.remove("go");
+    void fl.offsetWidth;
+    fl.classList.add("go");
+  }
 
   // HUD
   recT += dt;
-  if (locked || api.auto) {
+  if (locked || playing || api.auto) {
     $("tc").textContent = timecode(recT);
     $("rec").style.visibility = Math.floor(t * 1.4) % 2 ? "hidden" : "visible";
     $("prompt").textContent = quests.prompt || lifts.prompt;
@@ -310,7 +355,7 @@ function frame() {
 }
 
 // expose for automation / debugging
-const api = { player, world, camera, lifts, sound, quests, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan };
+const api = { player, world, camera, lifts, sound, quests, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished };
 (window as any).__vrt = api;
 if (debug) $("debug").style.display = "block";
 frame();

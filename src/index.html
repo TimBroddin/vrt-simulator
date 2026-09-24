@@ -2,10 +2,12 @@
 <html lang="nl">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="worker" content="./worker.js" />
     <link rel="stylesheet" href="./style.css" />
     <link rel="icon" href="data:," />
+    <script src="https://stats.titans.sh/api/script.js" data-site-id="936602c0e987" defer></script>
     <title>VRT Simulator · een liminale wandeling door de Reyerstoren</title>
   </head>
   <body>
@@ -22,6 +24,17 @@
       <div id="toasts"></div>
     </div>
 
+    <div id="touch" style="display:none">
+      <div id="stick"><div id="knob"></div></div>
+      <div id="t-pause" class="tbtn small">❚❚</div>
+      <div id="t-photo" class="tbtn small foto">FOTO</div>
+      <div class="tbtns">
+        <div id="t-lamp" class="tbtn">LAMP</div>
+        <div id="t-quest" class="tbtn">QUEST</div>
+        <div id="t-use" class="tbtn big">E</div>
+      </div>
+    </div>
+
     <div id="overlay">
       <div class="card">
         <div class="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
@@ -31,9 +44,16 @@
           <p class="sub">een eindeloze wandeling door het oude VRT-gebouw</p>
         </div>
         <div class="load"><div id="loadbar"></div></div>
-        <p class="go">Klik om binnen te gaan</p>
-        <p class="resume">Klik om verder te gaan</p>
-        <div class="keys">
+        <p class="go"><span class="desk">Klik</span><span class="mob">Tik</span> om binnen te gaan</p>
+        <p class="resume"><span class="desk">Klik</span><span class="mob">Tik</span> om verder te gaan</p>
+        <div class="keys mob">
+          <span>linkerduim lopen (ver duwen = rennen)</span>
+          <span>rechterduim kijken</span>
+          <span><kbd>E</kbd> gebruiken</span>
+          <span><kbd>QUEST</kbd> wisselen</span>
+          <span class="rot">liggend spelen werkt het best</span>
+        </div>
+        <div class="keys desk">
           <span><kbd>WASD</kbd>/<kbd>ZQSD</kbd> lopen</span>
           <span><kbd>SHIFT</kbd> rennen</span>
           <span><kbd>E</kbd> gebruiken</span>
@@ -42,7 +62,9 @@
           <span><kbd>SCROLL</kbd> zoom</span>
           <span><kbd>M</kbd> geluid</span>
           <span><kbd>H</kbd> beeld</span>
+          <span><kbd>P</kbd> foto</span>
         </div>
+        <p class="credits">Door <a href="https://broddin.be" target="_blank" rel="noopener" onclick="event.stopPropagation()">Tim Broddin</a> &amp; Claude Opus<br />Met dank aan Vincent Schroeven en Matti Meurisse voor hun input op het scenario</p>
         <p class="seed">wereld <a id="seedlink"><span id="seed"></span></a> · geluid aan voor de beste ervaring</p>
       </div>
     </div>
@@ -50,11 +72,12 @@
       <div class="card">
         <div class="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
         <h1>ALLE QUESTS<br />GEHAALD</h1>
-        <p class="sub">Brooddoos, veter, paraplu, sleutels, Jan Becaus en zes stoelen. Tijd: <span id="endtime"></span></p>
+        <p class="sub">Brooddoos, veter, paraplu, sleutels, Jan Becaus, zes stoelen en geen kak in de toiletten. Tijd: <span id="endtime"></span></p>
         <p class="sub dim">Je mag naar huis. Alleen: de uitgang bestaat niet.</p>
         <p class="go2">klik om verder te dwalen</p>
       </div>
     </div>
+    <div id="flash"></div>
     <div id="debug"></div>
     <script type="module" src="./main.ts"></script>
   </body>

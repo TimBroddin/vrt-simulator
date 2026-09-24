@@ -87,7 +87,7 @@ export interface Structure {
   corr: Uint8Array;
   stair: null | { c: number; a: number; b: number; d: number };
   elevs: { c: number; e: number; d: number }[];
-  atrium: null | { x0: number; z0: number; x1: number; z1: number; f0: number; f1: number };
+  atrium: null | { x0: number; z0: number; x1: number; z1: number; f0: number; f1: number; kind: "lobby" | "garden" };
   court: null | { x0: number; z0: number; x1: number; z1: number };
   style: number;
 }
@@ -206,9 +206,13 @@ function makeStructure(cx: number, cz: number): Structure {
 
   // Atrium: a multi-storey void with galleries around it.
   let atrium: Structure["atrium"] = null;
-  if (rng.chance(0.16)) {
+  if (rng.chance(0.22)) {
+    // a lobby (square, red bench and tree) or a plantentuin (long, planters, glass roof, floating stair)
+    const garden = rng.chance(0.55);
     for (let t = 0; t < 40 && !atrium; t++) {
-      const w = rng.int(2, 3), d = rng.int(2, 3);
+      const long = rng.int(4, 6);
+      const alongX = rng.chance(0.5);
+      const w = garden ? (alongX ? long : 2) : rng.int(2, 3), d = garden ? (alongX ? 2 : long) : rng.int(2, 3);
       const x0 = rng.int(2, CH - 2 - w), z0 = rng.int(2, CH - 2 - d);
       const x1 = x0 + w - 1, z1 = z0 + d - 1;
       let ok = true;
@@ -221,9 +225,9 @@ function makeStructure(cx: number, cz: number): Structure {
           if (!isVoid && corr[idx(x, z)]) touches = true;
         }
       if (ok && touches) {
-        const f0 = rng.int(0, 4);
-        const f1 = Math.min(FLOOR_MAX - 1, f0 + rng.int(2, 6));
-        atrium = { x0, z0, x1, z1, f0, f1 };
+        const f0 = garden ? rng.int(0, 3) : rng.int(0, 4);
+        const f1 = Math.min(FLOOR_MAX - 1, f0 + rng.int(2, garden ? 5 : 6));
+        atrium = { x0, z0, x1, z1, f0, f1, kind: garden ? "garden" : "lobby" };
         for (let z = z0 - 1; z <= z1 + 1; z++)
           for (let x = x0 - 1; x <= x1 + 1; x++) if (!corr[idx(x, z)]) reserved[idx(x, z)] = 1;
       }
@@ -579,7 +583,7 @@ export function cellLabel(f: number, gx: number, gz: number): string {
   const k = p.kind[i];
   switch (k) {
     case K.CORR:
-      if (p.zone[i] === 1 || p.zone[i] === 2) return "ATRIUM";
+      if (p.zone[i] === 1 || p.zone[i] === 2) return p.st.atrium?.kind === "garden" ? "PLANTENTUIN" : "ATRIUM";
       return "GANG " + "ABCDEFGH"[mod(hash(61, p.cx, p.cz), 8)] + (1 + mod(hash(62, p.cx, p.cz), 9));
     case K.ROOM: {
       const r = p.rooms[p.room[i]!]!;
@@ -610,4 +614,34 @@ export function stairFrame(cx: number, cz: number) {
   const ox = cxw - (Dx + Px) * CELL * 0.5;
   const oz = czw - (Dz + Pz) * CELL * 0.5;
   return { ox, oz, Dx, Dz, Px, Pz, ax, az, d };
+}
+
+// The floating stair in a plantentuin: one straight flight along the long axis,
+// from the garden floor up to the first gallery. Same on every floor's plan.
+export interface GardenStair {
+  alongX: boolean;
+  b: number; // top edge (world coord along the axis)
+  sb: number; // bottom start
+  pc: number; // lateral centre
+  half: number;
+  run: number;
+  f0: number;
+}
+
+export function gardenStair(st: Structure): GardenStair | null {
+  const a = st.atrium;
+  if (!a || a.kind !== "garden") return null;
+  const alongX = a.x1 - a.x0 > a.z1 - a.z0;
+  const X0 = (st.cx * CH + a.x0) * CELL, X1 = (st.cx * CH + a.x1 + 1) * CELL;
+  const Z0 = (st.cz * CH + a.z0) * CELL, Z1 = (st.cz * CH + a.z1 + 1) * CELL;
+  const run = 6.3;
+  const b = alongX ? X1 : Z1;
+  return { alongX, b, sb: b - run, pc: alongX ? (Z0 + Z1) / 2 : (X0 + X1) / 2, half: 0.72, run, f0: a.f0 };
+}
+
+// Height of the stair under (x, z), or null when not on it.
+export function gardenRampY(g: GardenStair, x: number, z: number, H: number): number | null {
+  const s = g.alongX ? x : z, lat = g.alongX ? z : x;
+  if (Math.abs(lat - g.pc) > g.half || s < g.sb || s > g.b) return null;
+  return g.f0 * H + (H * (s - g.sb)) / g.run;
 }

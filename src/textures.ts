@@ -2,7 +2,8 @@
 // texture array so the whole building renders with a single material.
 import * as THREE from "three";
 import { FLOOR_MAX, FLOOR_MIN } from "./config";
-import { L, LAYER_COUNT } from "./layers";
+import { ART } from "./art";
+import { ART0, L, LABEL0, LAYER_COUNT } from "./layers";
 import { Rng } from "./rng";
 
 const S = 512;
@@ -689,11 +690,33 @@ function posters(c: Ctx, list: [string, string, string, string, string][]) {
   });
 }
 
-export function makeTextureArray(renderer: THREE.WebGLRenderer): THREE.DataArrayTexture {
+// Museum labels for the auctioned works, 8 per layer (2 x 4).
+function labels(c: Ctx, first: number) {
+  fill(c, "#e9e6df");
+  for (let k = 0; k < 8; k++) {
+    const a = ART[first + k];
+    if (!a) break;
+    const x = (k % 2) * 256, y = Math.floor(k / 2) * 128;
+    c.fillStyle = "#f6f4ef";
+    c.fillRect(x + 3, y + 3, 250, 122);
+    text(c, `LOT ${a.lot}`, x + 14, y + 20, 13, "#ff2e7e", "700", "left");
+    const artist = a.artist.length > 26 ? a.artist.slice(0, 25) + "…" : a.artist;
+    text(c, artist, x + 14, y + 44, artist.length > 20 ? 14 : 17, "#111", "800", "left");
+    const title = a.title.length > 30 ? a.title.slice(0, 29) + "…" : a.title;
+    text(c, title, x + 14, y + 68, 15, "#333", "italic 500", "left");
+    text(c, "Collectie VRT", x + 14, y + 96, 12, "#777", "600", "left");
+    text(c, "veiling Bernaerts", x + 14, y + 112, 12, "#777", "600", "left");
+  }
+}
+
+export function makeTextureArray(renderer: THREE.WebGLRenderer, art: (HTMLImageElement | null)[], size = S): THREE.DataArrayTexture {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = S;
   const c = canvas.getContext("2d", { willReadFrequently: true })!;
-  const data = new Uint8Array(S * S * 4 * LAYER_COUNT);
+  const small = document.createElement("canvas");
+  small.width = small.height = size;
+  const sc = small.getContext("2d", { willReadFrequently: true })!;
+  const data = new Uint8Array(size * size * 4 * LAYER_COUNT);
   for (let l = 0; l < LAYER_COUNT; l++) {
     c.save();
     c.globalAlpha = 1;
@@ -702,13 +725,23 @@ export function makeTextureArray(renderer: THREE.WebGLRenderer): THREE.DataArray
     c.fillRect(0, 0, S, S);
     const p = painters[l];
     if (p) p(c);
+    else if (l >= ART0 && l < LABEL0) {
+      const img = art[l - ART0];
+      if (img) c.drawImage(img, 0, 0, S, S);
+      else fill(c, "#777");
+    } else if (l >= LABEL0) labels(c, (l - LABEL0) * 8);
     c.restore();
-    const img = c.getImageData(0, 0, S, S).data;
+    let img: Uint8ClampedArray;
+    if (size !== S) {
+      sc.clearRect(0, 0, size, size);
+      sc.drawImage(canvas, 0, 0, size, size);
+      img = sc.getImageData(0, 0, size, size).data;
+    } else img = c.getImageData(0, 0, S, S).data;
     // flip rows so v = 0 is the bottom of the drawing
-    const base = l * S * S * 4;
-    for (let y = 0; y < S; y++) data.set(img.subarray((S - 1 - y) * S * 4, (S - y) * S * 4), base + y * S * 4);
+    const base = l * size * size * 4;
+    for (let y = 0; y < size; y++) data.set(img.subarray((size - 1 - y) * size * 4, (size - y) * size * 4), base + y * size * 4);
   }
-  const tex = new THREE.DataArrayTexture(data, S, S, LAYER_COUNT);
+  const tex = new THREE.DataArrayTexture(data, size, size, LAYER_COUNT);
   tex.format = THREE.RGBAFormat;
   tex.type = THREE.UnsignedByteType;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;

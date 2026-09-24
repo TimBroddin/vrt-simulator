@@ -14,6 +14,7 @@ export class Player {
   phase = 0;
   bob = 0;
   keys = new Set<string>();
+  analog = { x: 0, z: 0, run: false };
   running = false;
   speed = 0;
   shake = 0;
@@ -77,10 +78,12 @@ export class Player {
       if (k.has("KeyS") || k.has("ArrowDown")) fz += 1;
       if (k.has("KeyA") || k.has("ArrowLeft")) fx -= 1;
       if (k.has("KeyD") || k.has("ArrowRight")) fx += 1;
+      fx += this.analog.x;
+      fz += this.analog.z;
     }
-    this.running = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
+    this.running = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") || (active && this.analog.run);
     const len = Math.hypot(fx, fz);
-    const sp = this.running ? 3.6 : 1.9;
+    const sp = (this.running ? 3.6 : 1.9) * Math.min(1, len);
     let tx = 0, tz = 0;
     if (len > 0) {
       const s = Math.sin(this.yaw), c = Math.cos(this.yaw);

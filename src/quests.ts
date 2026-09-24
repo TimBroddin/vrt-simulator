@@ -1,6 +1,7 @@
 // Quests: find the right thing for the right person. Everything exists in the
 // building from the start, but only the active quest's object counts.
 import * as THREE from "three";
+import { IcosahedronGeometry } from "three";
 import { CELL, CH, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, floorName } from "./config";
 import { Builder, Frame, LightCtx, fbox, type RGB, type Spec } from "./builder";
 import { getFurnished } from "./furnish";
@@ -138,6 +139,7 @@ interface ItemDef {
 }
 
 const DARKS = sp(L.WHITE, [0.05, 0.05, 0.05]);
+const BLOB = new IcosahedronGeometry(1, 1);
 const glow = (c: RGB): Spec => ({ layer: L.WHITE, emit: c });
 
 const ITEMS: ItemDef[] = [
@@ -259,6 +261,9 @@ export class Quests {
   root = new THREE.Group();
   chairs: Chair[] = [];
   chairSpot: Spot | null = null;
+  toiletSpot: Spot | null = null;
+  toilets: { mesh: THREE.Mesh; x: number; y: number; z: number; nx: number; nz: number; flushed: boolean; k: number }[] = [];
+  flyT = 0;
   ghost: THREE.Mesh | null = null;
   ghostMat = new THREE.MeshBasicMaterial({ color: 0xd8ecff, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending });
   ghostTimer = 35;
@@ -279,6 +284,8 @@ export class Quests {
 
     const chairs = this.placeChairs(cx0, cz0);
     this.chairSpot = chairs;
+    const loos = this.placeToilets(cx0, cz0);
+    this.toiletSpot = loos?.spot ?? null;
     const janSpot = this.pickJanSpot(cx0, cz0, startFloor, new Rng(hash(901, 1)));
     this.jan = { spot: janSpot, obj: null, timer: 150 };
 
@@ -298,17 +305,24 @@ export class Quests {
         hint: () => `${where(chairs)} · ${this.chairs.filter((c) => c.target === 1).length}/${this.chairs.length} stoelen`,
         target: () => chairs,
       },
+      {
+        id: "kak", title: "Geen kak in de toiletten", goal: "Trek alle toiletten door", item: "de vuile toiletten",
+        doneText: "Alles doorgetrokken. Het sanitair is weer presentabel.", launchAt: 0, launched: false, done: false,
+        hint: () => `Iemand heeft niet doorgetrokken. ${where(this.toiletSpot)} · ${this.toilets.filter((t) => t.flushed).length}/${this.toilets.length}`,
+        target: () => this.toiletSpot,
+      },
     ];
     const itemQuests: Quest[] = items.map(({ d, spot }) => ({
       id: d.id, title: d.title, goal: d.goal, item: d.item, doneText: d.done, launchAt: 0, launched: false, done: false,
       hint: () => d.hint(where(spot)), target: () => spot,
     }));
-    // order: Ben, Tom, Jan, Felice, then the rest
-    this.quests = [itemQuests[0]!, itemQuests[1]!, special[0]!, special[1]!, ...itemQuests.slice(2)];
+    // order: Ben, Tom, Jan, Felice, the toilets, then the rest
+    this.quests = [itemQuests[0]!, itemQuests[1]!, special[0]!, special[1]!, ...(loos ? [special[2]!] : []), ...itemQuests.slice(2)];
     this.quests.forEach((q, k) => (q.launchAt = launch[k] ?? 375 + (k - 10) * 45));
     for (const q of this.quests) if (saved.has(q.id)) q.done = true;
     for (const { d, spot } of items) if (spot) this.addItem(d.id, spot, d.short, d.model);
     if (chairs) this.buildChairs(chairs);
+    if (loos) this.buildToilets(loos.spot, loos.seats);
     this.spawnJan();
   }
 
@@ -371,6 +385,49 @@ export class Quests {
     }
     const i = rng.pick(r.cells);
     return cellSpot(p.f, p.cx * CH + (i % CH), p.cz * CH + ((i / CH) | 0), label);
+  }
+
+  private placeToilets(cx0: number, cz0: number) {
+    const rng = new Rng(hash(915, 1));
+    const floors = floorsNear(this.startFloor);
+    const withStalls = (p: Plan, r: Room) =>
+      getFurnished(p.f, p.cx, p.cz).props.some((pr) => pr.t === "stalls" && p.room[idx(pr.gx - p.cx * CH, pr.gz - p.cz * CH)] === r.id);
+    let c = findRooms([RT.BATH], floors, cx0, cz0, 2, withStalls);
+    if (!c.length) c = findRooms([RT.BATH], floors, cx0, cz0, 3, withStalls);
+    if (!c.length) return null;
+    const { p, r } = rng.pick(c);
+    const seats: { x: number; y: number; z: number; nx: number; nz: number }[] = [];
+    for (const pr of getFurnished(p.f, p.cx, p.cz).props) {
+      if (pr.t !== "stalls" || p.room[idx(pr.gx - p.cx * CH, pr.gz - p.cz * CH)] !== r.id) continue;
+      const fr = new Frame(pr.x, pr.y, pr.z, pr.rot);
+      for (const x of [-0.475, 0.475]) {
+        const w = fr.p(x, 0.462, 0.28);
+        seats.push({ x: w[0], y: w[1], z: w[2], nx: fr.s, nz: fr.c });
+      }
+    }
+    const m = roomCenter(p, r);
+    const spot: Spot = { f: p.f, x: m.x, z: m.z, y: p.f * H, gx: Math.floor(m.x / CELL), gz: Math.floor(m.z / CELL), rot: 0, label: "sanitair" };
+    return { spot, seats };
+  }
+
+  private buildToilets(s: Spot, seats: { x: number; y: number; z: number; nx: number; nz: number }[]) {
+    const done = this.quests.find((q) => q.id === "kak")?.done;
+    if (done) return;
+    const rng = new Rng(hash(916, 1));
+    for (const seat of seats) {
+      const spot: Spot = { ...s, x: seat.x, y: seat.y, z: seat.z, rot: rng.range(0, 6.28) };
+      const mesh = this.build(spot, (b) => {
+        // the water, and what floats in it
+        b.hrect(-0.14, -0.17, 0.14, 0.17, 0.002, true, sp(L.PUDDLE, [0.55, 0.45, 0.25]), 0);
+        const brown = sp(L.WHITE, [0.34, 0.2, 0.08]);
+        const n = rng.int(2, 4);
+        for (let k = 0; k < n; k++) {
+          const r = 0.06 - k * 0.012;
+          b.geom(BLOB, rng.range(-0.03, 0.03), 0.02 + k * 0.035, rng.range(-0.03, 0.03), rng.range(0, 6), r * 1.2, r * 0.7, r, brown);
+        }
+      });
+      this.toilets.push({ mesh, x: seat.x, y: seat.y, z: seat.z, nx: seat.nx, nz: seat.nz, flushed: false, k: 0 });
+    }
   }
 
   private placeChairs(cx0: number, cz0: number): Spot | null {
@@ -548,7 +605,7 @@ export class Quests {
 
   private wrong(label: string) {
     this.sound.wrong();
-    this.toast("TELT NIET", `Dat is ${label}. Dat hoort bij een andere quest.`, "bad");
+    this.toast("TELT NIET", `Dit hoort bij een andere quest (${label}).`, "bad");
   }
 
   update(dt: number, interact: boolean): boolean {
@@ -572,6 +629,10 @@ export class Quests {
 
     // visibility follows the streamed chunks
     for (const o of this.objs) o.mesh.visible = o.alive && this.world.isReady(o.f, Math.floor(o.x / (CH * CELL)), Math.floor(o.z / (CH * CELL)));
+    if (this.toiletSpot) {
+      const ready = this.world.isReady(this.toiletSpot.f, Math.floor(this.toiletSpot.x / (CH * CELL)), Math.floor(this.toiletSpot.z / (CH * CELL)));
+      for (const t of this.toilets) t.mesh.visible = ready && t.k < 1;
+    }
 
     // Jan wanders off every few minutes (never while you are looking at him)
     const j = this.jan!;
@@ -661,6 +722,34 @@ export class Quests {
           if (this.chairs.every((c) => c.target === 1)) setTimeout(() => this.chairs.every((c) => c.target === 1) && !felQ.done && this.complete("felice"), 700);
         });
       }
+    const kakQ = this.quests.find((x) => x.id === "kak");
+    if (kakQ && !kakQ.done && this.toiletSpot) {
+      let near = 99;
+      for (const t of this.toilets) {
+        if (t.flushed) {
+          if (t.k < 1) {
+            t.k = Math.min(1, t.k + dt * 0.6);
+            t.mesh.scale.setScalar(Math.max(0.01, 1 - t.k));
+            t.mesh.rotation.y += dt * 8;
+            if (t.k >= 1) t.mesh.visible = false;
+          }
+          continue;
+        }
+        if (this.toiletSpot.f === pf) near = Math.min(near, Math.hypot(t.x - P.pos.x, t.z - P.pos.z));
+        consider(t.x, t.y, t.z, this.toiletSpot.f, this.active === "kak" ? "E · Doortrekken" : "E · Toilet", () => {
+          if (this.active !== "kak") return this.wrong(kakQ.item);
+          t.flushed = true;
+          this.sound.flush();
+          if (this.toilets.every((x) => x.flushed)) setTimeout(() => !kakQ.done && this.complete("kak"), 1600);
+        }, 2.5);
+      }
+      // flies
+      this.flyT -= dt;
+      if (near < 5 && this.flyT <= 0) {
+        this.flyT = 1.5 + Math.random() * 3;
+        this.sound.fly(1 - near / 5);
+      }
+    }
     if (best) {
       const b = best as { d: number; label: string; action: () => void };
       this.prompt = b.label;
@@ -709,7 +798,7 @@ export class Quests {
         ? `<div class="qa"><div class="qt">${q.goal}</div><div class="qh">${q.hint()}</div><div class="sig">SIGNAAL ${sig}</div></div>`
         : `<div class="qa"><div class="qt">Geen actieve quest</div></div>`) +
       (showList ? `<ul>${list.map((x) => `<li class="${x.done ? "done" : x.id === this.active ? "act" : ""}">${x.done ? "✓" : x.id === this.active ? "▶" : "·"} ${x.title}</li>`).join("")}</ul>` : "") +
-      `<div class="qk">${this.quests.filter((x) => x.done).length}/${this.quests.length} gehaald${list.filter((x) => !x.done).length > 1 ? ` · <kbd>TAB</kbd> andere quest` : ""}</div>`;
+      `<div class="qk">${this.quests.filter((x) => x.done).length}/${this.quests.length} gehaald${list.filter((x) => !x.done).length > 1 ? ` · <kbd>TAB</kbd><span class="mob">QUEST</span> andere quest` : ""}</div>`;
   }
 
   start() {

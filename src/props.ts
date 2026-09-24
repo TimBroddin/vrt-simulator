@@ -3,7 +3,8 @@ import { CylinderGeometry, IcosahedronGeometry, SphereGeometry } from "three";
 import { CEIL, DOOR_H } from "./config";
 import { Builder, Frame, UP, fbox, type RGB, type Spec } from "./builder";
 import type { Light, Prop } from "./furnish";
-import { L } from "./layers";
+import { ART0, L, LABEL0 } from "./layers";
+import { ART } from "./art";
 import { Rng } from "./rng";
 
 const CYL = new CylinderGeometry(1, 1, 1, 14, 1);
@@ -421,6 +422,58 @@ export function buildProp(b: Builder, pr: Prop) {
       cyl(b, fr, 0, 0, 0, 0.14, 0.7, sp(L.STEEL, [0.7, 0.72, 0.74]));
       cyl(b, fr, 0, 0.7, 0, 0.26, 0.12, sp(L.STEEL, [0.6, 0.62, 0.64]));
       break;
+    case "art": {
+      const art = ART[pr.a]!;
+      const { w, h } = art;
+      const fw = art.frame === "none" ? 0 : art.frame === "steel" ? 0.035 : 0.045;
+      const fs =
+        art.frame === "wood" ? sp(L.WOOD_FLOOR, [0.32, 0.22, 0.15]) : art.frame === "alu" ? sp(L.STEEL, [0.85, 0.86, 0.88]) : sp(L.WHITE, [0.16, 0.16, 0.17]);
+      fbox(b, fr, 0, -h / 2, 0.02, w, h, 0.035, { all: sp(L.WHITE, [0.25, 0.24, 0.22]), pz: { layer: ART0 + pr.a, uv: [0, 0, 1, 1] } });
+      if (fw) {
+        fbox(b, fr, 0, h / 2, 0.028, w + 2 * fw, fw, 0.055, fs);
+        fbox(b, fr, 0, -h / 2 - fw, 0.028, w + 2 * fw, fw, 0.055, fs);
+        fbox(b, fr, -w / 2 - fw / 2, -h / 2, 0.028, fw, h, 0.055, fs);
+        fbox(b, fr, w / 2 + fw / 2, -h / 2, 0.028, fw, h, 0.055, fs);
+      }
+      // picture lamp
+      if (pr.b) {
+        fbox(b, fr, 0, h / 2 + fw + 0.12, 0.02, 0.05, 0.05, 0.04, sp(L.WOOD_FLOOR, [0.75, 0.6, 0.3]));
+        fbox(b, fr, 0, h / 2 + fw + 0.12, 0.14, Math.min(0.7, w * 0.6), 0.045, 0.06, { all: sp(L.WOOD_FLOOR, [0.75, 0.6, 0.3]), ny: { layer: L.WHITE, emit: [1.6, 1.3, 0.9] } });
+      }
+      // museum label, beside the work (or below it for the wide ones)
+      const k = pr.a % 8;
+      const u0 = (k % 2) * 0.5, v0 = 0.75 - Math.floor(k / 2) * 0.25;
+      const lbl: Spec = { layer: LABEL0 + Math.floor(pr.a / 8), uv: [u0, v0, u0 + 0.5, v0 + 0.25] };
+      if (w + fw * 2 + 0.5 < 2.7) fbox(b, fr, w / 2 + fw + 0.2, -0.22, 0.008, 0.24, 0.12, 0.012, { all: GREY, pz: lbl });
+      else fbox(b, fr, w / 2 - 0.12, -h / 2 - fw - 0.2, 0.008, 0.24, 0.12, 0.012, { all: GREY, pz: lbl });
+      break;
+    }
+    case "planter": {
+      const pl = sp(L.CONCRETE, [0.92, 0.92, 0.9]);
+      fbox(b, fr, 0, 0, 0, 1.4, 0.55, 1.1, { all: pl, py: null }, true);
+      b.hrect(pr.x - 0.66, pr.z - 0.66, pr.x + 0.66, pr.z + 0.66, pr.y + 0.5, true, sp(L.GRAVEL, [0.28, 0.22, 0.16]), 0);
+      const leaf = sp(L.FOLIAGE, [0.55, 0.8, 0.5]);
+      for (let k = 0; k < 5; k++)
+        b.geom(BLOB, pr.x + rng.range(-0.45, 0.45), pr.y + 0.7 + rng.range(0, 0.25), pr.z + rng.range(-0.35, 0.35), rng.range(0, 6), rng.range(0.3, 0.45), rng.range(0.25, 0.4), rng.range(0.3, 0.45), leaf);
+      if (pr.a) {
+        // a ficus reaching for the glass roof
+        const th = rng.range(2.4, 3.6);
+        b.geom(CYL6, pr.x, pr.y + 0.5 + th / 2, pr.z, 0, 0.07, th, 0.07, sp(L.WOOD_FLOOR, [0.4, 0.32, 0.24]));
+        for (let k = 0; k < 8; k++) {
+          const a = rng.range(0, 6.28), r = rng.range(0.1, 0.8);
+          b.geom(BLOB, pr.x + Math.cos(a) * r, pr.y + 0.5 + th * rng.range(0.55, 1.1), pr.z + Math.sin(a) * r, a, rng.range(0.5, 0.8), rng.range(0.45, 0.7), rng.range(0.5, 0.8), leaf);
+        }
+      }
+      break;
+    }
+    case "screens": {
+      for (const x of [-0.45, 0.45]) {
+        fbox(b, fr, x, 0, 0, 0.08, 1.1, 0.08, sp(L.STEEL, [0.8, 0.8, 0.82]));
+        fbox(b, fr, x, 1.1, 0.03, 0.62, 1.05, 0.06, { all: DARK, pz: { layer: x < 0 ? L.NWSWALL : L.TV_GEDULD, emit: [0.95, 0.95, 1.0], uv: x < 0 ? [0.1, 0, 0.7, 1] : [0.3, 0, 0.7, 1] } });
+      }
+      fbox(b, fr, 0, 0, 0, 1.3, 0.05, 0.5, DARK, true);
+      break;
+    }
     case "puddle": {
       const s = pr.a;
       b.quad(fr.p(-s, 0.006, -s * 0.7), [fr.c * 2 * s, 0, -fr.s * 2 * s], [fr.s * 1.4 * s, 0, fr.c * 1.4 * s], [0, 1, 0], { layer: L.PUDDLE, uv: [0, 0, 1, 1] }, 0);

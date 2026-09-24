@@ -273,6 +273,12 @@ export class Sound {
     this.motorGain.gain.setTargetAtTime(on ? 0.12 : 0, this.ctx.currentTime, on ? 0.6 : 0.3);
   }
 
+  shutter() {
+    if (!this.ctx) return;
+    this.burst(0.03, "highpass", 3000, 0.7, 0.4, 0, 0, 0.1);
+    this.burst(0.05, "bandpass", 1800, 2, 0.3, 0.07, 0, 0.1);
+  }
+
   chime() {
     if (!this.ctx) return;
     [659, 523, 392].forEach((f, k) => this.tone(f, 1.6, 0.08, k * 0.45, "sine", 0, 1.5));
@@ -298,6 +304,43 @@ export class Sound {
   creak(pan = 0) {
     if (!this.ctx) return;
     for (let i = 0; i < 8; i++) this.burst(0.09, "bandpass", 500 + Math.random() * 500, 12, 0.08, i * 0.07, pan, 2);
+  }
+
+  flush() {
+    if (!this.ctx) return;
+    this.burst(1.8, "lowpass", 1400, 0.7, 0.35, 0, 0, 0.6);
+    this.burst(1.2, "bandpass", 350, 2, 0.25, 0.4, 0, 0.6);
+    for (let i = 0; i < 6; i++) this.tone(180 + Math.random() * 220, 0.12, 0.03, 0.9 + i * 0.15 + Math.random() * 0.1, "sine", 0, 0.5);
+  }
+
+  fly(k: number) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = "sawtooth";
+    o.frequency.setValueAtTime(210, t);
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 9;
+    const lg = ctx.createGain();
+    lg.gain.value = 25;
+    lfo.connect(lg).connect(o.frequency);
+    const f = ctx.createBiquadFilter();
+    f.type = "bandpass";
+    f.frequency.value = 900;
+    f.Q.value = 1.5;
+    const g = ctx.createGain();
+    const dur = 0.8 + Math.random() * 1.2;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.02 * k, t + 0.2);
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    const p = ctx.createStereoPanner();
+    p.pan.value = Math.random() * 2 - 1;
+    o.connect(f).connect(g).connect(p).connect(this.dry);
+    o.start(t);
+    lfo.start(t);
+    o.stop(t + dur + 0.1);
+    lfo.stop(t + dur + 0.1);
   }
 
   beep(k: number) {

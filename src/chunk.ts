@@ -3,7 +3,7 @@
 import { CEIL, CELL, CH, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, ST_HALF, ST_U1, ST_U2, ST_VM, T } from "./config";
 import { Builder, LightCtx, UP, type Built, type RGB, type Spec, type V3 } from "./builder";
 import { getFurnished } from "./furnish";
-import { K, RT, SK, getStructure, kindAt, sideAt, stairFrame, type Plan } from "./layout";
+import { K, RT, SK, gardenStair, getStructure, kindAt, sideAt, stairFrame, type GardenStair, type Plan } from "./layout";
 import { L } from "./layers";
 import { buildFixture, buildProp } from "./props";
 
@@ -36,6 +36,10 @@ function surf(p: Plan, i: number): Surf {
   const k = p.kind[i];
   switch (k) {
     case K.CORR:
+      if ((p.zone[i] === 1 || p.zone[i] === 2) && p.st.atrium?.kind === "garden")
+        return p.zone[i] === 2
+          ? { floor: sp(L.TILEDARK, [0.75, 0.75, 0.75]), ceil: null, wall: sp(L.PLASTER), h: CEIL, base: false }
+          : { floor: sp(L.CARPET_GREY, [0.6, 0.6, 0.64]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.95, 0.94, 0.9]), h: CEIL, base: true };
       if (p.zone[i] === 1 || p.zone[i] === 2)
         return { floor: sp(L.WOOD_FLOOR, [0.9, 0.84, 0.76]), ceil: sp(L.CEILTILE), wall: sp(L.WOODSLAT, [0.95, 0.85, 0.75]), h: CEIL, base: false };
       if (p.style === 0) return { floor: sp(L.TILEDARK), ceil: sp(L.WOODSLAT, [0.5, 0.4, 0.32]), wall: sp(L.BRICK), h: CEIL, base: false };
@@ -82,6 +86,8 @@ export function buildChunk(f: number, cx: number, cz: number) {
     emitCell(b, p, i, gx, gz, y0, elevs);
   }
   if (p.st.stair) buildStair(b, p);
+  const gs = gardenStair(p.st);
+  if (gs && f === gs.f0) buildGardenStair(b, gs, cx, cz);
   for (const l of fur.lights) buildFixture(b, l);
   for (const pr of fur.props) buildProp(b, pr);
   return { built: b.finish(), elevs };
@@ -101,7 +107,14 @@ function emitCell(b: Builder, p: Plan, i: number, gx: number, gz: number, y0: nu
   if (k === K.COURT) return;
   if (k === K.VOID) {
     const a = p.st.atrium!;
-    if (f === a.f1) {
+    if (f === a.f1 && a.kind === "garden") {
+      // glass roof: big luminous panels in a steel grid
+      b.hrect(x0, z0, x1, z1, y0 + CEIL + 0.01, false, { layer: L.FROSTED, emit: [1.7, 1.66, 1.55], uv: [0, 0, 2, 2] }, 0);
+      for (const o of [0, 1.5]) {
+        b.aabox(x0, y0 + CEIL - 0.1, z0 + o - 0.04, x1, y0 + CEIL, z0 + o + 0.04, DARKTRIM);
+        b.aabox(x0 + o - 0.04, y0 + CEIL - 0.1, z0, x0 + o + 0.04, y0 + CEIL, z1, DARKTRIM);
+      }
+    } else if (f === a.f1) {
       b.hrect(x0, z0, x1, z1, y0 + CEIL + 0.01, false, { layer: L.FROSTED, emit: [1.45, 1.5, 1.58], uv: [0, 0, 1, 1] }, 0);
       b.aabox(x0, y0 + CEIL - 0.08, z0 + 1.45, x1, y0 + CEIL, z0 + 1.55, DARKTRIM);
       b.aabox(x0 + 1.45, y0 + CEIL - 0.08, z0, x0 + 1.55, y0 + CEIL, z1, DARKTRIM);
@@ -346,12 +359,33 @@ function emitSide(b: Builder, p: Plan, i: number, gx: number, gz: number, d: num
       break;
     }
     case SK.RAIL: {
-      const rs = BLACKSTEEL;
-      for (const m of [-1.45, -0.5, 0.5, 1.45]) sbox(m - 0.025, m + 0.025, 0.03, 0.08, 0, 1.05, rs);
-      sbox(-half, half, 0.02, 0.09, 1.02, 1.07, rs);
-      for (const y of [0.3, 0.55, 0.8]) sbox(-half, half, 0.045, 0.065, y, y + 0.02, rs);
+      const gs = gardenStair(p.st);
       b.vrect(axisX, plane(0), A(-half), A(half), y0 - (H - CEIL), y0, Dn, sp(L.PLASTER, [0.85, 0.85, 0.83]), 0, y0);
-      seg(-half, half, 0, 0.1);
+      if (!gs) {
+        const rs = BLACKSTEEL;
+        for (const m of [-1.45, -0.5, 0.5, 1.45]) sbox(m - 0.025, m + 0.025, 0.03, 0.08, 0, 1.05, rs);
+        sbox(-half, half, 0.02, 0.09, 1.02, 1.07, rs);
+        for (const y of [0.3, 0.55, 0.8]) sbox(-half, half, 0.045, 0.065, y, y + 0.02, rs);
+        seg(-half, half, 0, 0.1);
+        break;
+      }
+      // plantentuin: white parapet, steel posts, dark handrail; open where the stair lands
+      const segs: [number, number][] = [];
+      const topEdge = f === gs.f0 + 1 && axisX === gs.alongX && Math.abs(plane(0) - gs.b) < 0.01;
+      if (topEdge) {
+        const g0 = (gs.pc - gs.half - 0.08 - ca) * Pc, g1 = (gs.pc + gs.half + 0.08 - ca) * Pc;
+        const lo = Math.min(g0, g1), hi = Math.max(g0, g1);
+        if (lo > -half) segs.push([-half, lo]);
+        if (hi < half) segs.push([hi, half]);
+      } else segs.push([-half, half]);
+      const white = sp(L.PLASTER, [0.95, 0.95, 0.93]);
+      for (const [a0, a1] of segs) {
+        sbox(a0, a1, 0, 0.12, 0, 0.92, white);
+        sbox(a0, a1, -0.01, 0.13, 0.92, 0.95, sp(L.STEEL, [0.8, 0.8, 0.82]));
+        for (let m = a0 + 0.1; m < a1; m += 0.9) sbox(m - 0.015, m + 0.015, 0.05, 0.08, 0.95, 1.12, sp(L.STEEL, [0.85, 0.86, 0.88]));
+        sbox(a0, a1, 0.03, 0.1, 1.1, 1.16, sp(L.WHITE, [0.12, 0.1, 0.09]));
+        seg(a0, a1, 0, 0.13);
+      }
       break;
     }
   }
@@ -479,4 +513,46 @@ export function buildExterior(cx: number, cz: number): Built | null {
   b.hrect(X0, Z0, X1, Z0 + 0.6, 0.01, true, sp(L.GRAVEL), 0);
   b.hrect(X0, Z1 - 0.6, X1, Z1, 0.01, true, sp(L.GRAVEL), 0);
   return b.finish();
+}
+
+// The floating stair of the plantentuin: open glass-blue treads between two
+// dark steel stringers, handrails on posts.
+function buildGardenStair(b: Builder, g: GardenStair, cx: number, cz: number) {
+  const y0 = g.f0 * H;
+  const P = (s: number, lat: number, y: number): V3 => (g.alongX ? [s, y0 + y, g.pc + lat] : [g.pc + lat, y0 + y, s]);
+  const ax: V3 = g.alongX ? [1, 0, 0] : [0, 0, 1];
+  const lx: V3 = g.alongX ? [0, 0, 1] : [1, 0, 0];
+  const cellOf = (s: number) => {
+    const p = P(s, 0, 0);
+    b.cell(Math.floor(p[0] / CELL), Math.floor(p[2] / CELL));
+  };
+  const beam = (s0: number, y0b: number, s1: number, y1b: number, lat: number, hw: number, hh: number, spec: Spec) => {
+    const ds = s1 - s0, dy = y1b - y0b, len = Math.hypot(ds, dy);
+    const a: V3 = [(ax[0] * ds) / len, dy / len, (ax[2] * ds) / len];
+    const up: V3 = [(-ax[0] * dy) / len, ds / len, (-ax[2] * dy) / len];
+    cellOf((s0 + s1) / 2);
+    const c = P((s0 + s1) / 2, lat, (y0b + y1b) / 2);
+    b.obox(c, a, up, lx, [len / 2, hh, hw], spec);
+  };
+  const n = 20, rise = H / n, run = g.run / n;
+  const tread = sp(L.WHITE, [0.55, 0.78, 0.82]);
+  const steel = sp(L.WHITE, [0.1, 0.09, 0.09]);
+  for (let i = 0; i < n; i++) {
+    const s0 = g.sb + i * run;
+    cellOf(s0 + run / 2);
+    const c = P(s0 + run / 2, 0, (i + 1) * rise - 0.025);
+    b.obox(c, ax, UP, lx, [run / 2 + 0.01, 0.025, g.half], { all: tread });
+  }
+  for (const side of [-1, 1]) {
+    beam(g.sb, -0.2, g.b, H - 0.15, side * (g.half + 0.04), 0.03, 0.14, steel);
+    beam(g.sb - 0.1, 1.0, g.b, H + 1.0, side * (g.half + 0.06), 0.025, 0.03, steel);
+    for (let k = 0; k <= 5; k++) {
+      const s = g.sb + 0.3 + (k / 5) * (g.run - 0.6);
+      const y = ((s - g.sb) / g.run) * H;
+      cellOf(s);
+      b.obox(P(s, side * (g.half + 0.06), y + 0.5), ax, UP, lx, [0.012, 0.5, 0.012], { all: sp(L.STEEL, [0.85, 0.86, 0.88]) });
+    }
+  }
+  void cx;
+  void cz;
 }

@@ -88,3 +88,66 @@ kbd { font: 600 11px var(--osd); border: 1px solid rgba(255, 255, 255, 0.4); bor
 #endcard h1 { font-size: clamp(40px, 8vw, 84px); }
 #endcard .dim { opacity: 0.5; margin-top: -20px; }
 .go2 { font: 600 13px var(--osd); letter-spacing: 0.2em; text-transform: uppercase; opacity: 0.7; }
+
+/* touch */
+.mob { display: none; }
+body.touch .mob { display: initial; }
+body.touch .keys.mob { display: flex; }
+body.touch .desk { display: none !important; }
+.rot { opacity: 0.6; }
+#touch { position: fixed; inset: 0; touch-action: none; user-select: none; -webkit-user-select: none; }
+#overlay, #endcard { touch-action: manipulation; }
+#stick { position: absolute; display: none; width: 112px; height: 112px; margin: -56px 0 0 -56px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(255, 255, 255, 0.05); }
+#knob { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; border-radius: 50%; background: rgba(255, 255, 255, 0.45); }
+.tbtns { position: absolute; right: calc(24px + env(safe-area-inset-right)); bottom: calc(96px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
+.tbtn { display: grid; place-items: center; min-width: 58px; height: 44px; padding: 0 12px; border-radius: 22px; background: rgba(0, 0, 0, 0.4); border: 2px solid rgba(255, 255, 255, 0.5); font: 700 12px var(--osd); letter-spacing: 0.1em; color: #fff; }
+.tbtn.big { width: 76px; height: 76px; border-radius: 50%; font-size: 26px; border-color: var(--pink); }
+.tbtn.down { background: rgba(255, 46, 126, 0.5); }
+.tbtn.small { position: absolute; top: calc(18px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); min-width: 44px; height: 34px; font-size: 12px; }
+
+@media (max-width: 900px), (max-height: 520px) {
+  #hud { font-size: 11px; }
+  #hud .br { width: 20px; height: 20px; }
+  #hud .tl { top: 12px; left: 12px; } #hud .tr { top: 12px; right: 12px; } #hud .bl { bottom: 12px; left: 12px; } #hud .br2 { bottom: 12px; right: 12px; }
+  #top-left { top: 20px; left: 26px; }
+  #top-right { top: 18px; right: 26px; }
+  .drop { width: 22px; height: 22px; font-size: 10px; }
+  #bottom-left { bottom: 20px; left: 26px; }
+  #floor { font-size: 13px; }
+  #bottom-right { bottom: 20px; right: 26px; }
+  #quest { top: 50px; right: 26px; width: 240px; font-size: 10px; }
+  #quest .qt { font-size: 12px; }
+  #toasts { top: 18%; }
+  .toast { max-width: 80vw; padding: 6px 10px; }
+  .toast span { font-size: 12px; }
+  #prompt { top: 64%; }
+  .sub { font-size: 14px; margin: 10px 0 20px; }
+  .bars { margin-bottom: 20px; }
+  .keys { font-size: 12px; }
+}
+body.touch #bottom-right { display: none; }
+@media (max-height: 520px) {
+  .card { width: min(720px, 94vw); }
+  h1 { font-size: 15vh; }
+  h1.pause, #endcard h1 { font-size: 11vh; }
+  .bars { height: 6px; margin-bottom: 14px; }
+  .sub { margin: 6px 0 14px; }
+  .go, .resume { margin-bottom: 14px; }
+  .load { margin-bottom: 14px; }
+  .seed { margin-top: 12px; }
+}
+body.touch #quest { left: 26px; right: auto; top: 44px; width: min(300px, 40vw); text-align: left; }
+body.touch #quest .qa { border-right: 0; border-left: 3px solid var(--pink); padding: 0 0 0 8px; }
+body.touch #quest .sig { justify-content: flex-start; }
+body.touch #quest .qk kbd { display: none; }
+body.touch #toasts { top: 40%; }
+body.touch #toasts { top: auto; bottom: 18%; }
+#flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+#flash.go { animation: flash 0.35s ease-out; }
+@keyframes flash { 0% { opacity: 0.7; } 100% { opacity: 0; } }
+.credits { margin: 22px 0 0; font-size: 12px; line-height: 1.6; opacity: 0.55; }
+@media (max-height: 520px) { .credits { margin-top: 10px; font-size: 10px; line-height: 1.4; } }
+.tbtn.small.foto { transform: none; left: calc(50% + 34px); }
+.tbtn.small:not(.foto) { transform: translateX(calc(-100% - 10px)); left: calc(50% + 24px); }
+.credits a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.credits a:hover { color: var(--pink); }

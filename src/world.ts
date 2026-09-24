@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { CELL, CH, FLOOR_MAX, FLOOR_MIN, H, ST_HALF, ST_U1, ST_U2, ST_VM } from "./config";
 import type { Built } from "./builder";
 import type { ElevOut } from "./chunk";
-import { K, getStructure, kindAt, stairFrame } from "./layout";
+import { K, gardenRampY, gardenStair, getStructure, kindAt, stairFrame } from "./layout";
 import { floorDiv } from "./rng";
 
 export interface ElevRT {
@@ -48,8 +48,8 @@ export class World {
   extraBoxes: { f: number; box: [number, number, number, number] }[] = [];
   onChunkMs: (ms: number) => void = () => {};
 
-  constructor(workerUrl: string, seed: number, public mat: THREE.ShaderMaterial, public glassMat: THREE.ShaderMaterial) {
-    const n = Math.max(2, Math.min(4, (navigator.hardwareConcurrency || 4) - 1));
+  constructor(workerUrl: string, seed: number, public mat: THREE.ShaderMaterial, public glassMat: THREE.ShaderMaterial, public radius = 2) {
+    const n = radius < 2 ? 2 : Math.max(2, Math.min(4, (navigator.hardwareConcurrency || 4) - 1));
     for (let i = 0; i < n; i++) {
       const w = new Worker(workerUrl, { type: "module" });
       w.postMessage({ type: "init", seed });
@@ -151,8 +151,9 @@ export class World {
       const cur = want.get(k);
       if (!cur || cur.pri > pri) want.set(k, { key: k, kind: "chunk", f: ff, cx, cz, pri });
     };
-    for (let dz = -2; dz <= 2; dz++)
-      for (let dx = -2; dx <= 2; dx++) {
+    const R = this.radius;
+    for (let dz = -R; dz <= R; dz++)
+      for (let dx = -R; dx <= R; dx++) {
         const d = Math.max(Math.abs(dx), Math.abs(dz));
         const cx = pcx + dx, cz = pcz + dz;
         add(f, cx, cz, d + Math.hypot(dx, dz) * 0.01);
@@ -164,8 +165,8 @@ export class World {
         }
       }
     const wantExt = new Map<string, Job>();
-    for (let dz = -2; dz <= 2; dz++)
-      for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -R; dz <= R; dz++)
+      for (let dx = -R; dx <= R; dx++) {
         const cx = pcx + dx, cz = pcz + dz;
         if (getStructure(cx, cz).court) wantExt.set(`${cx},${cz}`, { key: `${cx},${cz}`, kind: "ext", f: 0, cx, cz, pri: Math.max(Math.abs(dx), Math.abs(dz)) + 0.5 });
       }
@@ -173,7 +174,7 @@ export class World {
     // unload what is well outside the wanted set
     for (const [k, rec] of this.recs) {
       if (want.has(k)) continue;
-      const far = Math.max(Math.abs(rec.cx - pcx), Math.abs(rec.cz - pcz)) > 3 || Math.abs(rec.f - f) > 2;
+      const far = Math.max(Math.abs(rec.cx - pcx), Math.abs(rec.cz - pcz)) > R + 1 || Math.abs(rec.f - f) > 2;
       const atr = getStructure(rec.cx, rec.cz).atrium;
       const keepAtr = atr && f >= atr.f0 && f <= atr.f1 && rec.f >= atr.f0 && rec.f <= atr.f1 && Math.max(Math.abs(rec.cx - pcx), Math.abs(rec.cz - pcz)) <= 2;
       if (far && !keepAtr) this.unload(k, rec);
@@ -278,6 +279,21 @@ export class World {
     const gx = Math.floor(x / CELL), gz = Math.floor(z / CELL);
     const cx = floorDiv(gx, CH), cz = floorDiv(gz, CH);
     if (!this.isReady(f, cx, cz)) return null;
+    // the floating stair in a plantentuin
+    const gs = gardenStair(getStructure(cx, cz));
+    if (gs) {
+      const ry = gardenRampY(gs, x, z, H);
+      if (ry !== null && y > gs.f0 * H - 0.5 && y < (gs.f0 + 1) * H + 0.5) {
+        const flat = gs.f0 * H;
+        const cands = [ry];
+        // walking underneath is only possible where there is headroom
+        if (ry - flat < 0.45 || ry - flat > 2.1) cands.push(flat);
+        let best: number | null = null;
+        // prefer stepping onto the stair over staying on the floor below it
+        for (const c of cands) if (Math.abs(c - y) < 0.45 && (best === null || c > best)) best = c;
+        return best;
+      }
+    }
     const k = kindAt(f, gx, gz);
     if (k === K.STAIR) {
       const sf = stairFrame(cx, cz)!;

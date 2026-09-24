@@ -1,7 +1,8 @@
 // Phase 2: lights and props. Only reads phase-1 plans (own + neighbours).
 import { CEIL, CELL, CH, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, T } from "./config";
-import { K, RT, SK, getPlan, idx, sideAt, stairFrame, type Plan, type Room } from "./layout";
+import { K, RT, SK, gardenStair, getPlan, idx, sideAt, stairFrame, type Plan, type Room } from "./layout";
 import { Rng, hash } from "./rng";
+import { ART, pickArt } from "./art";
 
 export interface Light {
   x: number;
@@ -83,6 +84,14 @@ function furnish(p: Plan): Furnished {
   const prop = (t: string, x: number, y: number, z: number, rot: number, gx: number, gz: number, a = 0, b = 0) =>
     props.push({ t, x, y, z, rot, gx, gz, a, b });
 
+  // a work from the VRT collection with its own picture light
+  const hangArt = (wx: number, wz: number, d: number, gx: number, gz: number, lamp = true) => {
+    const a = pickArt(rng.next());
+    const art = ART[a]!;
+    const h = Math.max(1.5, 0.95 + art.h / 2);
+    prop("art", wx, y0 + h, wz, faceRot(d), gx, gz, a, lamp ? 1 : 0);
+    if (lamp) light(wx - DX[d]! * 0.7, y0 + h + art.h / 2 + 0.1, wz - DZ[d]! * 0.7, WARM, 0.7, 3.4, gx, gz, null);
+  };
   const center = (i: number) => {
     const gx = gx0 + (i % CH), gz = gz0 + ((i / CH) | 0);
     return { gx, gz, x: (gx + 0.5) * CELL, z: (gz + 0.5) * CELL };
@@ -234,6 +243,10 @@ function furnish(p: Plan): Furnished {
       if (used & (1 << d) || sd[d]!.sk !== SK.WALL) continue;
       const wp = wallPoint(i, d);
       const rot = faceRot(d);
+      if (rng.chance(p.zone[i] === 1 ? 0.35 : 0.09)) {
+        hangArt(wp.wx, wp.wz, d, c.gx, c.gz);
+        continue;
+      }
       const r = rng.next();
       if (r < 0.1) prop("extinguisher", wp.wx, y0, wp.wz, rot, c.gx, c.gz);
       else if (r < 0.15) prop("hosebox", wp.wx, y0, wp.wz, rot, c.gx, c.gz);
@@ -263,8 +276,29 @@ function furnish(p: Plan): Furnished {
       }
   }
 
+  // Plantentuin: planters with trees along the floating stair, two info screens.
+  const gs = gardenStair(p.st);
+  if (inAtrium && f === atr!.f0 && gs) {
+    for (let z = atr!.z0; z <= atr!.z1; z++)
+      for (let x = atr!.x0; x <= atr!.x1; x++) {
+        const c = center(idx(x, z));
+        const s = gs.alongX ? c.x : c.z, lat = gs.alongX ? c.z : c.x;
+        const side = Math.sign(lat - gs.pc) || 1;
+        const onStair = s > gs.sb - 1.2;
+        // keep a walkway free along the lane and in front of the stair's foot
+        const px = gs.alongX ? c.x : gs.pc + side * 1.75;
+        const pz = gs.alongX ? gs.pc + side * 1.75 : c.z;
+        if (!onStair || rng.chance(0.7)) prop("planter", px, y0, pz, gs.alongX ? 0 : Math.PI / 2, c.gx, c.gz, rng.chance(0.55) ? 1 : 0, rng.int(0, 99));
+      }
+    const end = gs.sb - 2.6;
+    const sx = gs.alongX ? end : gs.pc, sz = gs.alongX ? gs.pc : end;
+    const sgx = Math.floor(sx / CELL), sgz = Math.floor(sz / CELL);
+    prop("screens", sx, y0, sz, gs.alongX ? -Math.PI / 2 : Math.PI, sgx, sgz);
+    light(sx, y0 + 1.6, sz, COOL, 0.5, 4, sgx, sgz, null);
+  }
+
   // Atrium lobby: a tree in a round red bench, like the NWS hall.
-  if (inAtrium && f === atr!.f0) {
+  if (inAtrium && f === atr!.f0 && !gs) {
     const mx = (gx0 + (atr!.x0 + atr!.x1 + 1) / 2) * CELL;
     const mz = (gz0 + (atr!.z0 + atr!.z1 + 1) / 2) * CELL;
     prop("tree", mx, y0, mz, 0, gx0 + atr!.x0, gz0 + atr!.z0);
@@ -283,7 +317,7 @@ function furnish(p: Plan): Furnished {
   // Rooms
   for (const room of p.rooms) {
     if (p.kind[room.cells[0]!] !== K.ROOM) continue;
-    furnishRoom(p, room, rng, { light, prop, center, wallPoint, wallDirs, hasDoor, deadP, flickP, y0 });
+    furnishRoom(p, room, rng, { light, prop, center, wallPoint, wallDirs, hasDoor, deadP, flickP, y0, hangArt });
   }
 
   // Windows in rooms
@@ -343,6 +377,7 @@ interface Ctx {
   deadP: number;
   flickP: number;
   y0: number;
+  hangArt: (wx: number, wz: number, d: number, gx: number, gz: number, lamp?: boolean) => void;
 }
 
 function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
@@ -382,6 +417,7 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
           else if (r < 0.26) prop("plant", wp.wx, y0, wp.wz, faceRot(dd), q.gx, q.gz);
           else if (r < 0.3) prop("whiteboard", wp.wx, y0 + 1.4, wp.wz, faceRot(dd), q.gx, q.gz);
           else if (r < 0.33) prop("clock", wp.wx, y0 + 2.2, wp.wz, faceRot(dd), q.gx, q.gz);
+          else if (r < 0.45) c.hangArt(wp.wx, wp.wz, dd, q.gx, q.gz, false);
         }
       }
       break;
@@ -400,7 +436,8 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
         const [j, d2] = rng.pick(perimeter);
         if (j !== i || d2 !== dd) {
           const wq = wallPoint(j, d2);
-          prop("whiteboard", wq.wx, y0 + 1.4, wq.wz, faceRot(d2), wq.gx, wq.gz);
+          if (rng.chance(0.5)) prop("whiteboard", wq.wx, y0 + 1.4, wq.wz, faceRot(d2), wq.gx, wq.gz);
+          else c.hangArt(wq.wx, wq.wz, d2, wq.gx, wq.gz, false);
         }
       }
       break;
@@ -469,13 +506,20 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
         if (!hasDoor(i)) prop("ctable", q.x, y0, q.z, rot, q.gx, q.gz, rng.int(0, 99));
       }
       let vend = 0;
+      const taken = new Set<string>();
       for (const [i, dd] of rng.shuffle([...perimeter])) {
         if (vend >= 2) break;
+        taken.add(i + ":" + dd);
         const wp = wallPoint(i, dd);
         prop("vending", wp.wx, y0, wp.wz, faceRot(dd), wp.gx, wp.gz, vend);
         light(wp.wx - DX[dd]! * 0.7, y0 + 1.3, wp.wz - DZ[dd]! * 0.7, COOL, 0.5, 3.5, wp.gx, wp.gz, null);
         vend++;
       }
+      for (const [i, dd] of perimeter)
+        if (!taken.has(i + ":" + dd) && rng.chance(0.2)) {
+          const wp = wallPoint(i, dd);
+          c.hangArt(wp.wx, wp.wz, dd, wp.gx, wp.gz, false);
+        }
       break;
     }
     case RT.ARCHIVE: {

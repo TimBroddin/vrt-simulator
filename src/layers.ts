@@ -1,3 +1,5 @@
+import { ART } from "./art";
+
 // Texture array layers, shared by the worker (geometry) and main thread (drawing).
 export const L = {
   BRICK: 0,
@@ -50,7 +52,10 @@ export const L = {
   PUDDLE: 47,
 } as const;
 
-export const LAYER_COUNT = 48;
+// artworks and their museum labels (8 labels per layer) follow the painted layers
+export const ART0 = 48;
+export const LABEL0 = ART0 + ART.length;
+export const LAYER_COUNT = LABEL0 + Math.ceil(ART.length / 8);
 
 // Metres covered by one repeat of each tiling texture (0 = explicit UVs).
 export const SCALE: number[] = new Array(LAYER_COUNT).fill(1);
