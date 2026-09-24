@@ -100,17 +100,29 @@ export interface Structure {
 }
 
 export type Special = "sport" | "mess" | "park";
-export const MESS_FLOOR = 0;
 
-// Where the big places are: one of each near the start, then rarely.
-function specialFor(cx: number, cz: number): Special | null {
-  if (cz <= MID_CZ || (cx === 0 && cz === 0)) return null;
-  const fixed: Record<string, Special> = { "-2,1": "sport", "2,0": "mess", "0,2": "park" };
-  const f = fixed[`${cx},${cz}`];
+// Where the big places are: one of each near the start, then scattered around.
+const FIXED: Record<string, Special> = { "-2,1": "sport", "2,0": "mess", "0,2": "park" };
+function rawSpecial(cx: number, cz: number): Special | null {
+  if (cz <= MID_CZ) return null;
+  const f = FIXED[`${cx},${cz}`];
   if (f) return f;
-  if (Math.max(Math.abs(cx), Math.abs(cz)) <= 2) return null;
+  if (Math.max(Math.abs(cx), Math.abs(cz)) <= 1) return null;
   const h = hash(71, cx, cz) % 1000;
-  return h < 14 ? "sport" : h < 28 ? "mess" : h < 46 ? "park" : null;
+  return h < 55 ? "sport" : h < 110 ? "mess" : h < 135 ? "park" : null;
+}
+function specialFor(cx: number, cz: number): Special | null {
+  const s = rawSpecial(cx, cz);
+  if (!s || FIXED[`${cx},${cz}`]) return s;
+  // never two big places side by side
+  for (const [ox, oz] of [[-1, 0], [0, -1], [1, 0], [0, 1]] as const) if (FIXED[`${cx + ox},${cz + oz}`]) return null;
+  if (rawSpecial(cx - 1, cz) || rawSpecial(cx, cz - 1)) return null;
+  return s;
+}
+
+// De Mess is on the ground floor, and once more somewhere higher up.
+export function messFloors(st: Structure) {
+  return st.special === "mess" ? [0, 3 + (hash(73, st.cx, st.cz >= MID_CZ ? st.cz : 2 * MID_CZ - st.cz) % 7)] : [];
 }
 
 export interface Plan {
@@ -410,7 +422,7 @@ function makePlan(f: number, cx: number, cz: number): Plan {
   }
 
   // De Mess: the whole inside of the chunk is one enormous canteen
-  if (st.special === "mess" && f === MESS_FLOOR) {
+  if (st.special === "mess" && messFloors(st).includes(f)) {
     const room: Room = { id: 0, type: RT.MESS, x0: 1, z0: 1, x1: CH - 2, z1: CH - 2, cells: [], dark: false, glass: false, num: 1 };
     for (let z = 1; z < CH - 1; z++)
       for (let x = 1; x < CH - 1; x++) {
@@ -470,9 +482,9 @@ function makePlan(f: number, cx: number, cz: number): Plan {
       if (area >= 9 && mn >= 3)
         room.type = rng.weighted([[RT.OFFICE, 40], [RT.CANTEEN, 10], [RT.STUDIO, 14], [RT.ARCHIVE, 10], [RT.EMPTY, 12], [RT.REGIE, 8]]);
       else if (area >= 4)
-        room.type = rng.weighted([[RT.OFFICE, 30], [RT.MEETING, 20], [RT.BATH, 12], [RT.ARCHIVE, 8], [RT.EDIT, 10], [RT.REGIE, 6], [RT.EMPTY, 8], [RT.SERVER, 6], [RT.LOUNGE, 2.5]]);
+        room.type = rng.weighted([[RT.OFFICE, 30], [RT.MEETING, 20], [RT.BATH, 12], [RT.ARCHIVE, 8], [RT.EDIT, 10], [RT.REGIE, 6], [RT.EMPTY, 8], [RT.SERVER, 6], [RT.LOUNGE, 5]]);
       else if (area >= 2)
-        room.type = rng.weighted([[RT.BATH, 20], [RT.MEETING, 18], [RT.STORAGE, 14], [RT.SERVER, 12], [RT.EDIT, 14], [RT.OFFICE, 12], [RT.LOUNGE, 1.5]]);
+        room.type = rng.weighted([[RT.BATH, 20], [RT.MEETING, 18], [RT.STORAGE, 14], [RT.SERVER, 12], [RT.EDIT, 14], [RT.OFFICE, 12], [RT.LOUNGE, 3]]);
       else room.type = rng.weighted([[RT.STORAGE, 40], [RT.SERVER, 20], [RT.BATH, 15], [RT.EDIT, 10]]);
       room.dark = rng.chance(room.type === RT.REGIE || room.type === RT.STUDIO ? 0.6 : 0.22 + Math.min(0.3, dist * 0.01));
       room.num = 1 + (hash(55, f, cx, cz, id) % 9);
@@ -857,6 +869,9 @@ function makeSpecialStructure(cx: number, cz: number, kind: Special): Structure 
     return { ...base, deck: dk };
   }
   for (let i = 0; i < CH; i++) corr[idx(i, 0)] = corr[idx(i, CH - 1)] = corr[idx(0, i)] = corr[idx(CH - 1, i)] = 1;
-  if (kind === "sport") base.atrium = { x0: 3, z0: 2, x1: 8, z1: 9, f0: 0, f1: 2, kind: "hall" };
+  if (kind === "sport") {
+    const f0 = FIXED[`${cx},${cz}`] ? 0 : [0, 3, 6, 8][hash(72, cx, cz) % 4]!;
+    base.atrium = { x0: 3, z0: 2, x1: 8, z1: 9, f0, f1: f0 + 2, kind: "hall" };
+  }
   return base;
 }
