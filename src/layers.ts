@@ -71,10 +71,15 @@ export const L = {
   MISC: 66, // 2 x 2: Kampioenen shirt, scarf, koersboekje, Boma label
   BANNERS: 67, // 4 hall banners, 4:1 each
   POSTERS6: 68,
+  SIGNS2: 69, // door signs for the services, 2 x 4
+  SIGNS2_FR: 70,
+  PLAQUES: 71, // 2 x 4: VIP neon, counters, the CEO's nameplate, dock numbers, a star
+  ROLLER: 72, // a loading-dock roller door
+  HAZARD: 73, // yellow and black stripes
 } as const;
 
 // artworks and their museum labels (8 labels per layer) follow the painted layers
-export const ART0 = 69;
+export const ART0 = 74;
 export const LABEL0 = ART0 + ART.length;
 export const LAYER_COUNT = LABEL0 + Math.ceil(ART.length / 8);
 
@@ -106,3 +111,4 @@ SCALE[L.TAPES] = 1.2;
 SCALE[L.LEDS] = 0.6;
 SCALE[L.PLYWOOD] = 2.4;
 SCALE[L.WALLPAPER] = 1.2;
+SCALE[L.HAZARD] = 0.8;

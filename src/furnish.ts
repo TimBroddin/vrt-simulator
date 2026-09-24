@@ -186,7 +186,7 @@ function furnish(p: Plan): Furnished {
     const k = p.kind[i];
     const c = center(i);
     if (k === K.VOID || (k === K.CORR && p.zone[i] === 2)) {
-      if (inAtrium && atr!.kind !== "hall") {
+      if (inAtrium && atr!.kind !== "hall" && atr!.kind !== "props") {
         const fall = 1 - (atr!.f1 - f) * 0.09;
         light(c.x, y0 + 2.4, c.z, DAY, 0.95 * fall, 7.5, c.gx, c.gz, null);
       }
@@ -240,7 +240,16 @@ function furnish(p: Plan): Furnished {
               const sp = wallPoint(i, d, -0.01, off);
               prop("sign", sp.wx, y0 + 1.55, sp.wz, faceRot(d), c.gx, c.gz, sign, rtbf ? 1 : 0);
             }
+            // a star for the guest, a nameplate for the CEO, a board for the restaurant
+            const plaque = r.type === RT.DRESSING ? 7 : r.type === RT.CEO ? 3 : r.type === RT.VIPRESTO ? 4 : -1;
+            if (plaque >= 0) {
+              const pp = wallPoint(i, d, -0.01, -off);
+              prop("plaque", pp.wx, y0 + (plaque === 4 ? 1.25 : 1.5), pp.wz, faceRot(d), c.gx, c.gz, plaque, plaque === 4 ? 1 : 0);
+            }
           }
+        } else if (other === K.CORR && s.door.kind === "double" && p.st.atrium?.kind === "props" && inAtrium && !p.zone[i]) {
+          const sp = wallPoint(i, d, -0.01, s.door.w / 2 + 0.4);
+          prop("sign", sp.wx, y0 + 1.55, sp.wz, faceRot(d), c.gx, c.gz, 9, rtbf ? 1 : 0);
         }
         used |= 1 << d;
       }
@@ -261,6 +270,11 @@ function furnish(p: Plan): Furnished {
       if (used & (1 << d) || sd[d]!.sk !== SK.WALL) continue;
       const wp = wallPoint(i, d);
       const rot = faceRot(d);
+      // the rekwisieten: shelving along every wall, upstairs and down
+      if (inAtrium && atr!.kind === "props" && p.zone[i]) {
+        if (rng.chance(0.8)) prop("shelf", wp.wx, y0, wp.wz, rot, c.gx, c.gz, rng.int(0, 99));
+        continue;
+      }
       // architectural oddities: a door onto brick, a door for someone very small, a window onto nothing
       const oddK = 1 + Math.min(2, dist * 0.08);
       const odd = rng.next();
@@ -352,6 +366,34 @@ function furnish(p: Plan): Furnished {
       prop("bigbanner", mx, y0 + 6.2, Z1 - T - 0.3, Math.PI, ...cellOf(mx, Z1 - 1.5));
       // the Kampioenen shirts on a rack by the bench
       prop("shirtrack", X0 + 0.9, y0, mz - 8.3, Math.PI / 2, ...cellOf(X0 + 0.9, mz - 8.3));
+    }
+  }
+
+  // De rekwisieten: rows of tall racks under a steel deck, big props in the aisles,
+  // a lending counter by the doors. Upstairs it's a gallery looking down on it.
+  if (inAtrium && atr!.kind === "props" && f === atr!.f0) {
+    const X0 = (gx0 + atr!.x0) * CELL, X1 = (gx0 + atr!.x1 + 1) * CELL;
+    const Z0 = (gz0 + atr!.z0) * CELL;
+    const cellOf = (x: number, z: number) => [Math.floor(x / CELL), Math.floor(z / CELL)] as const;
+    for (let i = 0; i < CH * CH; i++) {
+      if (p.zone[i] !== 2) continue;
+      const c = center(i);
+      if (((c.gx + c.gz) & 1) === 0) light(c.x, y0 + H + CEIL - 0.08, c.z, [0.95, 1.0, 0.9], 1.8, 10, c.gx, c.gz, "tube", { rot: Math.PI / 2, dead: rng.chance(0.12), flick: rng.chance(0.08) });
+    }
+    for (let k = 0; k < 4; k++)
+      for (let j = 0; j < 5; j++) {
+        const x = X0 + 3.6 + j * 2.7, z = Z0 + 3.5 + k * 5.5;
+        prop("palletrack", x, y0, z, 0, ...cellOf(x, z), rng.int(0, 999));
+      }
+    const spots = [[X0 + 1.0, Z0 + 6.2], [X1 - 1.0, Z0 + 11.7], [X0 + 1.0, Z0 + 17.2], [X1 - 1.0, Z0 + 1.2], [X0 + 1.0, Z0 + 1.2], [X1 - 1.0, Z0 + 22.4]];
+    spots.forEach(([x, z], k) => prop("bigprop", x!, y0, z!, rng.range(0, 6.28), ...cellOf(x!, z!), (k + rng.int(0, 5)) % 6));
+    // the counter, just inside the doors on one side
+    const ci = idx(atr!.x1 - 1, atr!.z0 - 1);
+    const cw = wallDirs(ci);
+    if (cw.length) {
+      const wp = wallPoint(ci, cw[0]!);
+      prop("lendcounter", wp.wx, y0, wp.wz, faceRot(cw[0]!), wp.gx, wp.gz, 2);
+      light(wp.wx - DX[cw[0]!]! * 1.2, y0 + 2.3, wp.wz - DZ[cw[0]!]! * 1.2, WARM, 0.8, 4, wp.gx, wp.gz, null);
     }
   }
 
@@ -471,6 +513,14 @@ function signFor(t: number) {
     case RT.SERVER: return 5;
     case RT.EDIT: return 6;
     case RT.MEETING: return 7;
+    case RT.RADIO: case RT.KETNET: case RT.SPORZA: case RT.SET: return 2;
+    // the SIGNS2 atlas (8 +)
+    case RT.COSTUME: return 8;
+    case RT.DRESSING: return 10;
+    case RT.VIPBAR: return 11;
+    case RT.VIPRESTO: return 12;
+    case RT.CEO: return 13;
+    case RT.DOCK: return 14;
   }
   return -1;
 }
@@ -538,6 +588,7 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
   const perimeter: [number, number][] = [];
   for (const i of cells) for (const dd of wallDirs(i)) perimeter.push([i, dd]);
 
+  if (furnishService(p, room, rng, c, perimeter, roomCenter)) return;
   const brand = room.type === RT.KETNET || room.type === RT.SPORZA || room.type === RT.SET;
   if (brand && !isRtbf(p.cz)) return furnishBrandStudio(p, room, rng, c, perimeter, roomCenter);
   // on the RTBF side the brand studios are ordinary studios
@@ -907,4 +958,174 @@ function furnishBrandStudio(p: Plan, room: Room, rng: Rng, c: Ctx, perimeter: Pe
       light(wp.wx - DX[dd]! * 1.0, y0 + 1.6, wp.wz - DZ[dd]! * 1.0, [0.8, 1.0, 0.85], 0.6 * dim, 5, wp.gx, wp.gz, null);
     });
   }
+}
+
+// The building's services. Returns false for the types it doesn't handle.
+function furnishService(p: Plan, room: Room, rng: Rng, c: Ctx, perimeter: Perimeter, rc: { x: number; z: number }): boolean {
+  const t = room.type;
+  if (t !== RT.COSTUME && t !== RT.DRESSING && t !== RT.VIPBAR && t !== RT.VIPRESTO && t !== RT.CEO && t !== RT.DOCK) return false;
+  const { light, prop, center, wallPoint, hasDoor, y0 } = c;
+  const w = room.x1 - room.x0 + 1, d = room.z1 - room.z0 + 1;
+  const rot = w >= d ? 0 : Math.PI / 2;
+  const cells = room.cells;
+  const lights = (col: readonly number[], int: number, fix: string | null = "panel", every = 1, y = CEIL - 0.03) =>
+    cells.forEach((i, n) => {
+      if (n % every) return;
+      const q = center(i);
+      light(q.x, y0 + y, q.z, col, int, 7, q.gx, q.gz, fix, { rot, dead: room.dark && rng.chance(0.55), flick: rng.chance(c.flickP) });
+    });
+  // which side of a cell has a door
+  const doorDir = (i: number) => {
+    const q = center(i);
+    for (let dd = 0; dd < 4; dd++) if (sideAt(p.f, q.gx, q.gz, dd).sk === SK.DOOR) return dd;
+    return -1;
+  };
+  if (!perimeter.length) return true;
+  const { bd, pieces, side } = mainWall(p, perimeter);
+  const mid = Math.floor(pieces.length / 2);
+  const others = rng.shuffle(perimeter.filter(([, dd]) => dd !== bd));
+
+  switch (t) {
+    case RT.COSTUME: {
+      // de kostuumdienst: rails of costumes, mannequins, hats, the lending counter
+      lights(FLUO, 1.15);
+      const dc = cells.find((i) => hasDoor(i) && c.wallDirs(i).length) ?? perimeter[0]![0];
+      const cd = c.wallDirs(dc)[0] ?? perimeter[0]![1];
+      const cp = wallPoint(dc, cd);
+      prop("lendcounter", cp.wx, y0, cp.wz, faceRot(cd), cp.gx, cp.gz, 1);
+      let n = 0;
+      for (const i of cells) {
+        if (i === dc || hasDoor(i)) continue;
+        const q = center(i);
+        if (rng.chance(0.18)) prop("mannequin", q.x + rng.range(-0.4, 0.4), y0, q.z + rng.range(-0.4, 0.4), rng.range(0, 6.28), q.gx, q.gz, n++);
+        else prop("rail", q.x, y0, q.z, rot, q.gx, q.gz, rng.int(0, 999));
+      }
+      const uses = ["hatshelf", "mirror", "sewing", "hatshelf", "mirror"];
+      others.filter(([i]) => i !== dc).slice(0, uses.length).forEach(([i, dd], k) => {
+        const wp = wallPoint(i, dd);
+        prop(uses[k]!, wp.wx, y0, wp.wz, faceRot(dd), wp.gx, wp.gz, rng.int(0, 99));
+      });
+      pieces.forEach(([i], k) => {
+        if (i === dc || k % 2) return;
+        const wp = wallPoint(i, bd, 0.42);
+        prop("rail", wp.wx, y0, wp.wz, faceRot(bd), wp.gx, wp.gz, rng.int(0, 999));
+      });
+      break;
+    }
+    case RT.DRESSING: {
+      // mirrors framed in bulbs along one wall, a rail with the outfit, a sofa, flowers
+      lights(WARM, 0.85);
+      pieces.forEach(([i]) => {
+        const wp = wallPoint(i, bd);
+        prop("vanity", wp.wx, y0, wp.wz, faceRot(bd), wp.gx, wp.gz, rng.int(0, 99));
+        light(wp.wx - DX[bd]! * 0.7, y0 + 1.5, wp.wz - DZ[bd]! * 0.7, [1.0, 0.86, 0.66], 0.9, 4, wp.gx, wp.gz, null);
+      });
+      const uses = ["rail", "sofa", "plant", "clock"];
+      others.slice(0, uses.length).forEach(([i, dd], k) => {
+        const wp = wallPoint(i, dd, uses[k] === "rail" ? 0.42 : 0);
+        prop(uses[k]!, wp.wx, uses[k] === "clock" ? y0 + 2.2 : y0, wp.wz, faceRot(dd), wp.gx, wp.gz, rng.int(0, 999));
+      });
+      if (cells.length >= 4) prop("flowers", rc.x, y0, rc.z, rng.range(0, 6), center(cells[0]!).gx, center(cells[0]!).gz);
+      break;
+    }
+    case RT.VIPBAR: {
+      // dark, purple, a backlit bar and lounge corners; a velvet rope at the door
+      lights(WARM, 0.5, "bulb", 1, CEIL - 0.1);
+      pieces.forEach(([i], k) => {
+        const wp = wallPoint(i, bd);
+        prop("vipbar", wp.wx, y0, wp.wz, faceRot(bd), wp.gx, wp.gz, k === mid ? 1 : 0);
+        light(wp.wx - DX[bd]! * 1.6, y0 + 2.2, wp.wz - DZ[bd]! * 1.6, [1.0, 0.7, 0.45], 0.9, 4.5, wp.gx, wp.gz, null);
+      });
+      const depth = (bd % 2 === 0 ? w : d) * CELL;
+      for (const i of cells) {
+        const q = center(i);
+        const nearBar = (q.x - rc.x) * DX[bd]! + (q.z - rc.z) * DZ[bd]! > depth / 2 - 2.9 && depth > 3;
+        if (hasDoor(i)) {
+          const dd = doorDir(i);
+          if (dd >= 0) {
+            const pd = (dd + 1) % 4;
+            prop("rope", q.x - DX[dd]! * 0.3 + DX[pd]! * 0.75, y0, q.z - DZ[dd]! * 0.3 + DZ[pd]! * 0.75, faceRot(pd), q.gx, q.gz);
+          }
+        } else if (!nearBar && rng.chance(0.8)) prop("lounge", q.x, y0, q.z, rng.pick([0, Math.PI / 2]), q.gx, q.gz, rng.int(0, 99));
+        if (rng.chance(0.5)) light(q.x, y0 + 1.2, q.z, [0.7, 0.35, 1.0], 0.5, 4, q.gx, q.gz, null);
+      }
+      break;
+    }
+    case RT.VIPRESTO: {
+      // round tables in white linen, chandeliers, a wine wall, the maître d's lectern
+      lights([1.0, 0.85, 0.62], 1.05, "chandelier", 1, CEIL - 0.05);
+      for (const i of cells) {
+        const q = center(i);
+        if (hasDoor(i)) {
+          const dd = doorDir(i);
+          if (dd >= 0) {
+            const pd = (dd + 1) % 4;
+            prop("lectern", q.x - DX[dd]! * 0.4 + DX[pd]! * 0.95, y0, q.z - DZ[dd]! * 0.4 + DZ[pd]! * 0.95, faceRot(dd) + Math.PI, q.gx, q.gz);
+          }
+          continue;
+        }
+        prop("rtable", q.x + rng.range(-0.25, 0.25), y0, q.z + rng.range(-0.25, 0.25), rng.range(0, 6.28), q.gx, q.gz, rng.int(0, 999));
+      }
+      pieces.forEach(([i], k) => {
+        const wp = wallPoint(i, bd);
+        if (k % 2 === 0) prop("winerack", wp.wx, y0, wp.wz, faceRot(bd), wp.gx, wp.gz, rng.int(0, 99));
+        else c.hangArt(wp.wx, wp.wz, bd, wp.gx, wp.gz, true);
+      });
+      break;
+    }
+    case RT.CEO: {
+      // a big desk in front of the VRT logo, bookcases, a sofa corner, a flag
+      lights(WARM, 1.05);
+      const depth = (bd % 2 === 0 ? w : d) * CELL;
+      const [mi] = pieces[mid]!;
+      const lp = wallPoint(mi, bd, -0.01);
+      prop("vrtframe", lp.wx, y0, lp.wz, faceRot(bd), lp.gx, lp.gz);
+      const off = Math.min(1.9, depth / 2 - 0.2);
+      const ex = lp.wx - DX[bd]! * off, ez = lp.wz - DZ[bd]! * off;
+      prop("ceodesk", ex, y0, ez, faceRot(bd), Math.floor(ex / CELL), Math.floor(ez / CELL), rng.int(0, 99));
+      light(ex, y0 + 2.3, ez, WARM, 0.9, 4.5, Math.floor(ex / CELL), Math.floor(ez / CELL), null);
+      pieces.forEach(([i], k) => {
+        if (k === mid) return;
+        const wp = wallPoint(i, bd);
+        prop("bookcase", wp.wx, y0, wp.wz, faceRot(bd), wp.gx, wp.gz, rng.int(0, 999));
+      });
+      const uses = ["sofa", "bookcase", "cflag", "plant", "art"];
+      others.slice(0, uses.length).forEach(([i, dd], k) => {
+        const wp = wallPoint(i, dd);
+        if (uses[k] === "art") c.hangArt(wp.wx, wp.wz, dd, wp.gx, wp.gz, true);
+        else prop(uses[k]!, wp.wx, y0, wp.wz, faceRot(dd), wp.gx, wp.gz, rng.int(0, 999));
+      });
+      break;
+    }
+    case RT.DOCK: {
+      // roller doors onto nothing, one of them half open onto daylight; pallets, flight cases, a forklift
+      lights([0.95, 1.0, 0.88], 1.2, "tube");
+      pieces.forEach(([i], k) => {
+        const wp = wallPoint(i, bd, -0.01);
+        const open = k === mid;
+        if (k % 2 === mid % 2) {
+          prop("rollerdoor", wp.wx, y0, wp.wz, faceRot(bd), wp.gx, wp.gz, k, open ? 1 : 0);
+          if (open) light(wp.wx - DX[bd]! * 0.6, y0 + 0.4, wp.wz - DZ[bd]! * 0.6, DAY, 1.4, 7, wp.gx, wp.gz, null);
+        } else prop("shelf", wp.wx, y0, wp.wz, faceRot(bd), wp.gx, wp.gz, rng.int(0, 99));
+      });
+      let fork = false;
+      for (const i of cells) {
+        if (hasDoor(i)) continue;
+        const q = center(i);
+        const r = rng.next();
+        if (!fork && r < 0.25) {
+          fork = true;
+          prop("forklift", q.x, y0, q.z, rng.range(0, 6.28), q.gx, q.gz);
+        } else if (r < 0.6) prop("pallet", q.x + rng.range(-0.4, 0.4), y0, q.z + rng.range(-0.4, 0.4), rng.range(-0.2, 0.2) + rot, q.gx, q.gz, rng.int(0, 999));
+        else if (r < 0.8) prop("flightcase", q.x + rng.range(-0.5, 0.5), y0, q.z + rng.range(-0.5, 0.5), rng.range(0, 6.28), q.gx, q.gz, rng.int(0, 999));
+        else if (r < 0.9) prop("palletjack", q.x, y0, q.z, rng.range(0, 6.28), q.gx, q.gz);
+      }
+      side.slice(0, 2).forEach(([i, dd]) => {
+        const wp = wallPoint(i, dd);
+        prop("shelf", wp.wx, y0, wp.wz, faceRot(dd), wp.gx, wp.gz, rng.int(0, 99));
+      });
+      break;
+    }
+  }
+  return true;
 }

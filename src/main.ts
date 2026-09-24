@@ -114,7 +114,7 @@ function surfaceAt(f: number, gx: number, gz: number): { s: Surface; wet: number
       if (anomalyAt(f, gx, gz) === "flooded") return { s: "wet", wet: 0.7 };
       const t = p.rooms[p.room[i]!]!.type;
       if (t === RT.BATH || t === RT.SERVER || t === RT.CANTEEN) return { s: "tile", wet: 0.35 };
-      if (t === RT.STORAGE || t === RT.ARCHIVE) return { s: "concrete", wet: 0.3 };
+      if (t === RT.STORAGE || t === RT.ARCHIVE || t === RT.DOCK) return { s: "concrete", wet: 0.3 };
       if (t === RT.STUDIO || t === RT.KETNET || t === RT.SPORZA || t === RT.SET) return { s: "wood", wet: 0.12 };
       return { s: "carpet", wet: 0.15 };
     }

@@ -1,6 +1,6 @@
 // Turns a furnished plan into geometry: floors, ceilings, walls with openings,
 // stairwells, elevator cars and the courtyard facades.
-import { CEIL, CELL, CH, CHUNK, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, ST_HALF, ST_U1, ST_U2, ST_VM, T, isRtbf } from "./config";
+import { CEIL, CELL, CH, CHUNK, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, MID_FLOOR, ST_HALF, ST_U1, ST_U2, ST_VM, T, isRtbf } from "./config";
 import { Builder, LightCtx, UP, type Built, type RGB, type Spec, type V3 } from "./builder";
 import { getFurnished } from "./furnish";
 import { K, RT, SK, gardenStair, getStructure, kindAt, roomAnomaly, sideAt, stairFrame, type GardenStair, type Plan } from "./layout";
@@ -43,6 +43,8 @@ function surf(p: Plan, i: number): Surf {
       if (p.st.atrium?.kind === "hall" && p.zone[i] === 2)
         return { floor: sp(L.SPORTFLOOR), ceil: null, wall: sp(L.PLASTER, [0.95, 0.9, 0.74]), h: CEIL, base: false };
       if (p.st.special === "park") return { floor: sp(L.CONCRETE, [0.75, 0.75, 0.72]), ceil: sp(L.STEEL, [0.7, 0.72, 0.75]), wall: sp(L.PLASTER), h: CEIL, base: false };
+      if (p.st.atrium?.kind === "props" && (p.zone[i] === 1 || p.zone[i] === 2))
+        return { floor: sp(L.CONCRETE, [0.72, 0.72, 0.7]), ceil: sp(L.CEILMETAL, [0.7, 0.7, 0.72]), wall: sp(L.BRICK_DOTS, [0.85, 0.85, 0.84]), h: CEIL, base: false };
       if (p.st.mid) return { floor: sp(L.TILEDARK, [2.0, 1.9, 1.7]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER), h: CEIL, base: false };
       if ((p.zone[i] === 1 || p.zone[i] === 2) && p.st.atrium?.kind === "garden")
         return p.zone[i] === 2
@@ -70,6 +72,12 @@ function surf(p: Plan, i: number): Surf {
           if (isRtbf(p.cz)) return { floor: sp(L.BLACK, [0.9, 0.9, 0.9]), ceil: sp(L.BLACK, [0.6, 0.6, 0.6]), wall: sp(L.BLACK), h: 3.3, base: false };
           return { floor: sp(L.WHITE, [0.07, 0.1, 0.22]), ceil: sp(L.BLACK, [0.6, 0.6, 0.6]), wall: sp(L.PLASTER, [0.42, 0.9, 0.62]), h: 3.3, base: false };
         case RT.SPORZA: return { floor: sp(L.TILEDARK, [0.55, 0.55, 0.58]), ceil: sp(L.BLACK, [0.6, 0.6, 0.6]), wall: sp(L.BLACK, [1.1, 1.15, 1.1]), h: 3.3, base: false };
+        case RT.COSTUME: return { floor: sp(L.LINO, [0.9, 0.85, 0.8]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.96, 0.93, 0.88]), h: CEIL, base: true };
+        case RT.DRESSING: return { floor: sp(L.CARPET_GREY, [0.62, 0.48, 0.5]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.98, 0.9, 0.84]), h: CEIL, base: true };
+        case RT.VIPBAR: return { floor: sp(L.CARPET_FLECK, [0.55, 0.3, 0.38]), ceil: sp(L.BLACK, [0.7, 0.6, 0.75]), wall: sp(L.WOODSLAT, [0.45, 0.32, 0.4]), h: CEIL, base: false };
+        case RT.VIPRESTO: return { floor: sp(L.CARPET_BLUE, [0.8, 0.5, 0.45]), ceil: sp(L.CEILTILE, [1.0, 0.95, 0.88]), wall: sp(L.WALLPAPER, [0.9, 0.82, 0.62]), h: CEIL, base: true };
+        case RT.CEO: return { floor: sp(L.WOOD_FLOOR, [0.7, 0.5, 0.36]), ceil: sp(L.CEILTILE), wall: sp(L.WOODSLAT, [0.8, 0.62, 0.48]), h: CEIL, base: true };
+        case RT.DOCK: return { floor: sp(L.CONCRETE, [0.62, 0.62, 0.6]), ceil: sp(L.CONCRETE, [0.72, 0.72, 0.7]), wall: sp(L.BRICK, [0.6, 0.62, 0.64]), h: CEIL, base: false };
         case RT.RADIO: return { floor: sp(L.CARPET_GREY, [0.55, 0.55, 0.6]), ceil: sp(L.CEILTILE, [0.45, 0.45, 0.48]), wall: sp(L.FABRIC, [0.3, 0.3, 0.33]), h: CEIL, base: false };
         case RT.CANTEEN: return { floor: sp(L.TILEDARK, [1.1, 1.05, 1.0]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.95, 0.9, 0.82]), h: CEIL, base: true };
         case RT.ARCHIVE: return { floor: sp(L.CONCRETE), ceil: sp(L.CONCRETE, [0.8, 0.8, 0.8]), wall: sp(L.BRICK, [0.8, 0.8, 0.78]), h: CEIL, base: false };
@@ -134,6 +142,9 @@ function emitCell(b: Builder, p: Plan, i: number, gx: number, gz: number, y0: nu
         b.aabox(x0, y0 + CEIL - 0.1, z0 + o - 0.04, x1, y0 + CEIL, z0 + o + 0.04, DARKTRIM);
         b.aabox(x0 + o - 0.04, y0 + CEIL - 0.1, z0, x0 + o + 0.04, y0 + CEIL, z1, DARKTRIM);
       }
+    } else if (f === a.f1 && a.kind === "props") {
+      // a plain steel deck over the rekwisieten
+      b.hrect(x0, z0, x1, z1, y0 + CEIL + 0.01, false, sp(L.CEILMETAL, [0.55, 0.56, 0.58]), 1.5);
     } else if (f === a.f1 && a.kind === "lobby") {
       b.hrect(x0, z0, x1, z1, y0 + CEIL + 0.01, false, { layer: L.FROSTED, emit: [1.45, 1.5, 1.58], uv: [0, 0, 1, 1] }, 0);
       b.aabox(x0, y0 + CEIL - 0.08, z0 + 1.45, x1, y0 + CEIL, z0 + 1.55, DARKTRIM);
@@ -631,8 +642,9 @@ function buildMidExterior(cx: number, cz: number): Built {
       }
       const deck = isDeck(x, z);
       // slab band per floor, filling the plenum between one ceiling and the next floor
+      // (the middengang is a single-storey bridge: its floor and its roof)
       for (let f = 1; f <= FLOOR_MAX; f++)
-        b.aabox(gx, f * H - (deck ? 1.0 : H - CEIL) + 0.02, gz, gx + CELL, f * H - 0.03, gz + CELL, { all: slab }, 0);
+        if (!st.mid || f === MID_FLOOR || f === MID_FLOOR + 1) b.aabox(gx, f * H - (deck ? 1.0 : H - CEIL) + 0.02, gz, gx + CELL, f * H - 0.03, gz + CELL, { all: slab }, 0);
       for (let d = 0; d < 4; d++) {
         const nx = x + DX[d]!, nz = z + DZ[d]!;
         if (nx < 0 || nz < 0 || nx >= CH || nz >= CH || solid(nx, nz)) continue;
@@ -641,6 +653,7 @@ function buildMidExterior(cx: number, cz: number): Built {
         const pz = axisX ? gz : gz + (DZ[d]! > 0 ? CELL : 0);
         const out = 0.03 * (axisX ? DX[d]! : DZ[d]!);
         for (let f = 0; f < FLOOR_MAX; f++) {
+          if (st.mid && f !== MID_FLOOR) continue;
           const y0 = f * H;
           if (deck) {
             // parapet of the open parking deck
@@ -661,14 +674,17 @@ function buildMidExterior(cx: number, cz: number): Built {
   // facades of the buildings around the open gap, one cell at a time
   for (let k = 0; k < CH; k++)
     for (const [x, z, d] of [[k, 0, 3], [k, CH - 1, 1], [0, k, 2], [CH - 1, k, 0]] as const) {
-      if (solid(x, z)) continue;
       if (st.mid && d % 2 === 0) continue; // the middengang continues east and west
+      // where a link of the middengang meets the building, the facade only opens on that floor
+      const spans: [number, number][] = !solid(x, z) ? [[0, top]] : st.mid ? [[0, MID_FLOOR * H], [(MID_FLOOR + 1) * H, top]] : [];
       const gx = X0 + x * CELL, gz = Z0 + z * CELL;
-      const fac = (a0: number, a1: number) => ({ layer: L.FACADE, uv: [a0 / CELL, 0, a1 / CELL, top / H] as [number, number, number, number] });
-      if (d === 3) b.vrect(false, gz, gx, gx + CELL, 0, top, 1, fac(gx, gx + CELL), 0);
-      else if (d === 1) b.vrect(false, gz + CELL, gx, gx + CELL, 0, top, -1, fac(gx, gx + CELL), 0);
-      else if (d === 2) b.vrect(true, gx, gz, gz + CELL, 0, top, 1, fac(gz, gz + CELL), 0);
-      else b.vrect(true, gx + CELL, gz, gz + CELL, 0, top, -1, fac(gz, gz + CELL), 0);
+      for (const [ya, yb] of spans) {
+        const fac = (a0: number, a1: number) => ({ layer: L.FACADE, uv: [a0 / CELL, ya / H, a1 / CELL, yb / H] as [number, number, number, number] });
+        if (d === 3) b.vrect(false, gz, gx, gx + CELL, ya, yb, 1, fac(gx, gx + CELL), 0);
+        else if (d === 1) b.vrect(false, gz + CELL, gx, gx + CELL, ya, yb, -1, fac(gx, gx + CELL), 0);
+        else if (d === 2) b.vrect(true, gx, gz, gz + CELL, ya, yb, 1, fac(gz, gz + CELL), 0);
+        else b.vrect(true, gx + CELL, gz, gz + CELL, ya, yb, -1, fac(gz, gz + CELL), 0);
+      }
     }
   return b.finish();
 }

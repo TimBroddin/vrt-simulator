@@ -1,7 +1,7 @@
 // Floor-plan generation. Phase 1 ("plan") decides what every cell is: corridor,
 // room, stairwell, elevator, atrium void, courtyard... It never looks at other
 // chunks, so neighbours can be queried freely without recursion.
-import { CELL, CH, DX, DZ, FLOOR_MAX, FLOOR_MIN, MID_CZ } from "./config";
+import { CELL, CH, DX, DZ, FLOOR_MAX, FLOOR_MIN, MID_CZ, MID_FLOOR } from "./config";
 import { Rng, floorDiv, hash, mod } from "./rng";
 import { STATIONS } from "./stations";
 
@@ -35,6 +35,12 @@ export const RT = {
   KETNET: 14,
   SPORZA: 15,
   SET: 16, // a TV set built inside a studio: Bar Madam (Thuis) or Café De Kampioenen
+  COSTUME: 17, // de kostuumdienst
+  DRESSING: 18, // kleedkamers
+  VIPBAR: 19,
+  VIPRESTO: 20,
+  CEO: 21,
+  DOCK: 22, // laadperrons, on the ground floor
 } as const;
 
 export const ROOM_LABEL = [
@@ -55,6 +61,12 @@ export const ROOM_LABEL = [
   "KETNET",
   "SPORZA",
   "DECOR",
+  "KOSTUUMDIENST",
+  "KLEEDKAMER",
+  "VIP-BAR",
+  "VIP-RESTAURANT",
+  "KABINET CEO",
+  "LAADPERRON",
 ];
 
 // Side kinds
@@ -100,7 +112,7 @@ export interface Structure {
   corr: Uint8Array;
   stair: null | { c: number; a: number; b: number; d: number };
   elevs: { c: number; e: number; d: number }[];
-  atrium: null | { x0: number; z0: number; x1: number; z1: number; f0: number; f1: number; kind: "lobby" | "garden" | "hall" };
+  atrium: null | { x0: number; z0: number; x1: number; z1: number; f0: number; f1: number; kind: "lobby" | "garden" | "hall" | "props" };
   court: null | { x0: number; z0: number; x1: number; z1: number };
   style: number;
   mid?: boolean; // de middengang
@@ -108,17 +120,17 @@ export interface Structure {
   deck?: { x0: number; z0: number; x1: number; z1: number }; // parkeertoren deck
 }
 
-export type Special = "sport" | "mess" | "park";
+export type Special = "sport" | "mess" | "park" | "props";
 
 // Where the big places are: one of each near the start, then scattered around.
-const FIXED: Record<string, Special> = { "-2,1": "sport", "2,0": "mess", "0,2": "park" };
+const FIXED: Record<string, Special> = { "-2,1": "sport", "2,0": "mess", "0,2": "park", "2,2": "props" };
 function rawSpecial(cx: number, cz: number): Special | null {
   if (cz <= MID_CZ) return null;
   const f = FIXED[`${cx},${cz}`];
   if (f) return f;
   if (Math.max(Math.abs(cx), Math.abs(cz)) <= 1) return null;
   const h = hash(71, cx, cz) % 1000;
-  return h < 55 ? "sport" : h < 110 ? "mess" : h < 135 ? "park" : null;
+  return h < 55 ? "sport" : h < 110 ? "mess" : h < 135 ? "park" : h < 165 ? "props" : null;
 }
 function specialFor(cx: number, cz: number): Special | null {
   const s = rawSpecial(cx, cz);
@@ -360,8 +372,8 @@ function makePlan(f: number, cx: number, cz: number): Plan {
 
   if (f === FLOOR_MIN) return planGarage(p);
   if (st.mid) {
-    // glass corridor + links on every floor, open air everywhere else
-    for (let i = 0; i < CH * CH; i++) p.kind[i] = st.corr[i] ? (f === FLOOR_MAX ? K.ROOF : K.CORR) : K.COURT;
+    // the glass corridor and its links, on one floor; open air everywhere else
+    for (let i = 0; i < CH * CH; i++) p.kind[i] = st.corr[i] && f === MID_FLOOR ? K.CORR : K.COURT;
     return p;
   }
   if (st.special === "park") {
@@ -414,7 +426,7 @@ function makePlan(f: number, cx: number, cz: number): Plan {
   const free = (x: number, z: number) => inside(x, z) && kind[idx(x, z)] === K.SOLID;
 
   // Sporthal entrances: solid walls to the corridor, with a pair of double doors
-  if (a && a.kind === "hall" && f === a.f0) {
+  if (a && ((a.kind === "hall" && f === a.f0) || (a.kind === "props" && f >= a.f0 && f <= a.f1))) {
     const doors: [number, number][] = [];
     for (let z = a.z0 - 1; z <= a.z1 + 1; z++)
       for (let x = a.x0 - 1; x <= a.x1 + 1; x++)
@@ -496,6 +508,7 @@ function makePlan(f: number, cx: number, cz: number): Plan {
         room.type = rng.weighted([[RT.BATH, 20], [RT.MEETING, 18], [RT.STORAGE, 14], [RT.SERVER, 12], [RT.EDIT, 14], [RT.OFFICE, 12], [RT.LOUNGE, 3]]);
       else room.type = rng.weighted([[RT.STORAGE, 40], [RT.SERVER, 20], [RT.BATH, 15], [RT.EDIT, 10]]);
       room.type = brandRoom(room.type, area, hash(56, f, cx, cz, id) % 100);
+      room.type = serviceRoom(room.type, area, mn, f, hash(58, f, cx, cz, id) % 100);
       room.dark = rng.chance(room.type === RT.REGIE || room.type === RT.STUDIO ? 0.6 : 0.22 + Math.min(0.3, dist * 0.01));
       room.num = 1 + (hash(55, f, cx, cz, id) % 9);
       p.rooms.push(room);
@@ -515,11 +528,12 @@ function makePlan(f: number, cx: number, cz: number): Plan {
     if (!cands.length) continue;
     connected.add(room.id);
     const t = room.type;
-    const big = t === RT.STUDIO || t === RT.CANTEEN || t === RT.MESS || t === RT.KETNET || t === RT.SPORZA || t === RT.SET;
+    const big = t === RT.STUDIO || t === RT.CANTEEN || t === RT.MESS || t === RT.KETNET || t === RT.SPORZA || t === RT.SET || t === RT.COSTUME || t === RT.VIPRESTO || t === RT.DOCK;
     if (t === RT.MESS) continue; // its doors were placed above
     const openP = t === RT.STORAGE || t === RT.SERVER ? 0.45 : t === RT.BATH ? 0.9 : 0.78;
-    // (radio studios were edit suites: same draw, so the rest of the floor stays the same)
-    room.glass = (t === RT.OFFICE || t === RT.MEETING || t === RT.EDIT || t === RT.RADIO) && rng.chance(0.35);
+    // (rooms converted from offices, meetings and edit suites make the same draw, so the rest of the floor stays the same)
+    const glassDraw = (t === RT.OFFICE || t === RT.MEETING || t === RT.EDIT || t === RT.RADIO || t === RT.COSTUME || t === RT.DRESSING || t === RT.CEO) && rng.chance(0.35);
+    room.glass = glassDraw && t !== RT.DRESSING;
     const nDoors = room.cells.length >= 6 && rng.chance(0.4) ? 2 : 1;
     rng.shuffle(cands);
     const used = new Set<number>();
@@ -579,6 +593,21 @@ function brandRoom(t: number, area: number, h: number): number {
   return t;
 }
 
+// The building's services: the kostuumdienst, kleedkamers, the VIP bar and
+// restaurant, the CEO (top floors only) and the loading docks (ground floor).
+// Also by hash, and only from types that keep the random stream the same.
+function serviceRoom(t: number, area: number, mn: number, f: number, h: number): number {
+  const big = area >= 9 && mn >= 3;
+  if (t === RT.OFFICE && big) return h < 9 ? RT.COSTUME : f >= 9 && h < 20 ? RT.CEO : t;
+  if (t === RT.OFFICE && area >= 4) return h < 7 ? RT.DRESSING : f >= 9 && h < 13 ? RT.CEO : t;
+  if (t === RT.MEETING && area >= 4) return h < 12 ? RT.DRESSING : t;
+  if (t === RT.CANTEEN) return h < 35 ? RT.VIPRESTO : t;
+  if (t === RT.LOUNGE) return h < 45 ? RT.VIPBAR : t;
+  if (t === RT.EMPTY && big) return f === 0 && h < 45 ? RT.DOCK : h < 12 ? RT.VIPBAR : t;
+  if (t === RT.ARCHIVE && big && f === 0) return h < 40 ? RT.DOCK : t;
+  return t;
+}
+
 // Which station a radio studio belongs to, or which series a set is for.
 // Mirrored on the RTBF side, like everything else.
 export function roomVariant(p: Plan, r: Room, n: number) {
@@ -592,6 +621,7 @@ export function roomLabel(p: Plan, r: Room): string {
   if (p.cz < MID_CZ) {
     if (r.type === RT.STUDIO || r.type === RT.KETNET || r.type === RT.SPORZA || r.type === RT.SET) return "STUDIO " + r.num;
     if (r.type === RT.RADIO) return "STUDIO RADIO";
+    if (r.type === RT.DRESSING) return "LOGE " + r.num;
     return ROOM_LABEL_FR[r.type]!;
   }
   switch (r.type) {
@@ -600,6 +630,7 @@ export function roomLabel(p: Plan, r: Room): string {
     case RT.KETNET: return "KETNET · STUDIO " + r.num;
     case RT.SPORZA: return "SPORZA · STUDIO " + r.num;
     case RT.SET: return setIsThuis(p, r) ? "DECOR THUIS" : "DECOR DE KAMPIOENEN";
+    case RT.DRESSING: return "KLEEDKAMER " + r.num;
   }
   return ROOM_LABEL[r.type]!;
 }
@@ -714,7 +745,7 @@ export function lightPass(f: number, gx: number, gz: number, d: number): boolean
 }
 
 // Human readable label for a cell (HUD).
-const ROOM_LABEL_FR = ["BUREAU", "SALLE DE RÉUNION", "SANITAIRES", "RÉSERVE", "SALLE DES SERVEURS", "STUDIO", "CANTINE", "ARCHIVES", "RÉGIE", "LOCAL VIDE", "MONTAGE", "LE MESS", "SALLE DE DÉTENTE", "STUDIO RADIO", "STUDIO", "STUDIO", "STUDIO"];
+const ROOM_LABEL_FR = ["BUREAU", "SALLE DE RÉUNION", "SANITAIRES", "RÉSERVE", "SALLE DES SERVEURS", "STUDIO", "CANTINE", "ARCHIVES", "RÉGIE", "LOCAL VIDE", "MONTAGE", "LE MESS", "SALLE DE DÉTENTE", "STUDIO RADIO", "STUDIO", "STUDIO", "STUDIO", "COSTUMES", "LOGE", "BAR VIP", "RESTAURANT VIP", "BUREAU DU CEO", "QUAI DE CHARGEMENT"];
 
 export function cellLabel(f: number, gx: number, gz: number): string {
   const { p, i } = planAt(f, gx, gz);
@@ -722,6 +753,7 @@ export function cellLabel(f: number, gx: number, gz: number): string {
   if (p.st.mid && (k === K.CORR || k === K.ROOF)) return "MIDDENGANG";
   if (p.st.special === "park") return k === K.CORR ? (p.cz < MID_CZ ? "PASSERELLE" : "LOOPBRUG") : p.cz < MID_CZ ? "PARKING-TOUR" : "PARKEERTOREN";
   if (p.st.atrium?.kind === "hall" && p.zone[i] === 2) return p.cz < MID_CZ ? "SALLE DE SPORT" : "SPORTHAL";
+  if (p.st.atrium?.kind === "props" && (p.zone[i] === 1 || p.zone[i] === 2) && p.f >= p.st.atrium.f0 && p.f <= p.st.atrium.f1) return p.cz < MID_CZ ? "ACCESSOIRES" : "REKWISIETEN";
   if (p.cz < MID_CZ) {
     switch (k) {
       case K.CORR:
@@ -906,6 +938,11 @@ function makeSpecialStructure(cx: number, cz: number, kind: Special): Structure 
     return { ...base, deck: dk };
   }
   for (let i = 0; i < CH; i++) corr[idx(i, 0)] = corr[idx(i, CH - 1)] = corr[idx(0, i)] = corr[idx(CH - 1, i)] = 1;
+  if (kind === "props") {
+    // two storeys: racks on the floor, a gallery all around upstairs
+    const f0 = FIXED[`${cx},${cz}`] ? 2 : [1, 3, 5, 7][hash(74, cx, cz) % 4]!;
+    base.atrium = { x0: 3, z0: 2, x1: 8, z1: 9, f0, f1: f0 + 1, kind: "props" };
+  }
   if (kind === "sport") {
     const f0 = FIXED[`${cx},${cz}`] ? 0 : [0, 3, 6, 8][hash(72, cx, cz) % 4]!;
     base.atrium = { x0: 3, z0: 2, x1: 8, z1: 9, f0, f1: f0 + 2, kind: "hall" };

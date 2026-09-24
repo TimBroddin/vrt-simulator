@@ -437,6 +437,66 @@ const painters: Record<number, (c: Ctx) => void> = {
       text(c, t, x + 135, y + 64, t.length > 9 ? 25 : 34, "#f5f5f5", "700");
     });
   },
+  [L.SIGNS2]: (c) => serviceSigns(c, ["KOSTUUMS", "REKWISIETEN", "KLEEDKAMER", "VIP-BAR", "VIP-RESTO", "DIRECTIE", "LAADPERRON", "UITLEEN"], "#ff2e7e"),
+  [L.SIGNS2_FR]: (c) => serviceSigns(c, ["COSTUMES", "ACCESSOIRES", "LOGE", "BAR VIP", "RESTO VIP", "DIRECTION", "QUAI", "PRÊT"], "#1a64c8"),
+  [L.PLAQUES]: (c) => {
+    const cell = (k: number, fn: (w: number, h: number) => void) => aspect(c, 2, fn, (k % 2) * 256, Math.floor(k / 2) * 128, 256, 128);
+    const board = (bg: string, line: string, t1: string, t2: string, fg: string) => (w: number, h: number) => {
+      c.fillStyle = bg; c.fillRect(0, 0, w, h);
+      c.strokeStyle = line; c.lineWidth = 4; c.strokeRect(6, 6, w - 12, h - 12);
+      text(c, t1, w / 2, h * 0.4, h * 0.3, fg, "900");
+      text(c, t2, w / 2, h * 0.72, h * 0.13, fg, "700");
+    };
+    cell(0, (w, h) => {
+      c.fillStyle = "#12060e"; c.fillRect(0, 0, w, h);
+      c.shadowColor = "#ffc34d"; c.shadowBlur = 18;
+      text(c, "VIP", w / 2, h * 0.52, h * 0.72, "#ffe2a0", "italic 800", "center", "Didot, Georgia, serif");
+      c.shadowBlur = 0;
+    });
+    cell(1, board("#1b1b1f", "#ff2e7e", "UITLEEN", "KOSTUUMDIENST · NR. TREKKEN", "#f5f5f5"));
+    cell(2, board("#1b1b1f", "#ffb000", "UITLEEN", "REKWISIETEN · BON VERPLICHT", "#f5f5f5"));
+    cell(3, (w, h) => {
+      const g = c.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, "#e8cf8a"); g.addColorStop(1, "#a88840");
+      c.fillStyle = g; c.fillRect(0, 0, w, h);
+      text(c, "GEDELEGEERD BESTUURDER", w / 2, h * 0.42, h * 0.15, "#2a1d08", "800", "center", "Georgia, serif");
+      text(c, "niet storen", w / 2, h * 0.7, h * 0.12, "#2a1d08", "italic 500", "center", "Georgia, serif");
+    });
+    cell(4, board("#0f0f10", "#c9a24a", "RESTAURANT VIP", "RESERVATIES · ENKEL MET BADGE", "#e8cf8a"));
+    cell(5, board("#f2c200", "#111", "PERRON 1", "LAADPERRON · MAX 3,5 T", "#111"));
+    cell(6, board("#f2c200", "#111", "PERRON 2", "LAADPERRON · MAX 3,5 T", "#111"));
+    cell(7, (w, h) => {
+      c.fillStyle = "#1c2a5c"; c.fillRect(0, 0, w, h);
+      c.fillStyle = "#f2c94c";
+      c.beginPath();
+      for (let k = 0; k < 10; k++) {
+        const a = -Math.PI / 2 + (k * Math.PI) / 5, r = k % 2 ? h * 0.18 : h * 0.4;
+        c.lineTo(w * 0.22 + Math.cos(a) * r, h / 2 + Math.sin(a) * r);
+      }
+      c.fill();
+      text(c, "GAST", w * 0.62, h * 0.4, h * 0.26, "#f2c94c", "900");
+      text(c, "graag kloppen", w * 0.62, h * 0.7, h * 0.13, "#f2c94c", "600");
+    });
+  },
+  [L.ROLLER]: (c) => {
+    // corrugated steel slats, a yellow bottom rail, grime
+    fill(c, "#8e9297");
+    for (let y = 0; y < S; y += 16) {
+      c.fillStyle = "#a3a7ac"; c.fillRect(0, y, S, 7);
+      c.fillStyle = "#6c7075"; c.fillRect(0, y + 13, S, 3);
+    }
+    blotches(c, 30, "#5a5040", 10, 40, 0.12);
+    c.fillStyle = "#e0b000"; c.fillRect(0, S - 26, S, 26);
+    c.fillStyle = "#222"; for (let x = 0; x < S; x += 40) { c.beginPath(); c.moveTo(x, S); c.lineTo(x + 20, S - 26); c.lineTo(x + 34, S - 26); c.lineTo(x + 14, S); c.fill(); }
+    text(c, "VRIJ HOUDEN", S / 2, S * 0.62, 34, "#d8202a", "900");
+    noise(c, 14);
+  },
+  [L.HAZARD]: (c) => {
+    fill(c, "#f2c200");
+    c.fillStyle = "#161616";
+    for (let k = -S; k < S * 2; k += 128) { c.beginPath(); c.moveTo(k, 0); c.lineTo(k + 64, 0); c.lineTo(k + 64 - S, S); c.lineTo(k - S, S); c.fill(); }
+    noise(c, 16);
+  },
   [L.MIDSIGN]: (c) => {
     // two hanging direction signs, each 1.9 x 0.32 m (top half / bottom half of the texture)
     for (const [row, left, right] of [[0, "← RTBF · RÉGIES · PARKING", "VRT · STUDIO TV · PERS →"], [1, "← RTBF", "VRT · RESTAURANT →"]] as const) {
@@ -1012,6 +1072,18 @@ const painters: Record<number, (c: Ctx) => void> = {
     });
   },
 };
+
+// door signs, like SIGNS: 8 labels on dark plates with a coloured edge
+function serviceSigns(c: Ctx, labels: string[], edge: string) {
+  labels.forEach((t, n) => {
+    const x = (n % 2) * 256, y = Math.floor(n / 2) * 128;
+    c.fillStyle = "#2b2d31";
+    c.fillRect(x, y, 256, 128);
+    c.fillStyle = edge;
+    c.fillRect(x, y, 14, 128);
+    text(c, t, x + 135, y + 64, t.length > 9 ? 25 : 32, "#f5f5f5", "700");
+  });
+}
 
 function rtbfLogo(c: Ctx, x: number, y: number, s: number) {
   c.fillStyle = "#1a64c8";
