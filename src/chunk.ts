@@ -7,6 +7,9 @@ import { K, RT, SK, gardenStair, getStructure, kindAt, roomAnomaly, sideAt, stai
 import { hash } from "./rng";
 import { L } from "./layers";
 import { buildFixture, buildProp } from "./props";
+import { CylinderGeometry } from "three";
+
+const DUCT = new CylinderGeometry(1, 1, 1, 16, 1, true);
 
 const sp = (layer: number, tint?: RGB, emit?: RGB): Spec => ({ layer, tint, emit });
 const DARKTRIM = sp(L.WHITE, [0.12, 0.12, 0.13]);
@@ -37,6 +40,9 @@ function surf(p: Plan, i: number): Surf {
   const k = p.kind[i];
   switch (k) {
     case K.CORR:
+      if (p.st.atrium?.kind === "hall" && p.zone[i] === 2)
+        return { floor: sp(L.SPORTFLOOR), ceil: null, wall: sp(L.PLASTER, [0.95, 0.9, 0.74]), h: CEIL, base: false };
+      if (p.st.special === "park") return { floor: sp(L.CONCRETE, [0.75, 0.75, 0.72]), ceil: sp(L.STEEL, [0.7, 0.72, 0.75]), wall: sp(L.PLASTER), h: CEIL, base: false };
       if (p.st.mid) return { floor: sp(L.TILEDARK, [2.0, 1.9, 1.7]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER), h: CEIL, base: false };
       if ((p.zone[i] === 1 || p.zone[i] === 2) && p.st.atrium?.kind === "garden")
         return p.zone[i] === 2
@@ -63,6 +69,8 @@ function surf(p: Plan, i: number): Surf {
         case RT.CANTEEN: return { floor: sp(L.TILEDARK, [1.1, 1.05, 1.0]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.95, 0.9, 0.82]), h: CEIL, base: true };
         case RT.ARCHIVE: return { floor: sp(L.CONCRETE), ceil: sp(L.CONCRETE, [0.8, 0.8, 0.8]), wall: sp(L.BRICK, [0.8, 0.8, 0.78]), h: CEIL, base: false };
         case RT.REGIE: return { floor: sp(L.CARPET_GREY, [0.6, 0.6, 0.65]), ceil: sp(L.BLACK), wall: sp(L.BLACK, [1.4, 1.4, 1.45]), h: CEIL, base: false };
+        case RT.MESS: return { floor: sp(L.TILEDARK, [0.8, 0.8, 0.8]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.95, 0.95, 0.93]), h: CEIL, base: false };
+        case RT.LOUNGE: return { floor: sp(L.WOOD_FLOOR, [0.85, 0.8, 0.72]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.97, 0.94, 0.88]), h: CEIL, base: true };
         case RT.EMPTY: return { floor: sp(L.CARPET_FLECK), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.88, 0.88, 0.84]), h: CEIL, base: true };
         default: return { floor: sp(L.CARPET_BLUE, [0.9, 0.85, 0.85]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.93, 0.88, 0.82]), h: CEIL, base: true };
       }
@@ -94,6 +102,7 @@ export function buildChunk(f: number, cx: number, cz: number) {
   if (p.st.stair) buildStair(b, p);
   const gs = gardenStair(p.st);
   if (gs && f === gs.f0) buildGardenStair(b, gs, cx, cz);
+  if (p.st.atrium?.kind === "hall" && f === p.st.atrium.f0) buildHall(b, p);
   for (const l of fur.lights) buildFixture(b, l);
   for (const pr of fur.props) buildProp(b, pr);
   return { built: b.finish(), elevs };
@@ -120,7 +129,7 @@ function emitCell(b: Builder, p: Plan, i: number, gx: number, gz: number, y0: nu
         b.aabox(x0, y0 + CEIL - 0.1, z0 + o - 0.04, x1, y0 + CEIL, z0 + o + 0.04, DARKTRIM);
         b.aabox(x0 + o - 0.04, y0 + CEIL - 0.1, z0, x0 + o + 0.04, y0 + CEIL, z1, DARKTRIM);
       }
-    } else if (f === a.f1) {
+    } else if (f === a.f1 && a.kind === "lobby") {
       b.hrect(x0, z0, x1, z1, y0 + CEIL + 0.01, false, { layer: L.FROSTED, emit: [1.45, 1.5, 1.58], uv: [0, 0, 1, 1] }, 0);
       b.aabox(x0, y0 + CEIL - 0.08, z0 + 1.45, x1, y0 + CEIL, z0 + 1.55, DARKTRIM);
       b.aabox(x0 + 1.45, y0 + CEIL - 0.08, z0, x0 + 1.55, y0 + CEIL, z1, DARKTRIM);
@@ -129,7 +138,13 @@ function emitCell(b: Builder, p: Plan, i: number, gx: number, gz: number, y0: nu
   }
   const s = surf(p, i);
   if (k !== K.STAIR) {
-    b.hrect(x0, z0, x1, z1, y0, true, s.floor);
+    const hall = p.st.atrium?.kind === "hall" && p.zone[i] === 2 ? p.st.atrium : null;
+    if (hall) {
+      // the court drawing spans the whole hall floor
+      const X0 = (p.cx * CH + hall.x0 - 1) * CELL, Z0 = (p.cz * CH + hall.z0 - 1) * CELL;
+      const W = (hall.x1 - hall.x0 + 3) * CELL, D = (hall.z1 - hall.z0 + 3) * CELL;
+      b.hrect(x0, z0, x1, z1, y0, true, { layer: L.SPORTFLOOR, uv: [(x0 - X0) / W, (z0 - Z0) / D, (x1 - X0) / W, (z1 - Z0) / D] });
+    } else b.hrect(x0, z0, x1, z1, y0, true, s.floor);
     if (s.ceil && !(k === K.CORR && p.zone[i] === 2)) b.hrect(x0, z0, x1, z1, y0 + s.h, false, s.ceil);
   }
   if (k === K.GARAGE) {
@@ -344,7 +359,7 @@ function emitSide(b: Builder, p: Plan, i: number, gx: number, gz: number, d: num
       break;
     }
     case SK.WINDOW: {
-      if (p.st.mid) {
+      if (p.st.mid || p.st.special === "park") {
         // de middengang: floor-to-ceiling glass, slim mullions, a low wooden rail
         const mull = sp(L.WHITE, [0.2, 0.2, 0.21]);
         const e0 = -half, e1 = half;
@@ -377,6 +392,18 @@ function emitSide(b: Builder, p: Plan, i: number, gx: number, gz: number, d: num
       break;
     }
     case SK.RAIL: {
+      if (p.st.atrium?.kind === "hall") {
+        // a window from the corridor down into the sporthal
+        face(s0, s1, 0, 0.95);
+        face(s0, s1, h - 0.15, h);
+        const fr = sp(L.WHITE, [0.25, 0.25, 0.26]);
+        sbox(s0, s1, 0.02, 0.1, 0.95, 1.0, fr);
+        for (const m of [-1.45, 0, 1.45]) sbox(m - 0.03, m + 0.03, 0.02, 0.1, 1.0, h - 0.15, fr);
+        b.glass(pt(-half, 0.06, 1.0), [along[0] * CELL, 0, along[2] * CELL], [0, h - 1.15, 0], [0.7, 0.8, 0.85, 0.1]);
+        base(s0, s1);
+        seg(s0, s1);
+        break;
+      }
       const gs = gardenStair(p.st);
       b.vrect(axisX, plane(0), A(-half), A(half), y0 - (H - CEIL), y0, Dn, sp(L.PLASTER, [0.85, 0.85, 0.83]), 0, y0);
       if (!gs) {
@@ -507,7 +534,7 @@ export function buildCarInterior(b: Builder, gx: number, gz: number, y0: number,
 // Courtyard facades + ground, independent of floor.
 export function buildExterior(cx: number, cz: number): Built | null {
   const st = getStructure(cx, cz);
-  if (st.mid) return buildMidExterior(cx, cz);
+  if (st.mid || st.special === "park") return buildMidExterior(cx, cz);
   const c = st.court;
   if (!c) return null;
   const b = new Builder(new LightCtx(0, cx, cz, "outdoor"));
@@ -578,34 +605,45 @@ function buildGardenStair(b: Builder, g: GardenStair, cx: number, cz: number) {
   void cz;
 }
 
-// Outside the middengang: grass, the facades of both buildings, and the floor
-// slabs of the glass corridor stacked up to the roof.
+// Outside the middengang / parkeertoren: grass, the facades of the buildings
+// around the gap, and every floor of the glass links and the parking deck.
 function buildMidExterior(cx: number, cz: number): Built {
   const st = getStructure(cx, cz);
   const b = new Builder(new LightCtx(0, cx, cz, "outdoor"));
-  const X0 = cx * CHUNK, Z0 = cz * CHUNK, X1 = X0 + CHUNK, Z1 = Z0 + CHUNK;
+  const X0 = cx * CHUNK, Z0 = cz * CHUNK;
   const top = FLOOR_MAX * H;
+  const dk = st.deck;
+  const isDeck = (x: number, z: number) => !!dk && x >= dk.x0 && x <= dk.x1 && z >= dk.z0 && z <= dk.z1;
+  const solid = (x: number, z: number) => x >= 0 && z >= 0 && x < CH && z < CH && (st.corr[z * CH + x] === 1 || isDeck(x, z));
+  const slab = sp(L.CONCRETE, [0.82, 0.82, 0.8]);
   b.cell(cx * CH, cz * CH);
   for (let z = 0; z < CH; z++)
     for (let x = 0; x < CH; x++) {
       const gx = X0 + x * CELL, gz = Z0 + z * CELL;
-      if (!st.corr[z * CH + x]) {
+      if (!solid(x, z)) {
         b.hrect(gx, gz, gx + CELL, gz + CELL, 0, true, sp(L.GRASS), 0);
         continue;
       }
-      // solid slab band per floor: fills the plenum between one ceiling and the next floor
+      const deck = isDeck(x, z);
+      // slab band per floor, filling the plenum between one ceiling and the next floor
       for (let f = 1; f <= FLOOR_MAX; f++)
-        b.aabox(gx, f * H - (H - CEIL) + 0.02, gz, gx + CELL, f * H - 0.03, gz + CELL, { all: sp(L.CONCRETE, [0.82, 0.82, 0.8]) }, 0);
-      // the curtain wall seen from outside, on every floor (loaded floors draw their own on top)
+        b.aabox(gx, f * H - (deck ? 1.0 : H - CEIL) + 0.02, gz, gx + CELL, f * H - 0.03, gz + CELL, { all: slab }, 0);
       for (let d = 0; d < 4; d++) {
         const nx = x + DX[d]!, nz = z + DZ[d]!;
-        if (nx < 0 || nz < 0 || nx >= CH || nz >= CH || st.corr[nz * CH + nx]) continue;
+        if (nx < 0 || nz < 0 || nx >= CH || nz >= CH || solid(nx, nz)) continue;
         const axisX = d % 2 === 0;
         const px = axisX ? gx + (DX[d]! > 0 ? CELL : 0) : gx;
         const pz = axisX ? gz : gz + (DZ[d]! > 0 ? CELL : 0);
         const out = 0.03 * (axisX ? DX[d]! : DZ[d]!);
         for (let f = 0; f < FLOOR_MAX; f++) {
           const y0 = f * H;
+          if (deck) {
+            // parapet of the open parking deck
+            if (axisX) b.aabox(px + out - 0.1, y0, pz, px + out + 0.1, y0 + 1.1, pz + CELL, slab, 0);
+            else b.aabox(px, y0, pz + out - 0.1, px + CELL, y0 + 1.1, pz + out + 0.1, slab, 0);
+            continue;
+          }
+          // the curtain wall seen from outside (loaded floors draw their own on top)
           if (axisX) b.glass([px + out, y0 + 0.1, pz], [0, 0, CELL], [0, CEIL - 0.2, 0], [0.7, 0.8, 0.85, 0.1]);
           else b.glass([px, y0 + 0.1, pz + out], [CELL, 0, 0], [0, CEIL - 0.2, 0], [0.7, 0.8, 0.85, 0.1]);
           for (const t of [0, 0.5, 1]) {
@@ -615,16 +653,64 @@ function buildMidExterior(cx: number, cz: number): Built {
         }
       }
     }
-  // facades, with gaps where the glass links enter the buildings
-  let lx0 = CH, lx1 = -1;
-  for (let x = 0; x < CH; x++) if (st.corr[x]) { lx0 = Math.min(lx0, x); lx1 = Math.max(lx1, x); }
-  const spans: [number, number][] = lx1 >= 0 ? [[0, lx0], [lx1 + 1, CH]] : [[0, CH]];
-  for (const [a0, a1] of spans) {
-    if (a1 <= a0) continue;
-    const u0 = X0 / CELL + a0, u1 = X0 / CELL + a1;
-    b.vrect(false, Z0, X0 + a0 * CELL, X0 + a1 * CELL, 0, top, 1, { layer: L.FACADE, uv: [u0, 0, u1, top / H] }, 0);
-    b.vrect(false, Z1, X0 + a0 * CELL, X0 + a1 * CELL, 0, top, -1, { layer: L.FACADE, uv: [u0, 0, u1, top / H] }, 0);
-  }
-  void X1;
+  // facades of the buildings around the open gap, one cell at a time
+  for (let k = 0; k < CH; k++)
+    for (const [x, z, d] of [[k, 0, 3], [k, CH - 1, 1], [0, k, 2], [CH - 1, k, 0]] as const) {
+      if (solid(x, z)) continue;
+      if (st.mid && d % 2 === 0) continue; // the middengang continues east and west
+      const gx = X0 + x * CELL, gz = Z0 + z * CELL;
+      const fac = (a0: number, a1: number) => ({ layer: L.FACADE, uv: [a0 / CELL, 0, a1 / CELL, top / H] as [number, number, number, number] });
+      if (d === 3) b.vrect(false, gz, gx, gx + CELL, 0, top, 1, fac(gx, gx + CELL), 0);
+      else if (d === 1) b.vrect(false, gz + CELL, gx, gx + CELL, 0, top, -1, fac(gx, gx + CELL), 0);
+      else if (d === 2) b.vrect(true, gx, gz, gz + CELL, 0, top, 1, fac(gz, gz + CELL), 0);
+      else b.vrect(true, gx + CELL, gz, gz + CELL, 0, top, -1, fac(gz, gz + CELL), 0);
+    }
   return b.finish();
+}
+
+// De sporthal: glulam arches carrying a barrel vault over the whole court,
+// glowing slatted windows in the gable ends, a long ventilation duct.
+function buildHall(b: Builder, p: Plan) {
+  const a = p.st.atrium!;
+  const y0 = a.f0 * H;
+  const X0 = (p.cx * CH + a.x0 - 1) * CELL + T, X1 = (p.cx * CH + a.x1 + 2) * CELL - T;
+  const Z0 = (p.cz * CH + a.z0 - 1) * CELL + T, Z1 = (p.cz * CH + a.z1 + 2) * CELL - T;
+  const spring = CEIL, apex = (a.f1 - a.f0) * H + CEIL - 0.25;
+  const span = X1 - X0, cxm = (X0 + X1) / 2, len = Z1 - Z0;
+  const N = 18;
+  const arc = (t: number): [number, number] => [cxm - Math.cos(Math.PI * t) * span / 2, spring + Math.sin(Math.PI * t) * (apex - spring)];
+  const cellAt = (x: number, z: number) => b.cell(Math.floor(Math.min(X1 - 0.1, Math.max(X0 + 0.1, x)) / CELL), Math.floor(Math.min(Z1 - 0.1, Math.max(Z0 + 0.1, z)) / CELL));
+  const skin = sp(L.CEILTILE, [0.78, 0.8, 0.8]);
+  const wood = sp(L.WOOD_FLOOR, [0.75, 0.5, 0.3]);
+  for (let i = 0; i < N; i++) {
+    const [xa, ya] = arc(i / N), [xb, yb] = arc((i + 1) / N);
+    const dx = xb - xa, dy = yb - ya, l = Math.hypot(dx, dy);
+    const n: V3 = [dy / l, -dx / l, 0];
+    // vault skin, in lengths so the light can vary along it
+    for (let z = Z0; z < Z1 - 0.01; z += CELL) {
+      const z2 = Math.min(Z1, z + CELL);
+      cellAt((xa + xb) / 2, (z + z2) / 2);
+      b.quad([xa, y0 + ya, z], [0, 0, z2 - z], [dx, dy, 0], n, skin, 1.5, [z / 2.4, 0, z2 / 2.4, l / 2.4]);
+    }
+    // glulam arches every 3 m
+    for (let z = Z0 + 1.5; z < Z1; z += CELL) {
+      cellAt((xa + xb) / 2, z);
+      b.obox([(xa + xb) / 2 + n[0] * 0.2, y0 + (ya + yb) / 2 + n[1] * 0.2, z], [dx / l, dy / l, 0], n, [0, 0, 1], [l / 2 + 0.02, 0.2, 0.11], { all: wood });
+    }
+    // gable ends: slatted windows glowing with daylight
+    for (const [zz, nz] of [[Z0, 1], [Z1, -1]] as const) {
+      cellAt((xa + xb) / 2, zz + nz * 1.5);
+      const u = (x: number) => (x - X0) / span, v = (y: number) => (y - spring) / (apex - spring);
+      b.quad4([[xa, y0 + spring, zz], [xb, y0 + spring, zz], [xb, y0 + yb, zz], [xa, y0 + ya, zz]], [[u(xa), 0], [u(xb), 0], [u(xb), v(yb)], [u(xa), v(ya)]], [0, 0, nz], { layer: L.SLATWIN, emit: [1.05, 0.95, 0.8] });
+    }
+  }
+  // big ventilation duct along the hall
+  cellAt(cxm, (Z0 + Z1) / 2);
+  const dx = cxm - span * 0.28;
+  b.geom(DUCT, dx, y0 + spring + (apex - spring) * 0.55, (Z0 + Z1) / 2, 0, 0.42, len, 0.42, sp(L.STEEL, [0.62, 0.64, 0.66]), Math.PI / 2);
+  // band between the ring walls and the vault on the long sides
+  for (const [xx, nx] of [[X0, 1], [X1, -1]] as const) {
+    cellAt(xx + nx * 1.5, (Z0 + Z1) / 2);
+    b.vrect(true, xx, Z0, Z1, y0 + spring - 0.05, y0 + spring + 0.4, nx, sp(L.WOOD_FLOOR, [0.55, 0.38, 0.24]), 3, y0);
+  }
 }

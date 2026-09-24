@@ -28,6 +28,8 @@ export const RT = {
   REGIE: 8,
   EMPTY: 9,
   EDIT: 10,
+  MESS: 11,
+  LOUNGE: 12,
 } as const;
 
 export const ROOM_LABEL = [
@@ -42,6 +44,8 @@ export const ROOM_LABEL = [
   "REGIE",
   "LEEG LOKAAL",
   "MONTAGE",
+  "DE MESS",
+  "ONTSPANNING",
 ];
 
 // Side kinds
@@ -87,10 +91,26 @@ export interface Structure {
   corr: Uint8Array;
   stair: null | { c: number; a: number; b: number; d: number };
   elevs: { c: number; e: number; d: number }[];
-  atrium: null | { x0: number; z0: number; x1: number; z1: number; f0: number; f1: number; kind: "lobby" | "garden" };
+  atrium: null | { x0: number; z0: number; x1: number; z1: number; f0: number; f1: number; kind: "lobby" | "garden" | "hall" };
   court: null | { x0: number; z0: number; x1: number; z1: number };
   style: number;
   mid?: boolean; // de middengang
+  special?: Special; // a whole chunk given over to one big place
+  deck?: { x0: number; z0: number; x1: number; z1: number }; // parkeertoren deck
+}
+
+export type Special = "sport" | "mess" | "park";
+export const MESS_FLOOR = 0;
+
+// Where the big places are: one of each near the start, then rarely.
+function specialFor(cx: number, cz: number): Special | null {
+  if (cz <= MID_CZ || (cx === 0 && cz === 0)) return null;
+  const fixed: Record<string, Special> = { "-2,1": "sport", "2,0": "mess", "0,2": "park" };
+  const f = fixed[`${cx},${cz}`];
+  if (f) return f;
+  if (Math.max(Math.abs(cx), Math.abs(cz)) <= 2) return null;
+  const h = hash(71, cx, cz) % 1000;
+  return h < 14 ? "sport" : h < 28 ? "mess" : h < 46 ? "park" : null;
 }
 
 export interface Plan {
@@ -132,7 +152,7 @@ export function getStructure(cx: number, cz: number): Structure {
   const key = cx + "," + cz;
   let s = structCache.get(key);
   if (s) return s;
-  s = cz === MID_CZ ? makeMidStructure(cx) : cz < MID_CZ ? mirrorStructure(makeStructure(cx, 2 * MID_CZ - cz), cz) : makeStructure(cx, cz);
+  s = cz === MID_CZ ? makeMidStructure(cx) : cz < MID_CZ ? mirrorStructure(getStructure(cx, 2 * MID_CZ - cz), cz) : specialFor(cx, cz) ? makeSpecialStructure(cx, cz, specialFor(cx, cz)!) : makeStructure(cx, cz);
   if (structCache.size > 4000) structCache.clear();
   structCache.set(key, s);
   return s;
@@ -323,6 +343,16 @@ function makePlan(f: number, cx: number, cz: number): Plan {
     for (let i = 0; i < CH * CH; i++) p.kind[i] = st.corr[i] ? (f === FLOOR_MAX ? K.ROOF : K.CORR) : K.COURT;
     return p;
   }
+  if (st.special === "park") {
+    // glass footbridges to an open parking deck, stacked all the way up
+    const dk = st.deck!;
+    for (let i = 0; i < CH * CH; i++) {
+      const x = i % CH, z = (i / CH) | 0;
+      const deck = x >= dk.x0 && x <= dk.x1 && z >= dk.z0 && z <= dk.z1;
+      p.kind[i] = f === FLOOR_MAX ? (deck || st.corr[i] ? K.ROOF : K.COURT) : deck ? K.GARAGE : st.corr[i] ? K.CORR : K.COURT;
+    }
+    return p;
+  }
   if (f === FLOOR_MAX) return planRoof(p);
 
   const { kind, zone } = p;
@@ -348,6 +378,10 @@ function makePlan(f: number, cx: number, cz: number): Plan {
         if (isVoid) {
           kind[i] = f === a.f0 ? K.CORR : K.VOID;
           zone[i] = 2;
+        } else if (a.kind === "hall") {
+          // the sporthal: one volume, three storeys high
+          kind[i] = f === a.f0 ? K.CORR : K.VOID;
+          zone[i] = 2;
         } else {
           if (kind[i] !== K.CORR) zone[i] = 1;
           kind[i] = K.CORR;
@@ -357,6 +391,39 @@ function makePlan(f: number, cx: number, cz: number): Plan {
   }
 
   const free = (x: number, z: number) => inside(x, z) && kind[idx(x, z)] === K.SOLID;
+
+  // Sporthal entrances: solid walls to the corridor, with a pair of double doors
+  if (a && a.kind === "hall" && f === a.f0) {
+    const doors: [number, number][] = [];
+    for (let z = a.z0 - 1; z <= a.z1 + 1; z++)
+      for (let x = a.x0 - 1; x <= a.x1 + 1; x++)
+        for (let d = 0; d < 4; d++) {
+          const nx = x + DX[d]!, nz = z + DZ[d]!;
+          const inHall = nx >= a.x0 - 1 && nx <= a.x1 + 1 && nz >= a.z0 - 1 && nz <= a.z1 + 1;
+          if (inHall || !inside(nx, nz) || kind[idx(nx, nz)] !== K.CORR) continue;
+          const i = idx(x, z);
+          p.sides.set(i * 4 + d, { sk: SK.WALL });
+          p.sides.set(idx(nx, nz) * 4 + ((d + 2) % 4), { sk: SK.WALL });
+          if (x === Math.floor((a.x0 + a.x1) / 2)) doors.push([i, d]);
+        }
+    for (const [i, d] of doors) setDoor(p, i, d, { kind: "double", open: true, owner: i, w: 1.8 });
+  }
+
+  // De Mess: the whole inside of the chunk is one enormous canteen
+  if (st.special === "mess" && f === MESS_FLOOR) {
+    const room: Room = { id: 0, type: RT.MESS, x0: 1, z0: 1, x1: CH - 2, z1: CH - 2, cells: [], dark: false, glass: false, num: 1 };
+    for (let z = 1; z < CH - 1; z++)
+      for (let x = 1; x < CH - 1; x++) {
+        const i = idx(x, z);
+        if (kind[i] !== K.SOLID) continue;
+        kind[i] = K.ROOM;
+        p.room[i] = 0;
+        room.cells.push(i);
+      }
+    p.rooms.push(room);
+    for (const [x, z, d] of [[5, 1, 3], [6, CH - 2, 1], [1, 6, 2], [CH - 2, 5, 0]] as const)
+      setDoor(p, idx(x, z), d, { kind: "double", open: true, owner: idx(x, z), w: 1.8 });
+  }
 
   // Spur corridors differ per floor.
   const nSpur = rng.int(0, 2);
@@ -403,9 +470,9 @@ function makePlan(f: number, cx: number, cz: number): Plan {
       if (area >= 9 && mn >= 3)
         room.type = rng.weighted([[RT.OFFICE, 40], [RT.CANTEEN, 10], [RT.STUDIO, 14], [RT.ARCHIVE, 10], [RT.EMPTY, 12], [RT.REGIE, 8]]);
       else if (area >= 4)
-        room.type = rng.weighted([[RT.OFFICE, 30], [RT.MEETING, 20], [RT.BATH, 12], [RT.ARCHIVE, 8], [RT.EDIT, 10], [RT.REGIE, 6], [RT.EMPTY, 8], [RT.SERVER, 6]]);
+        room.type = rng.weighted([[RT.OFFICE, 30], [RT.MEETING, 20], [RT.BATH, 12], [RT.ARCHIVE, 8], [RT.EDIT, 10], [RT.REGIE, 6], [RT.EMPTY, 8], [RT.SERVER, 6], [RT.LOUNGE, 2.5]]);
       else if (area >= 2)
-        room.type = rng.weighted([[RT.BATH, 20], [RT.MEETING, 18], [RT.STORAGE, 14], [RT.SERVER, 12], [RT.EDIT, 14], [RT.OFFICE, 12]]);
+        room.type = rng.weighted([[RT.BATH, 20], [RT.MEETING, 18], [RT.STORAGE, 14], [RT.SERVER, 12], [RT.EDIT, 14], [RT.OFFICE, 12], [RT.LOUNGE, 1.5]]);
       else room.type = rng.weighted([[RT.STORAGE, 40], [RT.SERVER, 20], [RT.BATH, 15], [RT.EDIT, 10]]);
       room.dark = rng.chance(room.type === RT.REGIE || room.type === RT.STUDIO ? 0.6 : 0.22 + Math.min(0.3, dist * 0.01));
       room.num = 1 + (hash(55, f, cx, cz, id) % 9);
@@ -426,7 +493,8 @@ function makePlan(f: number, cx: number, cz: number): Plan {
     if (!cands.length) continue;
     connected.add(room.id);
     const t = room.type;
-    const big = t === RT.STUDIO || t === RT.CANTEEN;
+    const big = t === RT.STUDIO || t === RT.CANTEEN || t === RT.MESS;
+    if (t === RT.MESS) continue; // its doors were placed above
     const openP = t === RT.STORAGE || t === RT.SERVER ? 0.45 : t === RT.BATH ? 0.9 : 0.78;
     room.glass = (t === RT.OFFICE || t === RT.MEETING || t === RT.EDIT) && rng.chance(0.35);
     const nDoors = room.cells.length >= 6 && rng.chance(0.4) ? 2 : 1;
@@ -557,7 +625,7 @@ export function sideAt(f: number, gx: number, gz: number, d: number): Side {
     kb = pb.kind[lb]!;
   }
   if (kb === K.COURT) {
-    if (ka === K.ROOF) return PARAPET_SIDE;
+    if (ka === K.ROOF || ka === K.GARAGE) return PARAPET_SIDE;
     if (ka === K.CORR || ka === K.ROOM) return WINDOW_SIDE;
     return WALL_SIDE;
   }
@@ -572,6 +640,8 @@ export function sideAt(f: number, gx: number, gz: number, d: number): Side {
   }
   if (same && ka === K.ROOM && kb === K.ROOM && p.room[la] === p.room[lb]) return OPEN_SIDE;
   if (same && ka === K.STAIR && kb === K.STAIR) return OPEN_SIDE;
+  // the footbridges walk straight onto the parking deck
+  if (same && p.st.special === "park" && ((ka === K.CORR && kb === K.GARAGE) || (ka === K.GARAGE && kb === K.CORR))) return OPEN_SIDE;
   return WALL_SIDE;
 }
 
@@ -588,12 +658,14 @@ export function lightPass(f: number, gx: number, gz: number, d: number): boolean
 }
 
 // Human readable label for a cell (HUD).
-const ROOM_LABEL_FR = ["BUREAU", "SALLE DE RÉUNION", "SANITAIRES", "RÉSERVE", "SALLE DES SERVEURS", "STUDIO", "CANTINE", "ARCHIVES", "RÉGIE", "LOCAL VIDE", "MONTAGE"];
+const ROOM_LABEL_FR = ["BUREAU", "SALLE DE RÉUNION", "SANITAIRES", "RÉSERVE", "SALLE DES SERVEURS", "STUDIO", "CANTINE", "ARCHIVES", "RÉGIE", "LOCAL VIDE", "MONTAGE", "LE MESS", "SALLE DE DÉTENTE"];
 
 export function cellLabel(f: number, gx: number, gz: number): string {
   const { p, i } = planAt(f, gx, gz);
   const k = p.kind[i];
   if (p.st.mid && (k === K.CORR || k === K.ROOF)) return "MIDDENGANG";
+  if (p.st.special === "park") return k === K.CORR ? (p.cz < MID_CZ ? "PASSERELLE" : "LOOPBRUG") : p.cz < MID_CZ ? "PARKING-TOUR" : "PARKEERTOREN";
+  if (p.st.atrium?.kind === "hall" && p.zone[i] === 2) return p.cz < MID_CZ ? "SALLE DE SPORT" : "SPORTHAL";
   if (p.cz < MID_CZ) {
     switch (k) {
       case K.CORR:
@@ -706,6 +778,8 @@ function mirrorStructure(src: Structure, cz: number): Structure {
     atrium: a ? { ...a, z0: CH - 1 - a.z1, z1: CH - 1 - a.z0 } : null,
     court: c ? { ...c, z0: CH - 1 - c.z1, z1: CH - 1 - c.z0 } : null,
     style: src.style,
+    special: src.special,
+    deck: src.deck ? { ...src.deck, z0: CH - 1 - src.deck.z1, z1: CH - 1 - src.deck.z0 } : undefined,
   };
 }
 
@@ -765,4 +839,24 @@ export function anomalyAt(f: number, gx: number, gz: number): Anomaly {
   const { p, i } = planAt(f, gx, gz);
   if (p.kind[i] !== K.ROOM) return "";
   return roomAnomaly(p, p.rooms[p.room[i]!]!);
+}
+
+// Special chunks: a corridor around the edge (so every neighbour's portal
+// connects), and the inside given over to one big place.
+function makeSpecialStructure(cx: number, cz: number, kind: Special): Structure {
+  const corr = new Uint8Array(CH * CH);
+  const base: Structure = { cx, cz, corr, stair: null, elevs: [], atrium: null, court: null, style: 1, special: kind };
+  if (kind === "park") {
+    const W = rowInfo(cz, xGroup(cx - 1, cz)), E = rowInfo(cz, xGroup(cx, cz));
+    const N = colInfo(cx, zGroup(cx, cz - 1)), S = colInfo(cx, zGroup(cx, cz));
+    const dk = { x0: 3, z0: 3, x1: CH - 4, z1: CH - 4 };
+    for (let x = 0; x < dk.x0; x++) for (let k = 0; k < W.w; k++) corr[idx(x, W.z + k)] = 1;
+    for (let x = dk.x1 + 1; x < CH; x++) for (let k = 0; k < E.w; k++) corr[idx(x, E.z + k)] = 1;
+    for (let z = 0; z < dk.z0; z++) for (let k = 0; k < N.w; k++) corr[idx(N.x + k, z)] = 1;
+    for (let z = dk.z1 + 1; z < CH; z++) for (let k = 0; k < S.w; k++) corr[idx(S.x + k, z)] = 1;
+    return { ...base, deck: dk };
+  }
+  for (let i = 0; i < CH; i++) corr[idx(i, 0)] = corr[idx(i, CH - 1)] = corr[idx(0, i)] = corr[idx(CH - 1, i)] = 1;
+  if (kind === "sport") base.atrium = { x0: 3, z0: 2, x1: 8, z1: 9, f0: 0, f1: 2, kind: "hall" };
+  return base;
 }

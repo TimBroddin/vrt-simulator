@@ -24,7 +24,7 @@ export class Minimap {
   key = "";
   ox = 0;
   oz = 0;
-  visible = false;
+  visible = true;
 
   constructor() {
     this.el = document.getElementById("minimap") as HTMLCanvasElement;

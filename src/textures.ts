@@ -446,6 +446,81 @@ const painters: Record<number, (c: Ctx) => void> = {
       }, 0, y0, S, 256);
     }
   },
+  [L.SPORTFLOOR]: (c) => {
+    // the whole hall floor: 24 x 30 m, court lines in white, blue and yellow
+    fill(c, "#2c6a50");
+    noise(c, 12);
+    const u = (m: number) => (m / 24) * S, v = (m: number) => (m / 30) * S;
+    c.fillStyle = "#29604a";
+    c.fillRect(u(3), v(3), u(18), v(24));
+    c.lineWidth = 3;
+    c.strokeStyle = "#e8e8e0";
+    c.strokeRect(u(3), v(3), u(18), v(24));
+    c.beginPath(); c.moveTo(u(3), v(15)); c.lineTo(u(21), v(15)); c.stroke();
+    c.beginPath(); c.ellipse(u(12), v(15), u(2), v(2), 0, 0, 7); c.stroke();
+    for (const [y, dir] of [[3, 1], [27, -1]] as const) {
+      c.beginPath(); c.ellipse(u(12), v(y), u(6), v(6), 0, dir > 0 ? 0 : Math.PI, dir > 0 ? Math.PI : Math.PI * 2); c.stroke();
+      c.setLineDash([10, 8]);
+      c.beginPath(); c.ellipse(u(12), v(y), u(9), v(9), 0, dir > 0 ? 0 : Math.PI, dir > 0 ? Math.PI : Math.PI * 2); c.stroke();
+      c.setLineDash([]);
+    }
+    c.lineWidth = 2;
+    c.strokeStyle = "#5aa0e0";
+    c.strokeRect(u(6), v(8), u(12), v(14));
+    c.beginPath(); c.moveTo(u(6), v(15)); c.lineTo(u(18), v(15)); c.stroke();
+    c.strokeStyle = "#e8c43a";
+    c.strokeRect(u(4.5), v(5), u(15), v(20));
+    c.beginPath(); c.moveTo(u(12), v(5)); c.lineTo(u(12), v(25)); c.stroke();
+  },
+  [L.SLATWIN]: (c) => {
+    // tall windows behind wooden slats, lit by the afternoon
+    const g = c.createLinearGradient(0, 0, 0, S);
+    g.addColorStop(0, "#fff6dc");
+    g.addColorStop(0.7, "#ffe6b0");
+    g.addColorStop(1, "#b8c890");
+    c.fillStyle = g;
+    c.fillRect(0, 0, S, S);
+    blotches(c, 20, "#6e8a4a", 20, 60, 0.25);
+    for (let x = 0; x < S; x += 22) {
+      c.fillStyle = "#6a4426";
+      c.fillRect(x, 0, 12, S);
+      c.fillStyle = "rgba(255,210,140,0.6)";
+      c.fillRect(x + 11, 0, 2, S);
+    }
+    c.fillStyle = "#4e321c";
+    for (let y = S * 0.2; y < S; y += S * 0.28) c.fillRect(0, y, S, 8);
+  },
+  [L.DARTBOARD]: (c) => {
+    c.clearRect(0, 0, S, S);
+    const r = 250;
+    for (let k = 0; k < 20; k++) {
+      const a0 = (k / 20) * Math.PI * 2, a1 = ((k + 1) / 20) * Math.PI * 2;
+      for (const [r0, r1, cols] of [[0, r, ["#111", "#eee6cc"]], [r * 0.58, r * 0.64, ["#c01818", "#1a8a3a"]], [r * 0.92, r, ["#c01818", "#1a8a3a"]]] as const) {
+        c.fillStyle = cols[k % 2]!;
+        c.beginPath();
+        c.arc(256, 256, r1, a0, a1);
+        c.arc(256, 256, r0, a1, a0, true);
+        c.fill();
+      }
+    }
+    c.fillStyle = "#1a8a3a"; c.beginPath(); c.arc(256, 256, 22, 0, 7); c.fill();
+    c.fillStyle = "#c01818"; c.beginPath(); c.arc(256, 256, 10, 0, 7); c.fill();
+  },
+  [L.CHALK]: (c) => {
+    fill(c, "#1d2a24");
+    noise(c, 10);
+    c.globalAlpha = 0.15;
+    c.fillStyle = "#ddd";
+    for (let i = 0; i < 30; i++) c.fillRect(R() * S, R() * S, 40 + R() * 120, 6 + R() * 10);
+    c.globalAlpha = 0.85;
+    aspect(c, 1.5 / 1.1, (w, h) => {
+      text(c, "POOL · VRT vs RTBF", w / 2, h * 0.18, 30, "#eee", "600", "center", "Marker Felt, Comic Sans MS, cursive");
+      text(c, "Tim  ||||  ||", 60, h * 0.42, 26, "#eee", "500", "left", "Marker Felt, Comic Sans MS, cursive");
+      text(c, "Jan  |||||  |||", 60, h * 0.58, 26, "#eee", "500", "left", "Marker Felt, Comic Sans MS, cursive");
+      text(c, "winnaar betaalt koffie", 60, h * 0.8, 22, "#f0d060", "500", "left", "Marker Felt, Comic Sans MS, cursive");
+    });
+    c.globalAlpha = 1;
+  },
   [L.NUMBERS]: (c) => {
     fill(c, "#f0efe9");
     for (let n = 0; n < 16; n++) {

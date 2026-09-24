@@ -175,7 +175,7 @@ export class World {
       for (let dx = -R; dx <= R; dx++) {
         const cx = pcx + dx, cz = pcz + dz;
         const st = getStructure(cx, cz);
-        if (st.court || st.mid) wantExt.set(`${cx},${cz}`, { key: `${cx},${cz}`, kind: "ext", f: 0, cx, cz, pri: Math.max(Math.abs(dx), Math.abs(dz)) + 0.5 });
+        if (st.court || st.mid || st.special === "park") wantExt.set(`${cx},${cz}`, { key: `${cx},${cz}`, kind: "ext", f: 0, cx, cz, pri: Math.max(Math.abs(dx), Math.abs(dz)) + 0.5 });
       }
 
     // unload what is well outside the wanted set

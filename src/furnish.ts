@@ -183,7 +183,7 @@ function furnish(p: Plan): Furnished {
     const k = p.kind[i];
     const c = center(i);
     if (k === K.VOID || (k === K.CORR && p.zone[i] === 2)) {
-      if (inAtrium) {
+      if (inAtrium && atr!.kind !== "hall") {
         const fall = 1 - (atr!.f1 - f) * 0.09;
         light(c.x, y0 + 2.4, c.z, DAY, 0.95 * fall, 7.5, c.gx, c.gz, null);
       }
@@ -283,6 +283,13 @@ function furnish(p: Plan): Furnished {
       } else if (r < 0.46) prop("bin", wp.wx, y0, wp.wz, rot, c.gx, c.gz);
       else if (r < 0.475) prop("vending", wp.wx, y0, wp.wz, rot, c.gx, c.gz, rng.int(0, 1));
     }
+    // the footbridges to the parkeertoren: diagonal steel braces in every bay
+    if (p.st.special === "park")
+      for (let d = 0; d < 4; d++)
+        if (sd[d]!.sk === SK.WINDOW) {
+          const wp = wallPoint(i, d, 0.1);
+          prop("brace", wp.wx, y0, wp.wz, faceRot(d), c.gx, c.gz, (c.gx + c.gz) & 1);
+        }
     // held-open fire doors at chunk seams
     if ((c.gx === gx0 && sd[2]!.sk === SK.OPEN) || (c.gz === gz0 && sd[3]!.sk === SK.OPEN)) {
       const d = c.gx === gx0 && sd[2]!.sk === SK.OPEN ? 2 : 3;
@@ -294,6 +301,58 @@ function furnish(p: Plan): Furnished {
         const wp = wallPoint(i, d, 0.7);
         light(wp.wx, y0 + 1.7, wp.wz, DAY, 1.0, 7, c.gx, c.gz, null);
       }
+  }
+
+  // De sporthal: the court, the goals, the lonely ball, the lights high up.
+  if (inAtrium && atr!.kind === "hall" && f === atr!.f0) {
+    const X0 = (gx0 + atr!.x0 - 1) * CELL, X1 = (gx0 + atr!.x1 + 2) * CELL;
+    const Z0 = (gz0 + atr!.z0 - 1) * CELL, Z1 = (gz0 + atr!.z1 + 2) * CELL;
+    const mx = (X0 + X1) / 2, mz = (Z0 + Z1) / 2;
+    const cellOf = (x: number, z: number) => [Math.floor(x / CELL), Math.floor(z / CELL)] as const;
+    const top = (atr!.f1 - atr!.f0) * H + CEIL - 1.6;
+    for (let z = Z0 + 4; z < Z1 - 2; z += 6)
+      for (const x of [mx - 6.5, mx, mx + 6.5]) {
+        const [gx, gz] = cellOf(x, z);
+        light(x, y0 + top - (x === mx ? 0 : 1.2), z, [0.92, 1.0, 0.9], 1.9, 13, gx, gz, "tube", { rot: Math.PI / 2, dead: rng.chance(0.12), flick: rng.chance(0.08) });
+      }
+    for (const [z, s] of [[Z0 + 1.5, 1], [Z1 - 1.5, -1]] as const) {
+      for (const x of [mx - 6, mx, mx + 6]) {
+        const [gx, gz] = cellOf(x, z);
+        light(x, y0 + 5, z + s, [1.0, 0.9, 0.72], 1.4, 12, gx, gz, null);
+      }
+      const [gx, gz] = cellOf(mx, z + s * 1.5);
+      prop("goal", mx, y0, z + s * 1.6, s > 0 ? 0 : Math.PI, gx, gz);
+    }
+    const [bgx, bgz] = cellOf(mx, mz);
+    prop("ball", mx + rng.range(-3, 3), y0, mz + rng.range(-3, 3), 0, bgx, bgz);
+    for (let k = 0; k < 6; k++) prop("cone", mx + rng.range(-7, 7), y0, mz + rng.range(-10, 10), 0, bgx, bgz);
+    const [hgx, hgz] = cellOf(X1 - 1, mz);
+    prop("hoop", X1 - 0.2, y0, mz, -Math.PI / 2, hgx, hgz);
+    const [wgx, wgz] = cellOf(X0 + 1, mz);
+    for (let k = -2; k <= 2; k++) prop("wallbars", X0 + 0.02, y0, mz + k * 1.05, Math.PI / 2, wgx, wgz);
+    prop("bench", X0 + 0.1, y0, mz - 6, Math.PI / 2, wgx, wgz);
+    prop("bench", X0 + 0.1, y0, mz + 6, Math.PI / 2, wgx, wgz);
+    prop("mats", X1 - 1.2, y0, Z0 + 3.5, 0.3, ...cellOf(X1 - 1.2, Z0 + 3.5));
+  }
+
+  // De parkeertoren: an open deck, parked cars, daylight from all sides.
+  if (p.st.special === "park" && f < FLOOR_MAX) {
+    for (let i = 0; i < CH * CH; i++) {
+      if (p.kind[i] !== K.GARAGE) continue;
+      const c = center(i);
+      if (c.gx % 2 === 0 && c.gz % 2 === 0) {
+        light(c.x, y0 + 2.45, c.z, [0.9, 1.0, 0.88], 1.3, 8, c.gx, c.gz, "tube", { dead: rng.chance(0.3), flick: rng.chance(0.12) });
+        const cornerOk = [[-1, -1], [0, -1], [-1, 0]].every(([ox, oz]) => kindAtLocal(p, i, ox!, oz!) === K.GARAGE);
+        if (cornerOk) prop("pillar", c.gx * CELL, y0, c.gz * CELL, 0, c.gx, c.gz);
+      }
+      const row = ((c.gz % 4) + 4) % 4;
+      if ((row === 1 || row === 2) && rng.chance(0.4)) prop("car", c.x + rng.range(-0.2, 0.2), y0, c.z + (row === 1 ? 0.2 : -0.2), row === 1 ? 0 : Math.PI, c.gx, c.gz, rng.int(0, 7));
+      for (let d = 0; d < 4; d++)
+        if (sideAt(f, c.gx, c.gz, d).sk === SK.PARAPET) {
+          const wp = wallPoint(i, d, 0.8);
+          light(wp.wx, y0 + 1.8, wp.wz, DAY, 1.1, 8, c.gx, c.gz, null);
+        }
+    }
   }
 
   // Plantentuin: planters with trees along the floating stair, two info screens.
@@ -318,7 +377,7 @@ function furnish(p: Plan): Furnished {
   }
 
   // Atrium lobby: a tree in a round red bench, like the NWS hall.
-  if (inAtrium && f === atr!.f0 && !gs) {
+  if (inAtrium && f === atr!.f0 && !gs && atr!.kind === "lobby") {
     const mx = (gx0 + (atr!.x0 + atr!.x1 + 1) / 2) * CELL;
     const mz = (gz0 + (atr!.z0 + atr!.z1 + 1) / 2) * CELL;
     prop("tree", mx, y0, mz, 0, gx0 + atr!.x0, gz0 + atr!.z0);
@@ -593,6 +652,43 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
     case RT.EMPTY: {
       panelLights(FLUO, 1.0, 2);
       if (rng.chance(0.5)) prop("chair", roomCenter.x, y0, roomCenter.z, rng.range(0, 6.28), g0.gx, g0.gz);
+      break;
+    }
+    case RT.MESS: {
+      // De Mess: rows of tables, green pillars, the counter, a flag
+      for (const i of cells) {
+        const lx = i % CH, lz = (i / CH) | 0;
+        const q = center(i);
+        light(q.x, y0 + CEIL - 0.02, q.z, WARM, 1.05, 7, q.gx, q.gz, null);
+        prop("downlights", q.x, y0 + CEIL, q.z, 0, q.gx, q.gz);
+        if (lx % 3 === 0 && lz % 3 === 0) prop("gpillar", q.x, y0, q.z, 0, q.gx, q.gz);
+        else if (lz > 1 && !hasDoor(i)) prop("messtable", q.x, y0, q.z, rng.chance(0.5) ? 0 : Math.PI / 2, q.gx, q.gz, rng.int(0, 99));
+        if (lz === 1 && lx >= 2 && lx <= CH - 3) {
+          const wp = wallPoint(i, 3);
+          prop("counter", wp.wx, y0, wp.wz, faceRot(3), q.gx, q.gz, lx);
+          if (lx === 6) prop("flag", q.x, y0 + CEIL, q.z + 1.2, 0, q.gx, q.gz);
+        }
+      }
+      for (const [i, dd] of perimeter) {
+        const lz = (i / CH) | 0;
+        if (lz === 1 && dd === 3) continue;
+        if (rng.chance(0.35)) {
+          const wp = wallPoint(i, dd, -0.01);
+          prop("greenwall", wp.wx, y0, wp.wz, faceRot(dd), wp.gx, wp.gz, rng.chance(0.4) ? 1 : 0);
+        }
+      }
+      break;
+    }
+    case RT.LOUNGE: {
+      // the pool table corner
+      panelLights(WARM, 1.1, 1);
+      prop("pooltable", roomCenter.x, y0, roomCenter.z, rot, g0.gx, g0.gz, rng.int(0, 99));
+      const ps = rng.shuffle([...perimeter]);
+      const uses = ["dartboard", "chalkboard", "plantshelf", "stools"];
+      ps.slice(0, 4).forEach(([i, dd], k) => {
+        const wp = wallPoint(i, dd);
+        prop(uses[k]!, wp.wx, y0, wp.wz, faceRot(dd), wp.gx, wp.gz, rng.int(0, 99));
+      });
       break;
     }
     case RT.EDIT: {

@@ -1,7 +1,7 @@
 // Prop and light-fixture geometry, all made from boxes and a few primitives.
 import { CylinderGeometry, IcosahedronGeometry, SphereGeometry } from "three";
 import { CEIL, DOOR_H } from "./config";
-import { Builder, Frame, UP, fbox, type RGB, type Spec } from "./builder";
+import { Builder, Frame, UP, fbox, type RGB, type Spec, type V3 } from "./builder";
 import type { Light, Prop } from "./furnish";
 import { ART0, L, LABEL0 } from "./layers";
 import { ART } from "./art";
@@ -575,6 +575,130 @@ export function buildProp(b: Builder, pr: Prop) {
       }
       break;
     }
+    case "goal": {
+      // handball goal, red and white
+      const red = sp(L.WHITE, [0.8, 0.1, 0.08]);
+      for (const x of [-1.5, 1.5]) for (let k = 0; k < 5; k++) fbox(b, fr, x, k * 0.4, 0, 0.08, 0.4, 0.08, k % 2 ? WHITE : red);
+      for (let k = 0; k < 8; k++) fbox(b, fr, -1.5 + k * 0.375 + 0.19, 2.0, 0, 0.375, 0.08, 0.08, k % 2 ? WHITE : red);
+      fbox(b, fr, -1.5, 0, -0.5, 0.04, 0.04, 1.0, GREY);
+      fbox(b, fr, 1.5, 0, -0.5, 0.04, 0.04, 1.0, GREY);
+      b.glass(fr.p(-1.5, 0, -1.0), [fr.c * 3, 0, -fr.s * 3], [0, 2.0, 0], [0.85, 0.85, 0.85, 0.12]);
+      solidRect(b, fr, 0, -0.5, 3.1, 1.0);
+      break;
+    }
+    case "ball": {
+      const c = fr.p(0, 0.12, 0);
+      b.geom(BLOB, c[0], c[1], c[2], 0, 0.12, 0.12, 0.12, sp(L.WHITE, [0.9, 0.45, 0.1]));
+      break;
+    }
+    case "cone":
+      b.geom(CYL6, pr.x, pr.y + 0.14, pr.z, rng.range(0, 3), 0.1, 0.28, 0.1, sp(L.WHITE, [0.95, 0.5, 0.1]));
+      break;
+    case "hoop": {
+      fbox(b, fr, 0, 0, 0.5, 0.12, 3.2, 0.12, GREY, true);
+      fbox(b, fr, 0, 2.9, 0.62, 1.8, 1.05, 0.05, { all: WHITE, pz: sp(L.WHITE, [0.95, 0.95, 0.95]) });
+      fbox(b, fr, 0, 3.05, 0.8, 0.46, 0.02, 0.46, sp(L.WHITE, [0.85, 0.3, 0.05]));
+      break;
+    }
+    case "wallbars":
+      fbox(b, fr, -0.45, 0, 0.06, 0.08, 2.6, 0.1, WOOD);
+      fbox(b, fr, 0.45, 0, 0.06, 0.08, 2.6, 0.1, WOOD);
+      for (let y = 0.2; y < 2.55; y += 0.17) fbox(b, fr, 0, y, 0.06, 0.82, 0.035, 0.035, WOOD);
+      break;
+    case "mats":
+      for (let k = 0; k < 5; k++) fbox(b, fr, rng.range(-0.05, 0.05), k * 0.08, rng.range(-0.05, 0.05), 2.0, 0.08, 1.0, sp(L.FABRIC, [0.2, 0.3, 0.6]), k === 0);
+      break;
+    case "brace": {
+      // diagonal steel rod across a bay of the footbridge
+      const up = pr.a ? 1 : -1;
+      const x0 = -1.35 * up, x1 = 1.35 * up, ya = 0.15, yb = CEIL - 0.1;
+      const p0 = fr.p(x0, ya, 0.02), p1 = fr.p(x1, yb, 0.02);
+      const d: V3 = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
+      const l = Math.hypot(d[0], d[1], d[2]);
+      const ax: V3 = [d[0] / l, d[1] / l, d[2] / l];
+      const az = fr.az;
+      const ay: V3 = [ax[1] * az[2] - ax[2] * az[1], ax[2] * az[0] - ax[0] * az[2], ax[0] * az[1] - ax[1] * az[0]];
+      b.obox([(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (p0[2] + p1[2]) / 2], ax, ay, az, [l / 2, 0.035, 0.035], sp(L.STEEL, [0.8, 0.82, 0.85]));
+      fbox(b, fr, x0, 0, 0.02, 0.2, 0.2, 0.2, sp(L.CONCRETE, [0.8, 0.8, 0.78]));
+      break;
+    }
+    case "downlights":
+      for (const [x, z] of [[-0.75, -0.75], [0.75, -0.75], [-0.75, 0.75], [0.75, 0.75]]) {
+        const c = fr.p(x!, -0.015, z!);
+        b.geom(CYL, c[0], c[1], c[2], 0, 0.1, 0.015, 0.1, { layer: L.WHITE, emit: [1.8, 1.6, 1.3] });
+      }
+      break;
+    case "gpillar": {
+      const green = sp(L.WHITE, [0.45, 0.78, 0.12]);
+      b.aabox(pr.x - 0.3, pr.y, pr.z - 0.3, pr.x + 0.3, pr.y + CEIL, pr.z + 0.3, { all: green }, 1);
+      fbox(b, fr, 0, 1.9, 0.31, 0.3, 0.22, 0.02, { all: WHITE, pz: { layer: L.EXIT, emit: [1.2, 1.2, 1.2], uv: [0, 0, 1, 1] } });
+      b.solid(pr.x - 0.32, pr.z - 0.32, pr.x + 0.32, pr.z + 0.32);
+      break;
+    }
+    case "messtable": {
+      fbox(b, fr, 0, 0.72, 0, 1.2, 0.03, 0.8, sp(L.WHITE, [0.92, 0.9, 0.84]), true);
+      for (const [x, z] of [[-0.55, -0.35], [0.55, -0.35], [-0.55, 0.35], [0.55, 0.35]]) fbox(b, fr, x!, 0, z!, 0.04, 0.72, 0.04, STEEL);
+      const seat = [sp(L.WOOD_FLOOR, [0.85, 0.62, 0.38]), sp(L.WHITE, [0.85, 0.85, 0.82])];
+      for (const [x, z, r] of [[-0.3, 0.72, 0], [0.3, 0.72, 0], [-0.3, -0.72, Math.PI], [0.3, -0.72, Math.PI]] as const)
+        if (rng.chance(0.85)) simpleChair(b, fr, x + rng.range(-0.08, 0.08), z + rng.range(-0.1, 0.15) * Math.sign(z), r + rng.range(-0.3, 0.3), rng.pick(seat));
+      if (rng.chance(0.4)) fbox(b, fr, 0, 0.75, 0, 0.06, 0.12, 0.06, GREY);
+      break;
+    }
+    case "counter": {
+      // serving counter with a lit display
+      fbox(b, fr, 0, 0, 0.45, 3.0, 0.95, 0.7, { all: STEEL, pz: sp(L.WHITE, [0.2, 0.2, 0.22]) }, true);
+      fbox(b, fr, 0, 0.95, 0.45, 3.0, 0.04, 0.72, STEEL);
+      fbox(b, fr, 0, 1.0, 0.35, 2.8, 0.4, 0.4, { all: DARK, pz: { layer: L.WHITE, emit: [1.1, 1.0, 0.8] } });
+      if (pr.a % 3 === 0) fbox(b, fr, 1.0, 0.99, 0.35, 0.5, 0.7, 0.45, { all: DARK, pz: sp(L.STEEL, [0.9, 0.9, 0.9]) });
+      break;
+    }
+    case "flag": {
+      // Belgian tricolour hanging from the ceiling
+      for (const [k, col] of [[-1, [0.05, 0.05, 0.05]], [0, [0.95, 0.8, 0.05]], [1, [0.85, 0.1, 0.12]]] as const)
+        fbox(b, fr, k * 0.6, -1.8, 0, 0.6, 1.6, 0.01, sp(L.FABRIC, col as unknown as RGB));
+      fbox(b, fr, 0, -0.2, 0, 1.9, 0.03, 0.03, DARK);
+      break;
+    }
+    case "greenwall":
+      fbox(b, fr, 0, 0, 0.0, 2.9, CEIL, 0.03, { all: sp(L.WHITE, [0.45, 0.78, 0.12]), pz: pr.a ? { layer: L.VRT_LOGO, tint: [0.45, 0.78, 0.12], uv: [-0.4, -0.3, 1.4, 1.3] } : sp(L.WHITE, [0.45, 0.78, 0.12]) });
+      break;
+    case "pooltable": {
+      const felt = sp(L.FABRIC, [0.55, 0.06, 0.08]);
+      const rail = sp(L.WOOD_FLOOR, [0.35, 0.18, 0.1]);
+      fbox(b, fr, 0, 0, 0, 1.2, 0.68, 2.2, rail, true);
+      fbox(b, fr, 0, 0.68, 0, 1.3, 0.1, 2.3, { all: rail, py: null });
+      fbox(b, fr, 0, 0.7, 0, 1.12, 0.06, 2.12, felt);
+      for (const [x, z] of [[-0.56, -1.06], [0.56, -1.06], [-0.58, 0], [0.58, 0], [-0.56, 1.06], [0.56, 1.06]]) fbox(b, fr, x!, 0.765, z!, 0.1, 0.02, 0.1, DARK);
+      const cols: RGB[] = [[0.95, 0.9, 0.8], [0.9, 0.35, 0.05], [0.8, 0.05, 0.05], [0.9, 0.35, 0.05], [0.05, 0.05, 0.05], [0.8, 0.05, 0.05], [0.9, 0.35, 0.05]];
+      for (const col of cols) {
+        const c = fr.p(rng.range(-0.45, 0.45), 0.79, rng.range(-0.9, 0.9));
+        b.geom(BLOB, c[0], c[1], c[2], 0, 0.028, 0.028, 0.028, sp(L.WHITE, col));
+      }
+      const cue = new Frame(...fr.p(0.2, 0.8, -0.3), fr.rot + 0.4);
+      fbox(b, cue, 0, 0, 0, 0.025, 0.025, 1.45, sp(L.WOOD_FLOOR, [0.9, 0.75, 0.55]));
+      break;
+    }
+    case "dartboard":
+      fbox(b, fr, 0, 1.2, 0.02, 0.9, 0.9, 0.03, sp(L.WHITE, [0.45, 0.32, 0.2]));
+      b.quad(fr.p(-0.23, 1.42, 0.04), [fr.c * 0.46, 0, -fr.s * 0.46], [0, 0.46, 0], fr.az, { layer: L.DARTBOARD, uv: [0, 0, 1, 1] }, 0);
+      break;
+    case "chalkboard":
+      fbox(b, fr, 0, 0.9, 0.02, 1.5, 1.1, 0.03, { all: sp(L.WOOD_FLOOR, [0.6, 0.45, 0.3]), pz: { layer: L.CHALK, uv: [0, 0, 1, 1] } });
+      break;
+    case "plantshelf":
+      fbox(b, fr, 0, 0.95, 0.15, 2.4, 0.04, 0.3, WHITE);
+      for (let k = -2; k <= 2; k++) {
+        fbox(b, fr, k * 0.5, 0.99, 0.15, 0.16, 0.15, 0.16, sp(L.WHITE, [0.8, 0.75, 0.7]));
+        for (let l = 0; l < 3; l++) fbox(b, new Frame(...fr.p(k * 0.5, 0, 0.15), fr.rot + l * 1.1), 0, 1.14, 0, 0.03, 0.4, 0.015, sp(L.WHITE, [0.2, 0.45, 0.15]));
+      }
+      break;
+    case "stools":
+      for (const x of [-0.8, 0, 0.8]) {
+        fbox(b, fr, x, 0.72, 0.4, 0.38, 0.05, 0.38, WOOD);
+        for (const [dx, dz] of [[-0.15, -0.15], [0.15, -0.15], [-0.15, 0.15], [0.15, 0.15]]) fbox(b, fr, x + dx!, 0, 0.4 + dz!, 0.03, 0.72, 0.03, WOOD);
+      }
+      fbox(b, fr, 0, 1.0, 0.1, 2.4, 0.04, 0.2, WOOD);
+      break;
     case "puddle": {
       const s = pr.a;
       b.quad(fr.p(-s, 0.006, -s * 0.7), [fr.c * 2 * s, 0, -fr.s * 2 * s], [fr.s * 1.4 * s, 0, fr.c * 1.4 * s], [0, 1, 0], { layer: L.PUDDLE, uv: [0, 0, 1, 1] }, 0);

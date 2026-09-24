@@ -54,10 +54,14 @@ export const L = {
   SIGNS_FR: 49,
   MIDSIGN: 50,
   DIGITAL: 51, // live LED clock face, sampled from a separate canvas texture
+  SPORTFLOOR: 52,
+  SLATWIN: 53,
+  DARTBOARD: 54,
+  CHALK: 55,
 } as const;
 
 // artworks and their museum labels (8 labels per layer) follow the painted layers
-export const ART0 = 52;
+export const ART0 = 56;
 export const LABEL0 = ART0 + ART.length;
 export const LAYER_COUNT = LABEL0 + Math.ceil(ART.length / 8);
 

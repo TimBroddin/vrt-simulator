@@ -209,6 +209,17 @@ export class Builder {
       }
   }
 
+  // Any four points (p0..p3 counter-clockwise seen from n), with explicit UVs.
+  quad4(p: [V3, V3, V3, V3], uv: [number, number][], n: V3, s: Spec) {
+    const base = this.P.length / 3;
+    for (let k = 0; k < 4; k++) this.vert(p[k]![0], p[k]![1], p[k]![2], uv[k]![0], uv[k]![1], s, n[0], n[1], n[2]);
+    const a = [p[1]![0] - p[0]![0], p[1]![1] - p[0]![1], p[1]![2] - p[0]![2]];
+    const c = [p[2]![0] - p[0]![0], p[2]![1] - p[0]![1], p[2]![2] - p[0]![2]];
+    const cr = [a[1]! * c[2]! - a[2]! * c[1]!, a[2]! * c[0]! - a[0]! * c[2]!, a[0]! * c[1]! - a[1]! * c[0]!];
+    if (cr[0]! * n[0] + cr[1]! * n[1] + cr[2]! * n[2] < 0) this.IX.push(base, base + 2, base + 1, base, base + 3, base + 2);
+    else this.IX.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+
   // Axis-aligned horizontal rectangle, world-mapped UVs.
   hrect(x0: number, z0: number, x1: number, z1: number, y: number, up: boolean, s: Spec, sub = 1.0) {
     const sc = SCALE[s.layer]!;
