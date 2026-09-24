@@ -1,0 +1,21 @@
+{
+  "name": "liminal",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/three": "^0.186.0"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "dependencies": {
+    "three": "^0.186.0"
+  },
+  "scripts": {
+    "dev": "bun index.ts",
+    "build": "bun build.ts",
+    "typecheck": "tsc --noEmit"
+  }
+}

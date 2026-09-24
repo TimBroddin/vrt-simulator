@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="worker" content="./worker.js" />
+    <link rel="stylesheet" href="./style.css" />
+    <link rel="icon" href="data:," />
+    <title>VRT Simulator · een liminale wandeling door de Reyerstoren</title>
+  </head>
+  <body>
+    <div id="hud">
+      <i class="br tl"></i><i class="br tr"></i><i class="br bl"></i><i class="br br2"></i>
+      <div id="top-left"><span id="rec">●</span> REC <span id="tc">00:00:00:00</span></div>
+      <div id="top-right"><span class="drop">vrt</span> REYERSLAAN 52</div>
+      <div id="bottom-left"><div id="floor"></div><div id="loc"></div></div>
+      <div id="bottom-right"><span id="zoom"></span><span id="lamp">LAMP</span><span class="bat"><b></b><b></b><b></b><b class="low"></b></span></div>
+      <div id="prompt"></div>
+      <div id="liftdisp" style="display:none"><div class="lbl">LIFT</div><div id="liftnum"></div></div>
+      <div id="cross"></div>
+      <div id="quest" style="display:none"></div>
+      <div id="toasts"></div>
+    </div>
+
+    <div id="overlay">
+      <div class="card">
+        <div class="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="titles">
+          <h1 class="title">VRT<br />SIMULATOR</h1>
+          <h1 class="pause">EVEN GEDULD</h1>
+          <p class="sub">een eindeloze wandeling door het oude VRT-gebouw</p>
+        </div>
+        <div class="load"><div id="loadbar"></div></div>
+        <p class="go">Klik om binnen te gaan</p>
+        <p class="resume">Klik om verder te gaan</p>
+        <div class="keys">
+          <span><kbd>WASD</kbd>/<kbd>ZQSD</kbd> lopen</span>
+          <span><kbd>SHIFT</kbd> rennen</span>
+          <span><kbd>E</kbd> gebruiken</span>
+          <span><kbd>TAB</kbd> quest</span>
+          <span><kbd>F</kbd> lamp</span>
+          <span><kbd>SCROLL</kbd> zoom</span>
+          <span><kbd>M</kbd> geluid</span>
+          <span><kbd>H</kbd> beeld</span>
+        </div>
+        <p class="seed">wereld <a id="seedlink"><span id="seed"></span></a> · geluid aan voor de beste ervaring</p>
+      </div>
+    </div>
+    <div id="endcard">
+      <div class="card">
+        <div class="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <h1>ALLE QUESTS<br />GEHAALD</h1>
+        <p class="sub">Brooddoos, veter, paraplu, sleutels, Jan Becaus en zes stoelen. Tijd: <span id="endtime"></span></p>
+        <p class="sub dim">Je mag naar huis. Alleen: de uitgang bestaat niet.</p>
+        <p class="go2">klik om verder te dwalen</p>
+      </div>
+    </div>
+    <div id="debug"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
