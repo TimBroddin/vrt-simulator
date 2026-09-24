@@ -15,6 +15,8 @@ export interface Spec {
   tint?: RGB;
   uv?: [number, number, number, number]; // explicit u0 v0 u1 v1
   flick?: number; // flicker phase for emissive fixtures
+  radio?: number; // emissive only while this station (index into STATIONS) is on the air
+  live?: number | "any"; // a screen showing the live studio video of this station (or whichever is streaming); hidden otherwise
 }
 
 export class LightCtx {
@@ -158,7 +160,9 @@ export class Builder {
     this.LY.push(s.layer);
     if (s.emit) {
       this.LI.push(s.emit[0], s.emit[1], s.emit[2]);
-      this.FL.push(s.flick ? 1 : 0, s.flick ?? 0);
+      if (s.live !== undefined) this.FL.push(s.live === "any" ? -1 : -1 - s.live, s.live === "any" ? 2 : 1);
+      else if (s.radio !== undefined) this.FL.push(-1 - s.radio, 0);
+      else this.FL.push(s.flick ? 1 : 0, s.flick ?? 0);
     } else {
       this.ctx.at(x + this.ox + nx * 0.05, y + this.oy + ny * 0.05, z + this.oz + nz * 0.05, nx, ny, nz, this.gx, this.gz, tmp);
       const t = s.tint;

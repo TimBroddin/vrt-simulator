@@ -11,6 +11,7 @@
     "typescript": "^7"
   },
   "dependencies": {
+    "hls.js": "^1.7.3",
     "three": "^0.186.0"
   },
   "scripts": {

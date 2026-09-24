@@ -11,11 +11,14 @@ import { Sound, type Surface } from "./audio";
 import { Lifts } from "./lifts";
 import { makePost } from "./post";
 import { ART_URLS } from "./artImages";
+import { LOGO_URLS, type LogoName } from "./logoImages";
+import { STATIONS } from "./stations";
 import { isTouch, setupTouch } from "./touch";
 import { takePhoto } from "./photo";
 import { Minimap } from "./minimap";
 import { ClockFace } from "./clockface";
 import { GhostRadio } from "./radio";
+import { LiveTV } from "./live";
 import { track, trackOnce } from "./analytics";
 import { Quests } from "./quests";
 
@@ -47,8 +50,11 @@ const loadImg = (u: string) =>
     i.onerror = () => res(null);
     i.src = u;
   });
-const artImgs = await Promise.all(ART_URLS.map(loadImg));
-const atlas = makeTextureArray(renderer, artImgs, touch ? 256 : 512);
+const [artImgs, logoImgs] = await Promise.all([
+  Promise.all(ART_URLS.map(loadImg)),
+  Promise.all(Object.entries(LOGO_URLS).map(async ([k, u]) => [k, await loadImg(u)] as const)).then((e) => Object.fromEntries(e) as Record<LogoName, HTMLImageElement | null>),
+]);
+const atlas = makeTextureArray(renderer, artImgs, logoImgs, touch ? 256 : 512);
 const mat = makeWorldMaterial(atlas);
 const glassMat = makeGlassMaterial(mat);
 const clockFace = new ClockFace();
@@ -109,7 +115,7 @@ function surfaceAt(f: number, gx: number, gz: number): { s: Surface; wet: number
       const t = p.rooms[p.room[i]!]!.type;
       if (t === RT.BATH || t === RT.SERVER || t === RT.CANTEEN) return { s: "tile", wet: 0.35 };
       if (t === RT.STORAGE || t === RT.ARCHIVE) return { s: "concrete", wet: 0.3 };
-      if (t === RT.STUDIO) return { s: "wood", wet: 0.12 };
+      if (t === RT.STUDIO || t === RT.KETNET || t === RT.SPORZA || t === RT.SET) return { s: "wood", wet: 0.12 };
       return { s: "carpet", wet: 0.15 };
     }
     case K.STAIR: return { s: "stair", wet: 0.7 };
@@ -122,7 +128,35 @@ function surfaceAt(f: number, gx: number, gz: number): { s: Surface; wet: number
 
 const quests = new Quests(world, player, sound, startFloor);
 const radio = new GhostRadio(sound);
-const minimap = new Minimap();
+// the station on the air: its studios light up ON AIR, and its logo flashes up in the HUD
+let stationTimer = 0;
+radio.onStation = (k) => {
+  mat.uniforms.radioStation!.value = k;
+  if (k < 0) return $("station").classList.remove("show");
+  const st = STATIONS[k]!;
+  ($("stationlogo") as HTMLImageElement).src = LOGO_URLS[st.logo];
+  $("stationname").textContent = st.name.toUpperCase();
+  $("station").classList.add("show");
+  clearTimeout(stationTimer);
+  stationTimer = window.setTimeout(() => $("station").classList.remove("show"), 6000);
+};
+// on phones and tablets the map starts closed (KAART opens it)
+const minimap = new Minimap(!touch);
+const live = new LiveTV(mat.uniforms);
+// the radio studio you're standing near (checked a few times a second)
+let nearStudio = -1, nearT = 0;
+function studioNear(): number {
+  const f = player.floor, cx = Math.floor(player.pos.x / (CH * CELL)), cz = Math.floor(player.pos.z / (CH * CELL));
+  let best = -1, bd = 14;
+  for (let dz = -1; dz <= 1; dz++)
+    for (let dx = -1; dx <= 1; dx++)
+      for (const p of getFurnished(f, cx + dx, cz + dz).props) {
+        if (p.t !== "radiologo" || !p.b) continue;
+        const d = Math.hypot(p.x - player.pos.x, p.z - player.pos.z);
+        if (d < bd) { bd = d; best = p.b - 1; }
+      }
+  return best;
+}
 scene.add(quests.root);
 quests.onFinish = (secs) => {
   $("endtime").textContent = `${Math.floor(secs / 60)} min ${String(Math.floor(secs % 60)).padStart(2, "0")} s`;
@@ -294,8 +328,8 @@ function updateEnv(dt: number) {
   if (started) {
     trackOnce(`floor${f}`, "floor_visited", { floor: f });
     const area = onRoof ? "roof" : f === FLOOR_MIN ? "parking" : /PLANTENTUIN|JARDIN/.test(label) ? "plantentuin" : label === "MIDDENGANG" ? "middengang"
-      : label === "ATRIUM" ? "atrium" : /^STUDIO/.test(label) ? "studio" : /REGIE|RÉGIE/.test(label) ? "regie" : /ARCHIEF|ARCHIVES/.test(label) ? "archive"
-      : /KANTINE|CANTINE/.test(label) ? "canteen" : "";
+      : label === "ATRIUM" ? "atrium" : STATIONS.some((st) => st.label === label) ? "radio" : /^STUDIO/.test(label) ? "studio" : /REGIE|RÉGIE/.test(label) ? "regie" : /ARCHIEF|ARCHIVES/.test(label) ? "archive"
+      : /KANTINE|CANTINE/.test(label) ? "canteen" : /^KETNET/.test(label) ? "ketnet" : /^SPORZA/.test(label) ? "sporza" : /^DECOR/.test(label) ? "tvset" : "";
     if (area) trackOnce(`area:${area}`, "area_discovered", { area });
     if (fr) trackOnce("area:rtbf", "area_discovered", { area: "rtbf" });
   }
@@ -359,6 +393,11 @@ function frame() {
       if (playSecs >= m * 60) trackOnce(`play${m}`, "playtime", { minutes: m, meters: Math.round(walked), quests_done: quests.quests.filter((q) => q.done).length });
   }
   radio.update(dt, sound.env.roof);
+  if (ready && (nearT -= dt) <= 0) {
+    nearT = 0.4;
+    nearStudio = studioNear();
+  }
+  live.update(dt, started ? (radio.station >= 0 ? radio.station : nearStudio) : -1);
   if (ready) updateEnv(dt);
 
   if (flickNear > 0 && t - lastFlickBuzz > 0.12 && Math.random() < flickNear * 0.25) {
@@ -424,7 +463,7 @@ function frame() {
 }
 
 // expose for automation / debugging
-const api = { player, world, camera, lifts, sound, quests, minimap, radio, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished };
+const api = { player, world, camera, lifts, sound, quests, minimap, radio, live, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished };
 (window as any).__vrt = api;
 if (debug) $("debug").style.display = "block";
 frame();

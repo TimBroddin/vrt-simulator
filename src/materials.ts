@@ -15,6 +15,10 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
       lampDir: { value: new THREE.Vector3(0, 0, -1) },
       lampOn: { value: 0 },
       exposure: { value: 1 },
+      radioStation: { value: -1 },
+      liveTex: { value: null as THREE.Texture | null },
+      liveOn: { value: 0 },
+      liveStation: { value: -1 },
     },
     vertexShader: /* glsl */ `
       in float layer;
@@ -24,7 +28,11 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
       out float vLayer;
       out vec3 vLight;
       out vec3 vWorld;
+      flat out float vLive;
       uniform float time;
+      uniform float radioStation;
+      uniform float liveOn;
+      uniform float liveStation;
       float h1(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
       float flickerAt(float t, float ph) {
         float slot = floor(t * 0.9 + ph);
@@ -36,8 +44,19 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
       void main() {
         vUv = uv;
         vLayer = layer;
-        float f = flick.x > 0.0 ? flickerAt(time, flick.y) : 1.0;
-        vLight = light * (1.0 - flick.x + flick.x * f);
+        vLive = 0.0;
+        if (flick.x < 0.0 && flick.y > 0.5) {
+          // a live screen: 1 = hidden (the surface behind shows), 2 = showing the stream
+          bool show = liveOn > 0.5 && (flick.y > 1.5 || abs(-1.0 - flick.x - liveStation) < 0.5);
+          vLive = show ? 2.0 : 1.0;
+          vLight = light;
+        } else if (flick.x < 0.0) {
+          // an ON AIR light that follows the ghost radio: -1 - station
+          vLight = light * (abs(-1.0 - flick.x - radioStation) < 0.5 ? 1.0 : 0.13);
+        } else {
+          float f = flick.x > 0.0 ? flickerAt(time, flick.y) : 1.0;
+          vLight = light * (1.0 - flick.x + flick.x * f);
+        }
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vWorld = wp.xyz;
         gl_Position = projectionMatrix * viewMatrix * wp;
@@ -47,7 +66,10 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
       precision highp sampler2DArray;
       uniform sampler2DArray atlas;
       uniform sampler2D clockTex;
+      uniform sampler2D liveTex;
       uniform float clockLayer;
+      uniform float time;
+      flat in float vLive;
       uniform vec3 fogColor;
       uniform float fogDensity;
       uniform vec3 lampPos;
@@ -61,7 +83,15 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
       out vec4 fragColor;
       void main() {
         float li = floor(vLayer + 0.5);
-        vec4 t = abs(li - clockLayer) < 0.5 ? texture(clockTex, vUv) : texture(atlas, vec3(vUv, li));
+        vec4 t;
+        if (vLive > 0.5) {
+          if (vLive < 1.5) discard;
+          // the studio cameras, on an old screen: scanlines and a slow roll
+          t = texture(liveTex, vUv);
+          t.rgb *= 0.86 + 0.14 * sin(vUv.y * 540.0 + time * 3.0);
+          t.rgb *= 0.94 + 0.06 * sin(vUv.y * 9.0 - time * 1.7);
+          t.a = 1.0;
+        } else t = abs(li - clockLayer) < 0.5 ? texture(clockTex, vUv) : texture(atlas, vec3(vUv, li));
         if (t.a < 0.5) discard;
         vec3 col = t.rgb * vLight;
         if (lampOn > 0.0) {

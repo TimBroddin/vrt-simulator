@@ -1,6 +1,6 @@
 // Phase 2: lights and props. Only reads phase-1 plans (own + neighbours).
-import { CEIL, CELL, CH, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, MID_CZ, T } from "./config";
-import { K, RT, SK, gardenStair, getPlan, idx, roomAnomaly, sideAt, stairFrame, type Plan, type Room } from "./layout";
+import { CEIL, CELL, CH, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, MID_CZ, T, isRtbf } from "./config";
+import { K, RT, SK, gardenStair, getPlan, idx, radioStation, roomAnomaly, setIsThuis, sideAt, stairFrame, type Plan, type Room } from "./layout";
 import { Rng, hash } from "./rng";
 import { ART, pickArt } from "./art";
 
@@ -47,6 +47,9 @@ const BLUE: [number, number, number] = [0.35, 0.55, 1.0];
 const RED: [number, number, number] = [1.0, 0.15, 0.1];
 
 const cache = new Map<string, Furnished>();
+
+// things hung on (or stood against) corridor walls
+const WALL_DECOR = new Set(["poster", "tv", "notice", "clock", "art", "extinguisher", "hosebox", "bench", "plant", "cooler", "bin", "vending", "fakedoor", "tinydoor", "blackwindow"]);
 
 export function getFurnished(f: number, cx: number, cz: number): Furnished {
   const key = f + ":" + cx + "," + cz;
@@ -222,10 +225,13 @@ function furnish(p: Plan): Furnished {
           light(wp.wx - DX[d]! * 0.4, y0 + DOOR_H + 0.2, wp.wz - DZ[d]! * 0.4, GREEN, 0.45, 3, c.gx, c.gz, null);
         } else if (other === K.ROOM) {
           const r = roomAcross(p, i, d);
-          if (r && r.type === RT.STUDIO) {
+          if (r && (r.type === RT.STUDIO || r.type === RT.KETNET || r.type === RT.SPORZA || r.type === RT.SET)) {
             const on = rng.chance(0.5);
             prop("onair", wp.wx, y0 + DOOR_H + 0.32, wp.wz, faceRot(d), c.gx, c.gz, on ? 1 : 0);
             if (on) light(wp.wx - DX[d]! * 0.4, y0 + DOOR_H + 0.3, wp.wz - DZ[d]! * 0.4, RED, 0.6, 3.5, c.gx, c.gz, null);
+          } else if (r && r.type === RT.RADIO && !rtbf) {
+            // lights up whenever the ghost radio plays this station
+            prop("onair", wp.wx, y0 + DOOR_H + 0.32, wp.wz, faceRot(d), c.gx, c.gz, 0, 1 + radioStation(p, r));
           }
           if (r) {
             const sign = signFor(r.type);
@@ -270,14 +276,14 @@ function furnish(p: Plan): Furnished {
       const r = rng.next();
       if (r < 0.1) prop("extinguisher", wp.wx, y0, wp.wz, rot, c.gx, c.gz);
       else if (r < 0.15) prop("hosebox", wp.wx, y0, wp.wz, rot, c.gx, c.gz);
-      else if (r < 0.26) prop("poster", wp.wx, y0 + 1.5, wp.wz, rot, c.gx, c.gz, rtbf ? rng.int(8, 11) : rng.int(0, 7));
+      else if (r < 0.26) prop("poster", wp.wx, y0 + 1.5, wp.wz, rot, c.gx, c.gz, rtbf ? rng.int(8, 11) : vrtPoster(rng.int(0, 19)));
       else if (r < 0.29) prop("clock", wp.wx, y0 + 2.2, wp.wz, rot, c.gx, c.gz);
       else if (r < 0.33) prop("bench", wp.wx, y0, wp.wz, rot, c.gx, c.gz);
       else if (r < 0.36) prop("plant", wp.wx, y0, wp.wz, rot, c.gx, c.gz);
       else if (r < 0.38) prop("cooler", wp.wx, y0, wp.wz, rot, c.gx, c.gz);
       else if (r < 0.41) prop("notice", wp.wx, y0 + 1.45, wp.wz, rot, c.gx, c.gz);
       else if (r < 0.44 || (p.zone[i] === 1 && r < 0.55)) {
-        const scr = rng.int(0, 3);
+        const scr = rtbf ? rng.int(0, 3) : rng.int(0, 7);
         prop("tv", wp.wx, y0 + 1.9, wp.wz, rot, c.gx, c.gz, scr);
         if (scr !== 3) light(wp.wx - DX[d]! * 0.5, y0 + 1.8, wp.wz - DZ[d]! * 0.5, COOL, 0.35, 3, c.gx, c.gz, null);
       } else if (r < 0.46) prop("bin", wp.wx, y0, wp.wz, rot, c.gx, c.gz);
@@ -333,6 +339,20 @@ function furnish(p: Plan): Furnished {
     prop("bench", X0 + 0.1, y0, mz - 6, Math.PI / 2, wgx, wgz);
     prop("bench", X0 + 0.1, y0, mz + 6, Math.PI / 2, wgx, wgz);
     prop("mats", X1 - 1.2, y0, Z0 + 3.5, 0.3, ...cellOf(X1 - 1.2, Z0 + 3.5));
+    // banners hung from the vault along the long sides, Hec Leemans' mural high on
+    // one gable end (above the goal), a big Sporza banner on the other
+    const bt = y0 + 5.2;
+    prop("banner", X0 + T + 1.3, bt, mz - 6, Math.PI / 2, ...cellOf(X0 + 1.5, mz - 6), rtbf ? 1 : 3);
+    prop("banner", X0 + T + 1.3, bt, mz + 6, Math.PI / 2, ...cellOf(X0 + 1.5, mz + 6), 2);
+    prop("banner", X1 - T - 1.3, bt, mz - 6, -Math.PI / 2, ...cellOf(X1 - 1.5, mz - 6), rtbf ? 2 : 0);
+    prop("banner", X1 - T - 1.3, bt, mz + 6, -Math.PI / 2, ...cellOf(X1 - 1.5, mz + 6), 1);
+    if (!rtbf) {
+      prop("hallmural", mx, y0 + 3.1, Z0 + T + 0.3, 0, ...cellOf(mx, Z0 + 1.5));
+      light(mx, y0 + 4.5, Z0 + 5, WARM, 1.2, 11, ...cellOf(mx, Z0 + 5), null);
+      prop("bigbanner", mx, y0 + 6.2, Z1 - T - 0.3, Math.PI, ...cellOf(mx, Z1 - 1.5));
+      // the Kampioenen shirts on a rack by the bench
+      prop("shirtrack", X0 + 0.9, y0, mz - 8.3, Math.PI / 2, ...cellOf(X0 + 0.9, mz - 8.3));
+    }
   }
 
   // De parkeertoren: an open deck, parked cars, daylight from all sides.
@@ -381,14 +401,23 @@ function furnish(p: Plan): Furnished {
     const mx = (gx0 + (atr!.x0 + atr!.x1 + 1) / 2) * CELL;
     const mz = (gz0 + (atr!.z0 + atr!.z1 + 1) / 2) * CELL;
     prop("tree", mx, y0, mz, 0, gx0 + atr!.x0, gz0 + atr!.z0);
-    // big NWS wall graphic on a ring wall
+    // big NWS wall graphic on a ring wall (and once, De Kampioenen)
+    let mural = rtbf;
     for (let z = atr!.z0 - 1; z <= atr!.z1 + 1; z++)
       for (let x = atr!.x0 - 1; x <= atr!.x1 + 1; x++) {
         const i = idx(x, z);
         const wd = wallDirs(i);
         if (wd.length && rng.chance(0.35)) {
           const wp = wallPoint(i, wd[0]!, -0.01);
-          prop("nwswall", wp.wx, y0, wp.wz, faceRot(wd[0]!), wp.gx, wp.gz);
+          const rot = faceRot(wd[0]!);
+          // the graphic takes the whole wall: take down what was hung there
+          for (let k = props.length - 1; k >= 0; k--) {
+            const q = props[k]!;
+            if (WALL_DECOR.has(q.t) && Math.abs(q.rot - rot) < 1e-6 && Math.abs(q.x - wp.wx) + Math.abs(q.z - wp.wz) < 1.7) props.splice(k, 1);
+          }
+          const m = !mural && rng.chance(0.3);
+          if (m) mural = true;
+          prop(m ? "mural" : "nwswall", wp.wx, y0, wp.wz, rot, wp.gx, wp.gz);
         }
       }
   }
@@ -509,7 +538,10 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
   const perimeter: [number, number][] = [];
   for (const i of cells) for (const dd of wallDirs(i)) perimeter.push([i, dd]);
 
-  switch (room.type) {
+  const brand = room.type === RT.KETNET || room.type === RT.SPORZA || room.type === RT.SET;
+  if (brand && !isRtbf(p.cz)) return furnishBrandStudio(p, room, rng, c, perimeter, roomCenter);
+  // on the RTBF side the brand studios are ordinary studios
+  switch (brand ? RT.STUDIO : room.type) {
     case RT.OFFICE: {
       panelLights(COOL, 1.15, 1, "panel");
       for (const i of cells) {
@@ -535,7 +567,7 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
       if (perimeter.length) {
         const [i, dd] = rng.pick(perimeter);
         const wp = wallPoint(i, dd);
-        const scr = rng.int(0, 3);
+        const scr = rng.int(0, 7);
         prop("tv", wp.wx, y0 + 1.5, wp.wz, faceRot(dd), wp.gx, wp.gz, scr);
         if (scr !== 3) light(wp.wx - DX[dd]! * 0.6, y0 + 1.5, wp.wz - DZ[dd]! * 0.6, COOL, 0.45, 4, wp.gx, wp.gz, null);
         const [j, d2] = rng.pick(perimeter);
@@ -578,6 +610,9 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
       }
       break;
     }
+    case RT.RADIO:
+      furnishRadio(p, room, rng, c, perimeter, roomCenter);
+      break;
     case RT.STUDIO: {
       // backdrop on the longest wall run, desk in front of it, cameras facing.
       const byDir = [0, 0, 0, 0];
@@ -632,6 +667,12 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
         const q = center(i);
         if (!hasDoor(i)) prop("tapes", q.x, y0, q.z, rot, q.gx, q.gz, rng.int(0, 99));
         light(q.x, y0 + CEIL - 0.05, q.z, [0.95, 1.0, 0.85], 1.0, 6, q.gx, q.gz, "tube", { rot, dead: rng.chance(0.45), flick: flick() });
+      }
+      // an old Ketnet poster from 1997, still up
+      if (perimeter.length && !isRtbf(p.cz) && rng.chance(0.5)) {
+        const [i, dd] = rng.pick(perimeter);
+        const wp = wallPoint(i, dd);
+        prop("poster", wp.wx, y0 + 1.5, wp.wz, faceRot(dd), wp.gx, wp.gz, 22);
       }
       break;
     }
@@ -726,5 +767,144 @@ function furnishRoof(p: Plan, rng: Rng, prop: Ctx["prop"]) {
     else if (r < 0.14) prop("vent", x + rng.range(-1, 1), y0, z + rng.range(-1, 1), 0, gx, gz);
     if (rng.chance(0.3)) prop("puddle", x + rng.range(-0.8, 0.8), y0, z + rng.range(-0.8, 0.8), rng.range(0, 3), gx, gz, rng.range(0.6, 1.4));
     if (rng.chance(0.004)) prop("chair", x, y0, z, rng.range(0, 6.28), gx, gz);
+  }
+}
+
+// the VRT posters: sheets 1-2 and 4-6 (sheet 3 is the RTBF's)
+const vrtPoster = (k: number) => (k < 8 ? k : k + 4);
+
+type Perimeter = [number, number][];
+
+// the wall with the longest run, and its pieces in order along it
+function mainWall(p: Plan, perimeter: Perimeter) {
+  const byDir = [0, 0, 0, 0];
+  for (const [, dd] of perimeter) byDir[dd]!++;
+  const bd = byDir.indexOf(Math.max(...byDir));
+  const pieces = perimeter.filter(([, dd]) => dd === bd).sort((a, b) => (bd % 2 === 0 ? a[0] - b[0] : (a[0] % CH) - (b[0] % CH)));
+  // the longest perpendicular run too (green screens, monitor walls)
+  const sd = byDir[(bd + 1) % 4]! >= byDir[(bd + 3) % 4]! ? (bd + 1) % 4 : (bd + 3) % 4;
+  const side = perimeter.filter(([, dd]) => dd === sd);
+  return { bd, pieces, sd, side };
+}
+
+// A radio studio: the station's logo behind the host, foam on the walls, a desk
+// with microphones on arms, and an ON AIR light that follows the ghost radio.
+function furnishRadio(p: Plan, room: Room, rng: Rng, c: Ctx, perimeter: Perimeter, rc: { x: number; z: number }) {
+  const { light, prop, wallPoint, center, y0 } = c;
+  const rtbf = isRtbf(p.cz);
+  const st = radioStation(p, room);
+  const w = room.x1 - room.x0 + 1, d = room.z1 - room.z0 + 1;
+  const rot = w >= d ? 0 : Math.PI / 2;
+  for (const i of room.cells) {
+    const q = center(i);
+    light(q.x, y0 + CEIL - 0.03, q.z, WARM, 0.8, 6, q.gx, q.gz, "panel", { rot, dead: room.dark && rng.chance(0.6), flick: rng.chance(c.flickP) });
+  }
+  if (!perimeter.length) return;
+  const { bd, pieces } = mainWall(p, perimeter);
+  const mid = pieces[Math.floor(pieces.length / 2)]!;
+  const lp = wallPoint(mid[0], bd, -0.01);
+  prop("radiologo", lp.wx, y0, lp.wz, faceRot(bd), lp.gx, lp.gz, rtbf ? 5 : st, rtbf ? 0 : 1 + st);
+  light(lp.wx - DX[bd]! * 1.2, y0 + 2.2, lp.wz - DZ[bd]! * 1.2, WARM, 0.8, 5, lp.gx, lp.gz, null);
+  // Studio Brussel hangs De Tijdloze on a second wall
+  const others = perimeter.filter(([i, dd]) => !(i === mid[0] && dd === bd));
+  rng.shuffle(others);
+  others.forEach(([i, dd], k) => {
+    const wp = wallPoint(i, dd, -0.01);
+    if (k === 0 && st === 3 && !rtbf) prop("radiologo", wp.wx, y0, wp.wz, faceRot(dd), wp.gx, wp.gz, 6, 0);
+    else if (rng.chance(0.75)) prop("foam", wp.wx, y0, wp.wz, faceRot(dd), wp.gx, wp.gz, rng.int(0, 99));
+  });
+  // the desk: host between the logo and the desk, guests across
+  const depth = (bd % 2 === 0 ? w : d) * CELL;
+  const off = Math.min(2.2, depth / 2);
+  const ex = lp.wx - DX[bd]! * off, ez = lp.wz - DZ[bd]! * off;
+  const gx = Math.floor(ex / CELL), gz = Math.floor(ez / CELL);
+  prop("radiodesk", ex, y0, ez, faceRot(bd), gx, gz, rng.int(0, 99), rtbf ? 0 : 1 + st);
+  light(ex, y0 + 2.3, ez, WARM, room.dark ? 0.6 : 1.0, 4.5, gx, gz, null);
+}
+
+// Ketnet, Sporza and the TV sets: big studios with a brand wall and cameras.
+function furnishBrandStudio(p: Plan, room: Room, rng: Rng, c: Ctx, perimeter: Perimeter, rc: { x: number; z: number }) {
+  const { light, prop, wallPoint, center, y0 } = c;
+  const w = room.x1 - room.x0 + 1, d = room.z1 - room.z0 + 1;
+  if (!perimeter.length) return;
+  const { bd, pieces, sd, side } = mainWall(p, perimeter);
+  const depth = (bd % 2 === 0 ? w : d) * CELL, len = (bd % 2 === 0 ? d : w) * CELL;
+  const ix = -DX[bd]!, iz = -DZ[bd]!; // into the room
+  const wx = rc.x - ix * (depth / 2 - T), wz = rc.z - iz * (depth / 2 - T); // middle of the main wall
+  const r0 = faceRot(bd);
+  const at = (lx: number, lz: number) => {
+    const x = wx + lx * Math.cos(r0) + lz * Math.sin(r0), z = wz - lx * Math.sin(r0) + lz * Math.cos(r0);
+    return { x, z, gx: Math.floor(x / CELL), gz: Math.floor(z / CELL) };
+  };
+  // lighting rigs under the ceiling (not over the set: the set has its own lamps)
+  const setW = Math.min(len - 2.6, 8.4), setD = Math.max(2.4, Math.min(depth - 5.6, 3.8));
+  for (const i of room.cells) {
+    const q = center(i);
+    const lx = (q.x - wx) * Math.cos(r0) - (q.z - wz) * Math.sin(r0), lz = (q.x - wx) * Math.sin(r0) + (q.z - wz) * Math.cos(r0);
+    if (room.type === RT.SET && Math.abs(lx) < setW / 2 + 1.4 && lz < 1.2 + setD + 1.4) continue;
+    prop("rig", q.x, y0 + 3.0, q.z, 0, q.gx, q.gz);
+  }
+  const cams = (dist: number) => {
+    for (let k = -1; k <= 1; k++) {
+      const q = at(k * 1.9, dist);
+      prop("camera", q.x, y0, q.z, r0 + Math.PI + k * 0.25, q.gx, q.gz, k === 0 && rng.chance(0.5) ? 1 : 0);
+    }
+  };
+  const dim = room.dark ? 0.45 : 1;
+
+  if (room.type === RT.SET) {
+    // a café built inside the studio, open towards the cameras, bare plywood behind
+    const thuis = setIsThuis(p, room);
+    const W = setW, D = setD;
+    prop("tvset", wx, y0, wz, r0, Math.floor(wx / CELL), Math.floor(wz / CELL), W, (thuis ? 0 : 1) + 2 * Math.round(D * 10));
+    for (const lx of [-W / 3, 0, W / 3]) {
+      const q = at(lx, 1.2 + D * 0.55);
+      light(q.x, y0 + 2.6, q.z, [1.0, 0.78, 0.5], 1.4 * dim, 6, q.gx, q.gz, null);
+    }
+    const f = at(0, 1.2 + D + 1.6);
+    light(f.x, y0 + 3.0, f.z, [0.9, 0.92, 1.0], 1.1 * dim, 7, f.gx, f.gz, null);
+    // the dark gap behind the set, one work light
+    const b = at(W / 2 - 0.4, 0.6);
+    light(b.x, y0 + 2.4, b.z, WARM, 0.8, 5, b.gx, b.gz, "bulb", { flick: rng.chance(0.5) });
+    cams(1.2 + D + 2.4);
+    const ch = at(W / 2 + 0.4, 1.2 + D + 3.6);
+    prop("chair", ch.x, y0, ch.z, r0 + Math.PI + 0.5, ch.gx, ch.gz);
+    return;
+  }
+
+  const ketnet = room.type === RT.KETNET;
+  const midK = Math.floor(pieces.length / 2);
+  pieces.forEach(([i], k) => {
+    const wp = wallPoint(i, bd, -0.01);
+    prop("brandwall", wp.wx, y0, wp.wz, r0, wp.gx, wp.gz, ketnet ? 0 : 1, k === midK ? 1 : 0);
+    light(wp.wx + ix * 1.0, y0 + 2.2, wp.wz + iz * 1.0, ketnet ? [0.8, 0.9, 1.0] : [0.85, 1.0, 0.9], 0.7 * dim, 6, wp.gx, wp.gz, null);
+  });
+  const e = at(0, 2.2);
+  prop(ketnet ? "kdesk" : "sdesk", e.x, y0, e.z, r0, e.gx, e.gz);
+  const top = at(0, 3.4);
+  light(top.x, y0 + 2.7, top.z, WARM, 1.2 * dim, 6, top.gx, top.gz, null);
+  cams(5.8 < depth - 1.5 ? 5.8 : depth - 1.8);
+  if (ketnet) {
+    // a green screen on a side wall, bean bags, and colour everywhere
+    side.forEach(([i, dd]) => {
+      const wp = wallPoint(i, dd, -0.01);
+      prop("greenscreen", wp.wx, y0, wp.wz, faceRot(dd), wp.gx, wp.gz);
+    });
+    for (let k = 0; k < 5; k++) {
+      const q = at(rng.range(-len / 2 + 1.2, len / 2 - 1.2), rng.range(3.2, depth - 1.2));
+      if (Math.abs(q.x - top.x) + Math.abs(q.z - top.z) < 1.8) continue;
+      prop("beanbag", q.x, y0, q.z, rng.range(0, 6.28), q.gx, q.gz, k);
+    }
+    for (const [lx, col] of [[-len / 3, [1.0, 0.35, 0.7]], [len / 3, [0.35, 1.0, 0.6]]] as const) {
+      const q = at(lx, 2.5);
+      light(q.x, y0 + 2.8, q.z, col, 0.9 * dim, 6, q.gx, q.gz, null);
+    }
+  } else {
+    // monitors with the match on a side wall
+    side.slice(0, 2).forEach(([i, dd]) => {
+      const wp = wallPoint(i, dd);
+      prop("monwall", wp.wx, y0, wp.wz, faceRot(dd), wp.gx, wp.gz, rng.int(0, 99), 1);
+      light(wp.wx - DX[dd]! * 1.0, y0 + 1.6, wp.wz - DZ[dd]! * 1.0, [0.8, 1.0, 0.85], 0.6 * dim, 5, wp.gx, wp.gz, null);
+    });
   }
 }

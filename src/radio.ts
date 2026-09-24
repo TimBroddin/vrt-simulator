@@ -2,14 +2,7 @@
 // VRT stations drifts in: band-limited, overdriven, wobbling like old tape,
 // drowned in reverb, crackling - then it's gone again.
 import type { Sound } from "./audio";
-
-const STATIONS = [
-  { name: "Radio 1", url: "https://quantumcast.vrtcdn.be/radio1/mp3-128" },
-  { name: "Radio 2", url: "https://quantumcast.vrtcdn.be/ra2ant/mp3-128" },
-  { name: "Klara", url: "https://quantumcast.vrtcdn.be/klara/mp3-128" },
-  { name: "Studio Brussel", url: "https://quantumcast.vrtcdn.be/stubru/mp3-128" },
-  { name: "MNM", url: "https://quantumcast.vrtcdn.be/mnm/mp3-128" },
-];
+import { STATIONS } from "./stations";
 
 // a short silent WAV, played inside the first tap to unlock the element (iOS)
 function silentWav() {
@@ -33,8 +26,12 @@ export class GhostRadio {
   private next = 10 + Math.random() * 35;
   private until = 0;
   private t = 0;
+  private token = 0;
   playing = false;
   enabled = true;
+  // index into STATIONS while a stream is audible, -1 otherwise
+  station = -1;
+  onStation: (station: number) => void = () => {};
 
   constructor(private sound: Sound) {}
 
@@ -83,13 +80,14 @@ export class GhostRadio {
     this.pan.connect(send).connect(this.sound.wetSend);
   }
 
-  play(station = STATIONS[Math.floor(Math.random() * STATIONS.length)]!, secs = 18 + Math.random() * 22) {
+  play(index = Math.floor(Math.random() * STATIONS.length), secs = 18 + Math.random() * 22) {
     const ctx = this.sound.ctx;
     if (!ctx || !this.el || !this.out || !this.pan || this.playing || this.sound.muted) return;
     this.playing = true;
     this.until = this.t + secs;
     this.pan.pan.value = Math.random() * 1.6 - 0.8;
-    this.el.src = station.url;
+    this.el.src = STATIONS[index]!.url;
+    const token = ++this.token;
     this.el.play().catch(() => this.stop(true));
     const now = ctx.currentTime;
     const vol = 0.22 + Math.random() * 0.12;
@@ -97,11 +95,15 @@ export class GhostRadio {
     this.out.gain.setValueAtTime(0, now);
     // it fades in once the stream actually starts
     const onPlaying = () => {
+      this.el!.removeEventListener("playing", onPlaying);
+      if (token !== this.token) return;
       const t = ctx.currentTime;
       this.out!.gain.setValueAtTime(0, t);
       this.out!.gain.linearRampToValueAtTime(vol, t + 3);
       this.sound.tuning();
-      this.el!.removeEventListener("playing", onPlaying);
+      if (!this.playing) return;
+      this.station = index;
+      this.onStation(index);
     };
     this.el.addEventListener("playing", onPlaying);
   }
@@ -110,6 +112,10 @@ export class GhostRadio {
     const ctx = this.sound.ctx;
     if (!this.playing || !ctx || !this.el || !this.out) return;
     this.playing = false;
+    if (this.station >= 0) {
+      this.station = -1;
+      this.onStation(-1);
+    }
     const t = ctx.currentTime;
     this.out.gain.cancelScheduledValues(t);
     this.out.gain.setValueAtTime(this.out.gain.value, t);

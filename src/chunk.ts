@@ -1,6 +1,6 @@
 // Turns a furnished plan into geometry: floors, ceilings, walls with openings,
 // stairwells, elevator cars and the courtyard facades.
-import { CEIL, CELL, CH, CHUNK, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, ST_HALF, ST_U1, ST_U2, ST_VM, T } from "./config";
+import { CEIL, CELL, CH, CHUNK, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, ST_HALF, ST_U1, ST_U2, ST_VM, T, isRtbf } from "./config";
 import { Builder, LightCtx, UP, type Built, type RGB, type Spec, type V3 } from "./builder";
 import { getFurnished } from "./furnish";
 import { K, RT, SK, gardenStair, getStructure, kindAt, roomAnomaly, sideAt, stairFrame, type GardenStair, type Plan } from "./layout";
@@ -65,7 +65,12 @@ function surf(p: Plan, i: number): Surf {
         case RT.BATH: return { floor: sp(L.TILE_SMALL), ceil: sp(L.CEILTILE), wall: sp(L.TILE_BLUE), h: CEIL, base: false };
         case RT.STORAGE: return { floor: sp(L.CONCRETE, [0.8, 0.8, 0.78]), ceil: sp(L.CONCRETE), wall: sp(L.PLASTER, [0.75, 0.75, 0.72]), h: CEIL, base: false };
         case RT.SERVER: return { floor: sp(L.TILE_SMALL, [0.7, 0.72, 0.75]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.8, 0.82, 0.85]), h: CEIL, base: false };
-        case RT.STUDIO: return { floor: sp(L.BLACK, [0.9, 0.9, 0.9]), ceil: sp(L.BLACK, [0.6, 0.6, 0.6]), wall: sp(L.BLACK), h: 3.3, base: false };
+        case RT.STUDIO: case RT.SET: return { floor: sp(L.BLACK, [0.9, 0.9, 0.9]), ceil: sp(L.BLACK, [0.6, 0.6, 0.6]), wall: sp(L.BLACK), h: 3.3, base: false };
+        case RT.KETNET:
+          if (isRtbf(p.cz)) return { floor: sp(L.BLACK, [0.9, 0.9, 0.9]), ceil: sp(L.BLACK, [0.6, 0.6, 0.6]), wall: sp(L.BLACK), h: 3.3, base: false };
+          return { floor: sp(L.WHITE, [0.07, 0.1, 0.22]), ceil: sp(L.BLACK, [0.6, 0.6, 0.6]), wall: sp(L.PLASTER, [0.42, 0.9, 0.62]), h: 3.3, base: false };
+        case RT.SPORZA: return { floor: sp(L.TILEDARK, [0.55, 0.55, 0.58]), ceil: sp(L.BLACK, [0.6, 0.6, 0.6]), wall: sp(L.BLACK, [1.1, 1.15, 1.1]), h: 3.3, base: false };
+        case RT.RADIO: return { floor: sp(L.CARPET_GREY, [0.55, 0.55, 0.6]), ceil: sp(L.CEILTILE, [0.45, 0.45, 0.48]), wall: sp(L.FABRIC, [0.3, 0.3, 0.33]), h: CEIL, base: false };
         case RT.CANTEEN: return { floor: sp(L.TILEDARK, [1.1, 1.05, 1.0]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.95, 0.9, 0.82]), h: CEIL, base: true };
         case RT.ARCHIVE: return { floor: sp(L.CONCRETE), ceil: sp(L.CONCRETE, [0.8, 0.8, 0.8]), wall: sp(L.BRICK, [0.8, 0.8, 0.78]), h: CEIL, base: false };
         case RT.REGIE: return { floor: sp(L.CARPET_GREY, [0.6, 0.6, 0.65]), ceil: sp(L.BLACK), wall: sp(L.BLACK, [1.4, 1.4, 1.45]), h: CEIL, base: false };

@@ -5,7 +5,8 @@ import { IcosahedronGeometry } from "three";
 import { CELL, CH, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, floorName } from "./config";
 import { Builder, Frame, LightCtx, fbox, type RGB, type Spec } from "./builder";
 import { getFurnished } from "./furnish";
-import { K, ROOM_LABEL, RT, cellLabel, getPlan, idx, roomAnomaly, type Plan, type Room } from "./layout";
+import { K, RT, cellLabel, getPlan, idx, radioStation, roomAnomaly, roomLabel, type Plan, type Room } from "./layout";
+import { MNM } from "./stations";
 import { L } from "./layers";
 import { chair } from "./props";
 import { Rng, getSeed, hash } from "./rng";
@@ -135,6 +136,7 @@ interface ItemDef {
   place: "rooms" | "garage" | "roof" | "corridor";
   types?: number[];
   fallback?: number[];
+  only?: (p: Plan, r: Room) => boolean; // preferred rooms among `types`
   surface?: "table" | "floor";
   model: (b: Builder, fr: Frame) => void;
 }
@@ -230,14 +232,55 @@ const ITEMS: ItemDef[] = [
   },
   {
     id: "peter", title: "Peter Van de Veire is zijn koptelefoon kwijt", goal: "Zoek de koptelefoon van Peter", item: "de koptelefoon van Peter Van de Veire", short: "Koptelefoon",
-    done: "Peter heeft zijn koptelefoon terug. MNM zendt weer uit.", hint: (w) => `Hij monteerde iets in een ${w}`,
-    place: "rooms", types: [RT.EDIT], fallback: [RT.OFFICE, RT.MEETING], surface: "table",
+    done: "Peter heeft zijn koptelefoon terug. MNM zendt weer uit.", hint: (w) => `Hij zat nog in de studio: ${w}`,
+    place: "rooms", types: [RT.RADIO], only: (p, r) => radioStation(p, r) === MNM, fallback: [RT.EDIT, RT.OFFICE], surface: "table",
     model: (b, fr) => {
       for (let k = 0; k <= 6; k++) {
         const a = (k / 6) * Math.PI;
         fbox(b, fr, Math.cos(a) * 0.09, 0.005 + Math.sin(a) * 0.004, Math.sin(a) * 0.09 - 0.04, 0.03, 0.012, 0.03, sp(L.WHITE, [0.1, 0.1, 0.1]));
       }
       for (const x of [-0.09, 0.09]) fbox(b, fr, x, 0, -0.04, 0.05, 0.07, 0.08, glow([0.1, 0.55, 0.3]));
+    },
+  },
+  {
+    id: "michel", title: "Michel Wuyts is zijn koersboekje kwijt", goal: "Zoek het koersboekje van Michel", item: "het koersboekje van Michel Wuyts", short: "Koersboekje",
+    done: "Michel Wuyts heeft zijn boekje terug. Wat een koers, wat een koers!", hint: (w) => `Hij zat aan de desk in ${w}`,
+    place: "rooms", types: [RT.SPORZA], fallback: [RT.STUDIO, RT.REGIE], surface: "table",
+    model: (b, fr) => {
+      fbox(b, fr, 0, 0, 0, 0.15, 0.018, 0.21, { all: sp(L.WHITE, [0.9, 0.88, 0.8]), py: { layer: L.MISC, emit: [0.8, 0.8, 0.8], uv: [0.5, 0.5, 1, 1] } });
+      fbox(b, fr, 0.09, 0.012, 0.02, 0.012, 0.004, 0.13, glow([0.9, 0.1, 0.1]));
+    },
+  },
+  {
+    id: "boma", title: "Boma zoekt zijn worst", goal: "Zoek de Boma-worst", item: "de Boma-worst", short: "Boma-worst",
+    done: "Boma heeft zijn worst terug. Allez, allez, Boma is content!", hint: (w) => `Iemand heeft hem laten liggen in ${w}`,
+    place: "rooms", types: [RT.MESS, RT.CANTEEN], fallback: [RT.MEETING], surface: "table",
+    model: (b, fr) => {
+      // a ring of Boma worst: a bent sausage, tied off, with its yellow label
+      const meat = glow([0.6, 0.2, 0.16]);
+      for (let k = 0; k < 7; k++) {
+        const a = -1.1 + k * 0.37;
+        b.geom(BLOB, Math.sin(a) * 0.16, 0.035, Math.cos(a) * 0.16 - 0.1, a, 0.075, 0.036, 0.04, meat);
+      }
+      for (const a of [-1.2, 1.2]) fbox(b, new Frame(...fr.p(Math.sin(a) * 0.17, 0, Math.cos(a) * 0.17 - 0.1), a), 0, 0.02, 0, 0.02, 0.03, 0.03, glow([0.85, 0.8, 0.65]));
+      fbox(b, new Frame(...fr.p(0, 0, 0.06), 0), 0, 0.066, 0, 0.1, 0.004, 0.035, glow([1.0, 0.85, 0.15]));
+      fbox(b, new Frame(...fr.p(0, 0, 0.06), 0), 0, 0.071, 0, 0.06, 0.002, 0.02, glow([0.85, 0.08, 0.1]));
+    },
+  },
+  {
+    id: "ceo", title: "De CEO is zijn ruggengraat kwijt", goal: "Zoek de ruggengraat van de CEO", item: "de ruggengraat van de CEO", short: "Ruggengraat",
+    done: "De CEO heeft zijn ruggengraat terug. Voorlopig.", hint: (w) => `Bij het begin van de vergadering met de EBU over Eurosong had hij hem nog: ${w}`,
+    place: "rooms", types: [RT.MEETING], fallback: [RT.OFFICE], surface: "table",
+    model: (b, fr) => {
+      // a spine lying on the boardroom table: vertebrae and discs, tail to neck
+      const bone = glow([0.92, 0.88, 0.76]), shade = glow([0.62, 0.58, 0.48]), disc = glow([0.6, 0.28, 0.26]);
+      for (let k = 0; k < 15; k++) {
+        const z = -0.26 + k * 0.037, s = 1.3 - k * 0.035, x = Math.sin(k * 0.35) * 0.025;
+        fbox(b, fr, x, 0, z, 0.052 * s, 0.036 * s, 0.024, bone);
+        fbox(b, fr, x, 0.034 * s, z - 0.004, 0.012, 0.035 * s, 0.03, shade);
+        for (const sd of [-1, 1]) fbox(b, fr, x + sd * 0.04 * s, 0.014, z, 0.036 * s, 0.01, 0.01, shade);
+        if (k < 14) fbox(b, fr, x, 0.006, z + 0.0185, 0.04 * s, 0.024 * s, 0.013, disc);
+      }
     },
   },
   {
@@ -317,8 +360,10 @@ export class Quests {
       id: d.id, title: d.title, goal: d.goal, item: d.item, doneText: d.done, launchAt: 0, launched: false, done: false,
       hint: () => d.hint(where(spot)), target: () => spot,
     }));
-    // order: Ben, Tom, Jan, Felice, the toilets, then the rest
-    this.quests = [itemQuests[0]!, itemQuests[1]!, special[0]!, special[1]!, ...(loos ? [special[2]!] : []), ...itemQuests.slice(2)];
+    // order: Ben, the CEO, Tom, Jan, Felice, the toilets, then the rest
+    const ceo = itemQuests.find((q) => q.id === "ceo")!;
+    const rest = itemQuests.slice(2).filter((q) => q !== ceo);
+    this.quests = [itemQuests[0]!, ceo, itemQuests[1]!, special[0]!, special[1]!, ...(loos ? [special[2]!] : []), ...rest];
     this.quests.forEach((q, k) => (q.launchAt = launch[k] ?? 375 + (k - 10) * 45));
     for (const q of this.quests) if (saved.has(q.id)) q.done = true;
     for (const { d, spot } of items) if (spot) this.addItem(d.id, spot, d.short, d.model);
@@ -365,16 +410,17 @@ export class Quests {
       const q = rng.pick(c);
       return cellSpot(f, q.gx, q.gz, lc(cellLabel(f, q.gx, q.gz)));
     }
-    let c = findRooms(d.types!, floors, cx0, cz0, 2);
+    let c = d.only ? findRooms(d.types!, floors, cx0, cz0, 2, d.only) : [];
+    if (!c.length) c = findRooms(d.types!, floors, cx0, cz0, 2);
     if (!c.length && d.fallback) c = findRooms(d.fallback, floors, cx0, cz0, 2);
     if (!c.length) c = findRooms(d.types!.concat(d.fallback ?? []), floors, cx0, cz0, 3);
     if (!c.length) return null;
     const { p, r } = rng.pick(c);
-    const label = r.type === RT.STUDIO ? `studio ${r.num}` : ROOM_LABEL[r.type]!.toLowerCase();
+    const label = lc(roomLabel(p, r));
     if (d.surface === "table") {
       const fur = getFurnished(p.f, p.cx, p.cz);
       const inRoom = (gx: number, gz: number) => p.room[idx(gx - p.cx * CH, gz - p.cz * CH)] === r.id;
-      const tops: Record<string, [number, number, number]> = { ctable: [0.745, 0, 0.8], mtable: [0.76, 0, 0.6], desks: [0.735, 0.55, 0.5], editdesk: [0.74, 0.55, 0.6], newsdesk: [0.97, -0.1, 0.9] };
+      const tops: Record<string, [number, number, number]> = { ctable: [0.745, 0, 0.8], mtable: [0.76, 0, 0.6], desks: [0.735, 0.55, 0.5], editdesk: [0.74, 0.55, 0.6], newsdesk: [0.97, -0.1, 0.9], messtable: [0.75, 0, 0.35], sdesk: [1.09, 0.05, 0.9], radiodesk: [0.76, 0.3, 0.3] };
       const tables = fur.props.filter((pr) => tops[pr.t] && inRoom(pr.gx, pr.gz));
       if (tables.length) {
         const t = rng.pick(tables);

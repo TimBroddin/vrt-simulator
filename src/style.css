@@ -17,6 +17,14 @@ canvas { display: block; }
 #tc { margin-left: 10px; }
 #top-right { position: absolute; top: 44px; right: 52px; display: flex; align-items: center; gap: 10px; }
 .drop { display: inline-grid; place-items: center; width: 30px; height: 30px; background: var(--pink); border-radius: 50% 0 50% 50%; font: 700 13px "Helvetica Neue", Arial, sans-serif; letter-spacing: 0; text-shadow: none; }
+#station { position: absolute; bottom: 84px; right: 52px; display: flex; align-items: center; gap: 12px; padding: 8px 14px 8px 8px; background: rgba(0, 0, 0, 0.45); border-left: 3px solid #ff2a1a; opacity: 0; transform: translateX(12px); transition: opacity 0.8s, transform 0.8s; }
+#station.show { opacity: 1; transform: none; }
+#station img { width: 50px; height: 50px; padding: 5px; object-fit: contain; background: rgba(245, 244, 240, 0.92); border-radius: 6px; }
+#station div { display: flex; flex-direction: column; gap: 3px; }
+#station .lbl { font-size: 10px; opacity: 0.7; }
+#station .lbl::before { content: "● "; color: #ff2a1a; }
+#stationname { font-size: 15px; }
+.credits .lic { font-size: 11px; opacity: 0.7; }
 #bottom-left { position: absolute; bottom: 44px; left: 52px; line-height: 1.5; }
 #floor { font-size: 18px; }
 #loc { opacity: 0.75; }
@@ -115,6 +123,9 @@ body.touch .desk { display: none !important; }
   #bottom-left { bottom: 20px; left: 26px; }
   #floor { font-size: 13px; }
   #bottom-right { bottom: 20px; right: 26px; }
+  #station { bottom: 52px; right: 26px; gap: 8px; padding: 5px 10px 5px 5px; }
+  #station img { width: 36px; height: 36px; padding: 3px; }
+  #stationname { font-size: 12px; }
   #quest { top: 50px; right: 26px; width: 240px; font-size: 10px; }
   #quest .qt { font-size: 12px; }
   #toasts { top: 18%; }
@@ -126,6 +137,7 @@ body.touch .desk { display: none !important; }
   .keys { font-size: 12px; }
 }
 body.touch #bottom-right { display: none; }
+body.touch #station { bottom: auto; top: 52px; right: 26px; }
 @media (max-height: 520px) {
   .card { width: min(720px, 94vw); }
   h1 { font-size: 15vh; }
@@ -171,3 +183,13 @@ body.touch .lp-help.mob { display: block; }
 #overlay { z-index: 10; }
 #endcard { z-index: 11; }
 #flash { z-index: 12; }
+
+.review { position: relative; margin: -8px auto 30px; max-width: 520px; padding: 18px 26px 16px 58px; text-align: left; background: rgba(255, 46, 126, 0.1); border: 1px solid rgba(255, 46, 126, 0.55); border-left: 5px solid var(--pink); border-radius: 4px; box-shadow: 0 0 32px rgba(255, 46, 126, 0.18); font: italic 600 18px/1.45 "Helvetica Neue", Helvetica, Arial, sans-serif; color: #fff; transform: rotate(-1deg); }
+.review::before { content: "“"; position: absolute; left: 12px; top: -6px; font: 900 82px/1 Georgia, serif; font-style: normal; color: var(--pink); }
+.review .label { display: inline-block; margin-right: 10px; padding: 2px 7px; background: var(--pink); color: #fff; font: 700 10px var(--osd); font-style: normal; letter-spacing: 0.2em; vertical-align: 2px; }
+.review .stars { display: inline-block; font-style: normal; color: var(--pink); letter-spacing: 0.2em; font-size: 17px; margin-bottom: 8px; text-shadow: 0 0 10px rgba(255, 46, 126, 0.6); }
+.review q { display: block; quotes: none; }
+.review cite { display: block; margin-top: 10px; font: 700 12px var(--osd); font-style: normal; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pink); }
+.review cite::before { content: "— "; }
+@media (max-height: 520px) { .review { margin: -2px auto 10px; max-width: 600px; padding: 8px 16px 8px 44px; font-size: 13px; line-height: 1.3; } .review::before { font-size: 54px; left: 8px; top: -4px; } .review .stars { font-size: 12px; margin-bottom: 3px; } .review .label { font-size: 8px; } .review cite { font-size: 9px; margin-top: 4px; } }
+@media (max-height: 520px) { .rot, .seed { display: none; } .keys { gap: 4px 14px; font-size: 11px; } .credits { margin-top: 8px; } h1 { font-size: 13vh; } }

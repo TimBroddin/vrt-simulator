@@ -4,6 +4,7 @@ import * as THREE from "three";
 import { FLOOR_MAX, FLOOR_MIN } from "./config";
 import { ART } from "./art";
 import { ART0, L, LABEL0, LAYER_COUNT } from "./layers";
+import type { LogoName } from "./logoImages";
 import { Rng } from "./rng";
 
 const S = 512;
@@ -11,6 +12,8 @@ type Ctx = CanvasRenderingContext2D;
 const rng = new Rng(9001);
 const R = () => rng.next();
 const FONT = `"Helvetica Neue", Helvetica, Arial, sans-serif`;
+const MARKER = "Marker Felt, Comic Sans MS, cursive";
+let IMG: Partial<Record<LogoName, HTMLImageElement | null>> = {};
 
 function fill(c: Ctx, col: string) {
   c.fillStyle = col;
@@ -406,12 +409,16 @@ const painters: Record<number, (c: Ctx) => void> = {
     ["DE AFSPRAAK", "#f2e6d0", "#101010", "22:25", "OP CANVAS"],
     ["KARREWIET", "#ffd400", "#1a1a1a", "18:50", "NIEUWS VOOR KINDEREN"],
   ]),
-  [L.POSTERS2]: (c) => posters(c, [
-    ["PANO", "#101418", "#c7f0ff", "WOENSDAG", "ONDERZOEKSJOURNALISTIEK"],
-    ["DE ZEVENDE DAG", "#e9e2d6", "#233d8c", "ZONDAG 11:00", "POLITIEK DEBAT"],
-    ["STUDIO BRUSSEL", "#ff2d2d", "#ffffff", "100.6 FM", "LIFE IS MUSIC"],
-    ["RADIO 1", "#101010", "#ffcf3f", "EN NU", "HET NIEUWS VAN HET UUR"],
-  ]),
+  [L.POSTERS2]: (c) => {
+    posters(c, [
+      ["PANO", "#101418", "#c7f0ff", "WOENSDAG", "ONDERZOEKSJOURNALISTIEK"],
+      ["DE ZEVENDE DAG", "#e9e2d6", "#233d8c", "ZONDAG 11:00", "POLITIEK DEBAT"],
+    ]);
+    brandPosters(c, [
+      { title: "", bg: "#1b1b1b", fg: "#ffffff", time: "100.6 FM", sub: "LIFE IS MUSIC", logo: "stubru", big: true },
+      { title: "", bg: "#f1eee6", fg: "#1a1636", time: "EN NU", sub: "HET NIEUWS VAN HET UUR", logo: "radio1", big: true },
+    ], 2);
+  },
   [L.POSTERS3]: (c) =>
     posters(c, [
       ["LE JT", "#0b2a5b", "#ffffff", "19H30", "LA UNE · RTBF"],
@@ -778,6 +785,232 @@ const painters: Record<number, (c: Ctx) => void> = {
     }
     c.fill();
   },
+  [L.POSTERS4]: (c) => brandPosters(c, [
+    { title: "GALAXY PARK", bg: "#0f1a44", fg: "#6ee7a0", time: "ELKE WEEKDAG", sub: "DE REEKS OP KETNET", logo: "ketnet" },
+    { title: "#LIKEME", bg: "#ff4fa3", fg: "#ffffff", time: "OP KETNET", sub: "DE REEKS · DE MUSICAL", logo: "ketnet" },
+    { title: "RONDE VAN VLAANDEREN", bg: "#111111", fg: "#ffe600", time: "ZONDAG · LIVE", sub: "DE HOOGMIS VAN DE KOERS", logo: "sporza", panel: "#ffffff" },
+    { title: "RODE DUIVELS", bg: "#c8102e", fg: "#ffffff", time: "20:45 · VRT 1", sub: "LIVE MET COMMENTAAR", logo: "sporza", panel: "#ffffff" },
+  ]),
+  [L.POSTERS5]: (c) => brandPosters(c, [
+    { title: "", bg: "#f2f2ef", fg: "#111111", time: "OUDEJAARSDAG", sub: "DE TIJDLOZE 100 · STUDIO BRUSSEL", logo: "tijdloze", big: true },
+    { title: "", bg: "#2a1c12", fg: "#f3dca8", time: "VRT 1", sub: "ELKE WEEKDAG · SINDS 1995", logo: "thuis", big: true },
+    { title: "", bg: "#1f7a34", fg: "#ffd21f", time: "ZATERDAG", sub: "DE HERHALING · SEIZOEN 1", logo: "kampsign", big: true },
+    { title: "", bg: "#2b0f3a", fg: "#ffe94a", time: "NON-STOP", sub: "DE GROOTSTE HITS", logo: "mnm", big: true },
+  ]),
+  [L.POSTERS6]: (c) => brandPosters(c, [
+    { title: "", bg: "#ffffff", fg: "#e8504a", time: "ELKE ZOMER", sub: "DE ZOMERHIT", logo: "radio2", big: true },
+    { title: "DE WARMSTE WEEK", bg: "#ff5a1f", fg: "#ffffff", time: "DECEMBER", sub: "SAMEN VOOR HET GOEDE DOEL", logo: "stubru" },
+    { title: "", bg: "#3a4bb0", fg: "#ffb04a", time: "1 DEC 1997", sub: "HET NIEUWE KINDERNET", logo: "ketnet97", big: true },
+    { title: "", bg: "#f4f4f2", fg: "#111111", time: "89.5 FM", sub: "KLASSIEK · JAZZ · WERELD", logo: "klara", big: true },
+  ]),
+  [L.RADIOWALL]: (c) => {
+    // eight 2:1 panels: the five stations, the RTBF, De Tijdloze, De Warmste Week
+    const cells: [string, LogoName | null, string][] = [
+      ["#f1eee6", "radio1", ""], ["#ffffff", "radio2", ""], ["#f4f4f2", "klara", ""], ["#161616", "stubru", ""],
+      ["#2b0f3a", "mnm", ""], ["#1a64c8", null, "LA PREMIÈRE"], ["#f2f2ef", "tijdloze", ""], ["#ff5a1f", null, "DE WARMSTE WEEK"],
+    ];
+    cells.forEach(([bg, lg, t], k) => {
+      const x = (k % 2) * 256, y = Math.floor(k / 2) * 128;
+      c.fillStyle = bg;
+      c.fillRect(x, y, 256, 128);
+      if (lg) logo(c, lg, x + 20, y + 12, 216, 104);
+      else text(c, t, x + 128, y + 64, t.length > 12 ? 22 : 30, "#fff", "900");
+    });
+  },
+  [L.KETNETWALL]: (c) => {
+    // left half: the pattern that repeats along the wall; right half: the big K
+    for (const half of [0, 1]) {
+      aspect(c, 2.98 / 3.2, (w, h) => {
+        c.fillStyle = "#0f1a44";
+        c.fillRect(0, 0, w, h);
+        const cols = ["#6ee7a0", "#ff4fa3", "#ffb000", "#39a0ff", "#ffffff"];
+        const r = new Rng(77 + half);
+        for (let k = 0; k < 16; k++) {
+          c.fillStyle = cols[k % cols.length]!;
+          c.globalAlpha = 0.9;
+          const x = r.next() * w, y = r.next() * h, s = 10 + r.next() * 28;
+          c.save();
+          c.translate(x, y);
+          c.rotate(r.next() * 6);
+          if (k % 3 === 0) { c.beginPath(); c.arc(0, 0, s * 0.6, 0, 7); c.fill(); }
+          else if (k % 3 === 1) c.fillRect(-s / 2, -s / 6, s, s / 3);
+          else { c.beginPath(); c.moveTo(0, -s / 2); c.lineTo(s / 2, s / 2); c.lineTo(-s / 2, s / 2); c.fill(); }
+          c.restore();
+        }
+        c.globalAlpha = 1;
+        c.fillStyle = "#6ee7a0";
+        c.fillRect(0, h * 0.9, w, h * 0.1);
+        if (half) logo(c, "ketnet", w * 0.12, h * 0.1, w * 0.76, h * 0.72, "KETNET");
+      }, half * 256, 0, 256, S);
+    }
+  },
+  [L.SPORZAWALL]: (c) => {
+    for (const half of [0, 1]) {
+      aspect(c, 2.98 / 3.2, (w, h) => {
+        const g = c.createLinearGradient(0, 0, w, h);
+        g.addColorStop(0, "#0d1512");
+        g.addColorStop(1, "#16241d");
+        c.fillStyle = g;
+        c.fillRect(0, 0, w, h);
+        // pitch lines and speed stripes
+        c.strokeStyle = "rgba(90,220,120,0.35)";
+        c.lineWidth = 3;
+        for (let k = -4; k < 10; k++) { c.beginPath(); c.moveTo(k * 50, h); c.lineTo(k * 50 + h * 0.6, 0); c.stroke(); }
+        c.fillStyle = "#3ccf6a";
+        c.fillRect(0, h * 0.86, w, h * 0.03);
+        if (half) {
+          c.fillStyle = "#f4f4f2";
+          c.fillRect(w * 0.08, h * 0.3, w * 0.84, h * 0.3);
+          logo(c, "sporza", w * 0.14, h * 0.33, w * 0.72, h * 0.24, "sporza");
+          text(c, "LIVE", w * 0.5, h * 0.72, h * 0.07, "#3ccf6a", "900");
+        }
+      }, half * 256, 0, 256, S);
+    }
+  },
+  [L.IDENTS]: (c) => {
+    const ids: [string, LogoName, string][] = [["#0f1a44", "ketnet", ""], ["#f4f4f2", "sporza", "#3ccf6a"], ["#ffffff", "vrt1", ""], ["#0e4f4a", "canvas", ""]];
+    ids.forEach(([bg, lg, bar], k) => {
+      aspect(c, 16 / 9, (w, h) => {
+        c.fillStyle = bg;
+        c.fillRect(0, 0, w, h);
+        logo(c, lg, w * 0.25, h * 0.14, w * 0.5, h * 0.66);
+        if (bar) { c.fillStyle = bar; c.fillRect(0, h * 0.9, w, h * 0.1); }
+      }, (k % 2) * 256, Math.floor(k / 2) * 256, 256, 256);
+    });
+  },
+  [L.KAMPWALL]: (c) => {
+    fill(c, "#6aa33a");
+    logo(c, "kampwall", 0, 0, S, S);
+  },
+  [L.SETSIGNS]: (c) => {
+    // 0: the Kampioenen scarf sign, 1: Bar Madam in neon, 2: Boma Worst enamel, 3: the stencil on the back of a flat
+    c.fillStyle = "#e9dcc0";
+    c.fillRect(0, 0, 256, 256);
+    aspect(c, 1.88, (w, h) => logo(c, "kampsign", 0, 0, w, h, "F.C. DE KAMPIOENEN"), 0, 0, 256, 256);
+    aspect(c, 2.4, (w, h) => {
+      c.fillStyle = "#1a0d14";
+      c.fillRect(0, 0, w, h);
+      c.shadowColor = "#ff4fa3";
+      c.shadowBlur = 14;
+      text(c, "Bar Madam", w / 2, h * 0.47, h * 0.5, "#ffd0ea", "italic 700", "center", "Snell Roundhand, Brush Script MT, Georgia, serif");
+      c.shadowBlur = 0;
+      c.strokeStyle = "#ff4fa3";
+      c.lineWidth = 3;
+      c.strokeRect(8, 8, w - 16, h - 16);
+    }, 256, 0, 256, 256);
+    aspect(c, 2.2, (w, h) => {
+      c.fillStyle = "#c8141e";
+      c.fillRect(0, 0, w, h);
+      c.fillStyle = "#f7f2e6";
+      c.fillRect(6, 6, w - 12, h - 12);
+      c.fillStyle = "#c8141e";
+      c.fillRect(12, 12, w - 24, h - 24);
+      text(c, "BOMA", w / 2, h * 0.42, h * 0.44, "#ffd21f", "900");
+      text(c, "WORST · VLEESWAREN", w / 2, h * 0.76, h * 0.13, "#f7f2e6", "800");
+    }, 0, 256, 256, 256);
+    aspect(c, 2.4, (w, h) => {
+      c.fillStyle = "#c9a878";
+      c.fillRect(0, 0, w, h);
+      text(c, "VRT DECOR", w * 0.06, h * 0.32, h * 0.2, "#1a1a1a", "900", "left", "Courier New, monospace");
+      text(c, "NIET VERPLAATSEN", w * 0.06, h * 0.58, h * 0.14, "#1a1a1a", "700", "left", "Courier New, monospace");
+      text(c, "STUDIO 5 · FLAT 12", w * 0.06, h * 0.8, h * 0.12, "#8a1010", "700", "left", "Courier New, monospace");
+    }, 256, 256, 256, 256);
+    noise(c, 8);
+  },
+  [L.PLYWOOD]: (c) => {
+    fill(c, "#c9a878");
+    c.globalAlpha = 0.18;
+    for (let i = 0; i < 220; i++) {
+      c.strokeStyle = R() > 0.5 ? "#8a6a40" : "#e6c99a";
+      c.lineWidth = 1 + R() * 3;
+      const y = R() * S;
+      c.beginPath();
+      c.moveTo(0, y);
+      c.bezierCurveTo(S * 0.3, y + R() * 16 - 8, S * 0.6, y + R() * 16 - 8, S, y);
+      c.stroke();
+    }
+    c.globalAlpha = 1;
+    // sheet seams and screw rows
+    c.fillStyle = "#6b5232";
+    c.fillRect(0, 0, 4, S);
+    c.fillRect(0, S / 2 - 2, S, 4);
+    for (let y = 16; y < S; y += 40) { c.fillRect(10, y, 3, 3); c.fillRect(S - 14, y, 3, 3); }
+    noise(c, 12);
+  },
+  [L.WALLPAPER]: (c) => {
+    fill(c, "#e8dcc4");
+    for (let x = 0; x < S; x += 64) {
+      c.fillStyle = "rgba(120,90,50,0.16)";
+      c.fillRect(x, 0, 22, S);
+    }
+    c.fillStyle = "rgba(110,80,40,0.22)";
+    for (let y = 32; y < S; y += 128)
+      for (let x = 43; x < S; x += 128)
+        for (const [ox, oy] of [[0, 0], [64, 64]]) {
+          c.save();
+          c.translate(x + ox!, y + oy!);
+          for (let k = 0; k < 4; k++) { c.rotate(Math.PI / 2); c.beginPath(); c.ellipse(0, 10, 5, 12, 0, 0, 7); c.fill(); }
+          c.restore();
+        }
+    noise(c, 10);
+  },
+  [L.MISC]: (c) => {
+    // 0: a Kampioenen shirt, green and yellow, BOMA on the chest
+    aspect(c, 0.62 / 0.72, (w, h) => {
+      for (let k = 0; k < 8; k++) { c.fillStyle = k % 2 ? "#ffd21f" : "#1f8a3a"; c.fillRect((k * w) / 8, 0, w / 8 + 1, h); }
+      c.fillStyle = "#1f8a3a";
+      c.fillRect(0, 0, w, h * 0.08);
+      c.fillStyle = "#ffffff";
+      c.fillRect(w * 0.18, h * 0.3, w * 0.64, h * 0.2);
+      text(c, "BOMA", w / 2, h * 0.4, h * 0.14, "#c8141e", "900");
+    }, 0, 0, 256, 256);
+    // 1: Michel Wuyts' koersboekje
+    aspect(c, 0.15 / 0.21, (w, h) => {
+      c.fillStyle = "#1c2f6e";
+      c.fillRect(0, 0, w, h);
+      c.fillStyle = "#e9e3cf";
+      c.fillRect(w * 0.1, h * 0.22, w * 0.8, h * 0.4);
+      text(c, "KOERS", w / 2, h * 0.34, h * 0.08, "#1c2f6e", "900");
+      text(c, "Michel", w / 2, h * 0.5, h * 0.08, "#b01818", "600", "center", MARKER);
+      for (let y = 0; y < h; y += h / 14) { c.fillStyle = "#999"; c.fillRect(0, y, w * 0.05, h / 40); }
+    }, 256, 0, 256, 256);
+    // 2: the front of the Sporza desk
+    aspect(c, 2.6 / 0.95, (w, h) => {
+      c.fillStyle = "#111512";
+      c.fillRect(0, 0, w, h);
+      c.fillStyle = "#3ccf6a";
+      c.fillRect(0, h * 0.82, w, h * 0.06);
+      c.fillStyle = "#f4f4f2";
+      c.fillRect(w * 0.3, h * 0.2, w * 0.4, h * 0.45);
+      logo(c, "sporza", w * 0.32, h * 0.24, w * 0.36, h * 0.37, "sporza");
+    }, 0, 256, 256, 256);
+    // 3: the bottles behind the bar
+    fillRect(c, 256, 256, 256, 256, "#2a1810");
+    for (let r = 0; r < 3; r++) {
+      c.fillStyle = "#6b4a2e";
+      c.fillRect(256, 256 + r * 85 + 78, 256, 7);
+      for (let k = 0; k < 12; k++) {
+        const x = 262 + k * 20.5, hgt = 42 + R() * 28, y = 256 + r * 85 + 78 - hgt;
+        c.fillStyle = ["#2e6b2a", "#7a2a18", "#d8b050", "#e8e8e0", "#3a2a6a", "#b86a18"][(R() * 6) | 0]!;
+        c.fillRect(x, y + hgt * 0.35, 14, hgt * 0.65);
+        c.fillRect(x + 4, y, 6, hgt * 0.4);
+        c.fillStyle = "rgba(255,255,255,0.35)";
+        c.fillRect(x + 2, y + hgt * 0.45, 2, hgt * 0.4);
+      }
+    }
+  },
+  [L.BANNERS]: (c) => {
+    const rows: [string, (w: number, h: number) => void][] = [
+      ["#f4f4f2", (w, h) => { logo(c, "sporza", w * 0.3, h * 0.12, w * 0.4, h * 0.7, "sporza"); c.fillStyle = "#3ccf6a"; c.fillRect(0, h * 0.88, w, h * 0.12); }],
+      ["#111111", (w, h) => { c.fillStyle = "#ffe600"; c.fillRect(0, 0, h * 0.5, h); c.fillRect(w - h * 0.5, 0, h * 0.5, h); text(c, "RONDE VAN VLAANDEREN", w / 2, h / 2 + 2, h * 0.42, "#ffe600", "900"); }],
+      ["#c8102e", (w, h) => { text(c, "ALLEZ LES DIABLES · RODE DUIVELS", w / 2, h / 2 + 2, h * 0.36, "#ffffff", "900"); c.fillStyle = "#111"; c.fillRect(0, 0, w, h * 0.08); c.fillStyle = "#ffe600"; c.fillRect(0, h * 0.92, w, h * 0.08); }],
+      ["#1f8a3a", (w, h) => { for (let k = 0; k < 16; k++) if (k % 2) { c.fillStyle = "#ffd21f"; c.fillRect((k * w) / 16, 0, w / 16, h * 0.14); c.fillRect((k * w) / 16, h * 0.86, w / 16, h * 0.14); } text(c, "F.C. DE KAMPIOENEN", w / 2, h / 2 + 2, h * 0.42, "#ffd21f", "900"); }],
+    ];
+    rows.forEach(([bg, fn], k) => {
+      fillRect(c, 0, k * 128, S, 128, bg);
+      aspect(c, 4, fn, 0, k * 128, S, 128);
+    });
+  },
 };
 
 function rtbfLogo(c: Ctx, x: number, y: number, s: number) {
@@ -805,6 +1038,52 @@ function posters(c: Ctx, list: [string, string, string, string, string][], logo:
   });
 }
 
+function fillRect(c: Ctx, x: number, y: number, w: number, h: number, col: string) {
+  c.fillStyle = col;
+  c.fillRect(x, y, w, h);
+}
+
+// an image fitted (contained and centred) into a box, or a text fallback while missing
+function logo(c: Ctx, name: LogoName, x: number, y: number, w: number, h: number, fallback = "") {
+  const img = IMG[name];
+  if (!img) {
+    if (fallback) text(c, fallback, x + w / 2, y + h / 2, Math.min(h * 0.5, (w / fallback.length) * 1.6), "#ccc", "900");
+    return;
+  }
+  const k = Math.min(w / img.width, h / img.height);
+  const dw = img.width * k, dh = img.height * k;
+  c.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+}
+
+interface BrandPoster { title: string; bg: string; fg: string; time: string; sub: string; logo: LogoName; big?: boolean; panel?: string }
+
+// Posters with a real brand logo: big and centred, or a smaller logo over a title.
+function brandPosters(c: Ctx, list: BrandPoster[], first = 0) {
+  list.forEach((p, n) => {
+    const q = first + n;
+    const x = (q % 2) * 256, y = q < 2 ? 0 : 256;
+    aspect(c, 0.64 / 0.9, (w, h) => {
+      c.fillStyle = p.bg;
+      c.fillRect(0, 0, w, h);
+      c.fillStyle = p.fg;
+      c.globalAlpha = 0.12;
+      c.beginPath(); c.arc(w * 0.8, h * 0.75, w * 0.5, 0, 7); c.fill();
+      c.globalAlpha = 1;
+      const lh = p.big ? h * 0.5 : h * 0.24;
+      if (p.panel) fillRect(c, 12, 14, w - 24, lh + 8, p.panel);
+      logo(c, p.logo, 18, 18, w - 36, lh, p.title);
+      if (p.title) {
+        const words = p.title.split(" ");
+        const top = p.big ? h * 0.66 : h * 0.44;
+        words.forEach((wd, k) => text(c, wd, 16, top + k * 36, wd.length > 9 ? 25 : wd.length > 6 ? 32 : 38, p.fg, "900", "left"));
+      }
+      text(c, p.sub, 16, h * 0.84, p.sub.length > 26 ? 9 : 11, p.fg, "600", "left");
+      text(c, p.time, 16, h * 0.92, 18, p.fg, "800", "left");
+      vrtLogo(c, w - 24, h - 24, 11);
+    }, x, y, 256, 256);
+  });
+}
+
 // Museum labels for the auctioned works, 8 per layer (2 x 4).
 function labels(c: Ctx, first: number) {
   fill(c, "#e9e6df");
@@ -824,7 +1103,10 @@ function labels(c: Ctx, first: number) {
   }
 }
 
-export function makeTextureArray(renderer: THREE.WebGLRenderer, art: (HTMLImageElement | null)[], size = S): THREE.DataArrayTexture {
+export function makeTextureArray(
+  renderer: THREE.WebGLRenderer, art: (HTMLImageElement | null)[], logos: Partial<Record<LogoName, HTMLImageElement | null>>, size = S,
+): THREE.DataArrayTexture {
+  IMG = logos;
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = S;
   const c = canvas.getContext("2d", { willReadFrequently: true })!;

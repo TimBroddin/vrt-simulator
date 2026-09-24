@@ -21,6 +21,13 @@ const PA_LINES = [
   "Het gebouw sluit om negentien uur.",
   "Er is niemand meer in het gebouw.",
   "Studio één, de uitzending is afgelopen. Dank u wel.",
+  "De opnames van Thuis beginnen in studio vijf. Stilte op de set.",
+  "Sporza, de Ronde start over tien minuten.",
+  "Ketnet, iedereen naar de groene studio.",
+  "De decorploeg van De Kampioenen wordt verwacht in studio vier.",
+  "Wie heeft de worst van Boma gezien?",
+  "Studio Brussel zoekt nog stemmen voor De Tijdloze.",
+  "Radio twee, jingle na het nieuws.",
 ];
 
 export class Sound {

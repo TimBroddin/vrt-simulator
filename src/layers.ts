@@ -58,10 +58,23 @@ export const L = {
   SLATWIN: 53,
   DARTBOARD: 54,
   CHALK: 55,
+  POSTERS4: 56,
+  POSTERS5: 57,
+  RADIOWALL: 58, // 2 x 4 station panels, 2:1 each
+  KETNETWALL: 59,
+  SPORZAWALL: 60,
+  IDENTS: 61, // 2 x 2 channel idents, 16:9 each
+  KAMPWALL: 62, // Hec Leemans' Kampioenen mural
+  SETSIGNS: 63, // 2 x 2 signs for the TV sets
+  PLYWOOD: 64,
+  WALLPAPER: 65,
+  MISC: 66, // 2 x 2: Kampioenen shirt, scarf, koersboekje, Boma label
+  BANNERS: 67, // 4 hall banners, 4:1 each
+  POSTERS6: 68,
 } as const;
 
 // artworks and their museum labels (8 labels per layer) follow the painted layers
-export const ART0 = 56;
+export const ART0 = 69;
 export const LABEL0 = ART0 + ART.length;
 export const LAYER_COUNT = LABEL0 + Math.ceil(ART.length / 8);
 
@@ -91,3 +104,5 @@ SCALE[L.WHITE] = 1.0;
 SCALE[L.GRAVEL] = 2.0;
 SCALE[L.TAPES] = 1.2;
 SCALE[L.LEDS] = 0.6;
+SCALE[L.PLYWOOD] = 2.4;
+SCALE[L.WALLPAPER] = 1.2;
