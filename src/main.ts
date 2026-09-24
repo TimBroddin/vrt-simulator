@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import { CELL, CH, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, floorName } from "./config";
-import { K, RT, SK, cellLabel, getPlan, getStructure, sideAt, stairFrame } from "./layout";
+import { CELL, CH, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, floorName, isRtbf } from "./config";
+import { K, RT, SK, anomalyAt, cellLabel, getPlan, getStructure, sideAt, stairFrame } from "./layout";
 import { getFurnished } from "./furnish";
 import { hash, setSeed } from "./rng";
 import { makeTextureArray } from "./textures";
@@ -13,6 +13,10 @@ import { makePost } from "./post";
 import { ART_URLS } from "./artImages";
 import { isTouch, setupTouch } from "./touch";
 import { takePhoto } from "./photo";
+import { Minimap } from "./minimap";
+import { ClockFace } from "./clockface";
+import { GhostRadio } from "./radio";
+import { track, trackOnce } from "./analytics";
 import { Quests } from "./quests";
 
 const params = new URLSearchParams(location.search);
@@ -47,6 +51,8 @@ const artImgs = await Promise.all(ART_URLS.map(loadImg));
 const atlas = makeTextureArray(renderer, artImgs, touch ? 256 : 512);
 const mat = makeWorldMaterial(atlas);
 const glassMat = makeGlassMaterial(mat);
+const clockFace = new ClockFace();
+mat.uniforms.clockTex!.value = clockFace.tex;
 const workerUrl = (document.querySelector('meta[name="worker"]') as HTMLMetaElement | null)?.content || "/worker.js";
 const world = new World(workerUrl, seed, mat, glassMat, touch ? 1 : 2);
 scene.add(world.root);
@@ -99,6 +105,7 @@ function surfaceAt(f: number, gx: number, gz: number): { s: Surface; wet: number
       if (p.zone[i] === 1 || p.zone[i] === 2) return { s: "wood", wet: 0.55 };
       return p.style === 0 ? { s: "tile", wet: 0.5 } : { s: "carpet", wet: 0.28 };
     case K.ROOM: {
+      if (anomalyAt(f, gx, gz) === "flooded") return { s: "wet", wet: 0.7 };
       const t = p.rooms[p.room[i]!]!.type;
       if (t === RT.BATH || t === RT.SERVER || t === RT.CANTEEN) return { s: "tile", wet: 0.35 };
       if (t === RT.STORAGE || t === RT.ARCHIVE) return { s: "concrete", wet: 0.3 };
@@ -114,6 +121,8 @@ function surfaceAt(f: number, gx: number, gz: number): { s: Surface; wet: number
 }
 
 const quests = new Quests(world, player, sound, startFloor);
+const radio = new GhostRadio(sound);
+const minimap = new Minimap();
 scene.add(quests.root);
 quests.onFinish = (secs) => {
   $("endtime").textContent = `${Math.floor(secs / 60)} min ${String(Math.floor(secs % 60)).padStart(2, "0")} s`;
@@ -132,31 +141,63 @@ let started = false;
 let interact = false;
 let lampTarget = 0;
 let photoRequested = false;
+let playSecs = 0;
+let walked = 0;
+let lastDigit = -1;
+let lastDigitT = 0;
 let hudOn = true;
 let zoom = 0;
 const canvas = renderer.domElement;
 document.addEventListener("keydown", (e) => {
   player.keys.add(e.code);
   if (!locked) return;
+  if (lifts.panelOpen) {
+    // choosing a floor: the lift panel takes the keys
+    const k = e.code;
+    if (k === "ArrowUp" || k === "KeyW") lifts.panelInput("up");
+    else if (k === "ArrowDown" || k === "KeyS") lifts.panelInput("down");
+    else if (k === "KeyE" || k === "Enter" || k === "NumpadEnter") lifts.panelInput("go");
+    else if (k === "Backspace") lifts.panelInput("close");
+    else if (k === "Minus" || k === "NumpadSubtract") lifts.panelInput(-1);
+    else if (/^(Digit|Numpad)\d$/.test(k)) {
+      const d = Number(k.slice(-1));
+      // "1" then "0"/"1" quickly = 10/11
+      const now = performance.now();
+      if (lastDigit === 1 && now - lastDigitT < 900 && d <= 1) lifts.panelInput(10 + d);
+      else lifts.panelInput(d);
+      lastDigit = d;
+      lastDigitT = now;
+    }
+    player.keys.clear();
+    return;
+  }
   if (e.code === "KeyE") interact = true;
   if (e.code === "Tab") {
     e.preventDefault();
     quests.cycle();
   }
   if (e.code === "KeyF") lampTarget = lampTarget ? 0 : 1;
-  if (e.code === "KeyM") sound.setMuted(!sound.muted);
+  if (e.code === "KeyN") sound.setMuted(!sound.muted);
+  if (e.code === "KeyM") {
+    minimap.toggle();
+    if (minimap.visible) track("minimap_opened", { device: "desktop" });
+  }
   if (e.code === "KeyP") photoRequested = true;
   if (e.code === "KeyH") {
     hudOn = !hudOn;
     $("hud").style.display = hudOn ? "" : "none";
   }
 });
-document.addEventListener("keyup", (e) => player.keys.delete(e.code));
+document.addEventListener("keyup", (e) => {
+  player.keys.delete(e.code);
+  if (locked && lifts.panelOpen) e.preventDefault();
+});
 window.addEventListener("blur", () => player.keys.clear());
 document.addEventListener("mousemove", (e) => {
   if (locked) player.look(e.movementX, e.movementY);
 });
 document.addEventListener("wheel", (e) => {
+  if (locked && lifts.panelOpen) return lifts.panelInput(e.deltaY < 0 ? "up" : "down");
   if (locked) zoom = Math.max(0, Math.min(1, zoom + e.deltaY * -0.001));
 });
 document.addEventListener("pointerlockchange", () => {
@@ -174,6 +215,10 @@ const touchUi = touch
       quest: () => quests.cycle(),
       lamp: () => (lampTarget = lampTarget ? 0 : 1),
       photo: () => (photoRequested = true),
+      map: () => {
+        minimap.toggle();
+        if (minimap.visible) track("minimap_opened", { device: "touch" });
+      },
       pause: () => {
         playing = false;
         touchUi?.reset();
@@ -184,13 +229,15 @@ const touchUi = touch
   : null;
 $("overlay").addEventListener("click", () => {
   if (!ready) return;
-  started = true;
+  if (!started) track("game_start", { seed, floor: startFloor, device: touch ? "touch" : "desktop" });
   sound.start();
+  radio.unlock();
   quests.start();
   if (touch) {
     playing = true;
     $("overlay").classList.add("hidden");
   } else canvas.requestPointerLock?.();
+  started = true;
 });
 $("seed").textContent = String(seed);
 ($("seedlink") as HTMLAnchorElement).href = `?seed=${seed}`;
@@ -243,8 +290,20 @@ function updateEnv(dt: number) {
   const surf = surfaceAt(f, gx, gz);
   sound.setEnv({ roof: onRoof, garage: f === FLOOR_MIN, light: Math.min(1, lum / 2.5), wet: surf.wet });
   const label = cellLabel(f, gx, gz);
+  const fr = isRtbf(Math.floor(gz / CH));
+  if (started) {
+    trackOnce(`floor${f}`, "floor_visited", { floor: f });
+    const area = onRoof ? "roof" : f === FLOOR_MIN ? "parking" : /PLANTENTUIN|JARDIN/.test(label) ? "plantentuin" : label === "MIDDENGANG" ? "middengang"
+      : label === "ATRIUM" ? "atrium" : /^STUDIO/.test(label) ? "studio" : /REGIE|RÉGIE/.test(label) ? "regie" : /ARCHIEF|ARCHIVES/.test(label) ? "archive"
+      : /KANTINE|CANTINE/.test(label) ? "canteen" : "";
+    if (area) trackOnce(`area:${area}`, "area_discovered", { area });
+    if (fr) trackOnce("area:rtbf", "area_discovered", { area: "rtbf" });
+  }
   $("loc").textContent = label;
-  $("floor").textContent = floorName(f);
+  $("floor").textContent = floorName(f, fr);
+  $("addr").textContent = fr ? "BD A. REYERS 52" : "REYERSLAAN 52";
+  $("logo").textContent = fr ? "rtbf" : "vrt";
+  $("logo").classList.toggle("rtbf", fr);
 }
 
 // --- HUD
@@ -287,12 +346,19 @@ function frame() {
 
   if (ready) {
     const active = locked || playing || api.auto;
-    player.update(dt, world, active && !lifts.ride?.phase.startsWith("clos"));
+    player.update(dt, world, active && !lifts.ride?.phase.startsWith("clos") && !lifts.panelOpen);
     const used = quests.update(dt, interact && active);
     lifts.update(t, dt, interact && !used);
   }
   interact = false;
   sound.update(dt);
+  if (started && (locked || playing)) {
+    playSecs += dt;
+    walked += Math.min(player.speed * dt, 1);
+    for (const m of [5, 15, 30, 60])
+      if (playSecs >= m * 60) trackOnce(`play${m}`, "playtime", { minutes: m, meters: Math.round(walked), quests_done: quests.quests.filter((q) => q.done).length });
+  }
+  radio.update(dt, sound.env.roof);
   if (ready) updateEnv(dt);
 
   if (flickNear > 0 && t - lastFlickBuzz > 0.12 && Math.random() < flickNear * 0.25) {
@@ -309,6 +375,7 @@ function frame() {
   camera.getWorldDirection(fwd);
   const u = mat.uniforms;
   u.time!.value = t;
+  clockFace.update();
   u.lampOn!.value += (lampTarget - u.lampOn!.value) * Math.min(1, dt * 10);
   u.lampPos!.value.copy(camera.position).addScaledVector(fwd, -0.1);
   u.lampPos!.value.y -= 0.15;
@@ -316,6 +383,7 @@ function frame() {
   sky.position.copy(camera.position);
   tower.position.set(camera.position.x + 430, -30, camera.position.z - 330);
 
+  if (ready) minimap.draw(player.floor, player.pos.x, player.pos.z, player.yaw, quests.activeTarget());
   post.cam.uniforms.time!.value = t;
   post.cam.uniforms.glitch!.value = lifts.ride?.phase === "moving" ? 0.15 + Math.random() * 0.1 : Math.random() < 0.002 ? 0.6 : 0;
   post.composer.render(dt);
@@ -323,7 +391,8 @@ function frame() {
     // read the canvas right after rendering, before the browser clears it
     photoRequested = false;
     const gx = Math.floor(player.pos.x / CELL), gz = Math.floor(player.pos.z / CELL);
-    takePhoto(renderer.domElement, { hud: hudOn, tc: timecode(recT), floor: floorName(player.floor), loc: cellLabel(player.floor, gx, gz) });
+    track("photo_taken", { floor: player.floor, location: cellLabel(player.floor, gx, gz) });
+    takePhoto(renderer.domElement, { hud: hudOn, tc: timecode(recT), floor: floorName(player.floor, isRtbf(Math.floor(gz / CH))), loc: cellLabel(player.floor, gx, gz) });
     sound.shutter();
     const fl = $("flash");
     fl.classList.remove("go");
@@ -355,7 +424,7 @@ function frame() {
 }
 
 // expose for automation / debugging
-const api = { player, world, camera, lifts, sound, quests, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished };
+const api = { player, world, camera, lifts, sound, quests, minimap, radio, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished };
 (window as any).__vrt = api;
 if (debug) $("debug").style.display = "block";
 frame();

@@ -5,13 +5,14 @@ import { IcosahedronGeometry } from "three";
 import { CELL, CH, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, floorName } from "./config";
 import { Builder, Frame, LightCtx, fbox, type RGB, type Spec } from "./builder";
 import { getFurnished } from "./furnish";
-import { K, ROOM_LABEL, RT, cellLabel, getPlan, idx, type Plan, type Room } from "./layout";
+import { K, ROOM_LABEL, RT, cellLabel, getPlan, idx, roomAnomaly, type Plan, type Room } from "./layout";
 import { L } from "./layers";
 import { chair } from "./props";
 import { Rng, getSeed, hash } from "./rng";
 import type { Sound } from "./audio";
 import type { Player } from "./player";
 import type { World } from "./world";
+import { track } from "./analytics";
 
 type QId = string;
 
@@ -434,7 +435,7 @@ export class Quests {
     const rng = new Rng(hash(913, 1));
     const floors = floorsNear(this.startFloor);
     const noChair = (p: Plan, r: Room) => {
-      if (r.x1 - r.x0 < 1 || r.z1 - r.z0 < 1) return false;
+      if (r.x1 - r.x0 < 1 || r.z1 - r.z0 < 1 || roomAnomaly(p, r)) return false;
       const fur = getFurnished(p.f, p.cx, p.cz);
       return !fur.props.some((pr) => pr.t === "chair" && p.room[idx(pr.gx - p.cx * CH, pr.gz - p.cz * CH)] === r.id);
     };
@@ -581,6 +582,9 @@ export class Quests {
     localStorage.setItem(this.store, JSON.stringify(this.quests.filter((x) => x.done).map((x) => x.id)));
     this.sound.success();
     this.toast("QUEST GEHAALD", q.doneText, "ok");
+    const done = this.quests.filter((x) => x.done).length;
+    track("quest_completed", { quest: id, seconds: Math.round(this.t - this.startedAt), completed: done });
+    if (done === this.quests.length) track("all_quests_completed", { seconds: Math.round(this.t - this.startedAt) });
     if (this.active === id) this.active = null;
     this.pickNext();
     if (this.quests.every((x) => x.done) && !this.finished) {
@@ -594,6 +598,11 @@ export class Quests {
     this.active = this.quests.find((q) => q.launched && !q.done)?.id ?? null;
   }
 
+  activeTarget() {
+    const q = this.active ? this.questOf(this.active) : null;
+    return q?.target() ?? null;
+  }
+
   cycle() {
     const open = this.quests.filter((q) => q.launched && !q.done);
     if (!open.length) return;
@@ -604,6 +613,8 @@ export class Quests {
   }
 
   private wrong(label: string) {
+    const owner = this.quests.find((q) => q.item === label)?.id ?? "?";
+    track("quest_wrong_item", { active: this.active ?? "none", item_of: owner });
     this.sound.wrong();
     this.toast("TELT NIET", `Dit hoort bij een andere quest (${label}).`, "bad");
   }

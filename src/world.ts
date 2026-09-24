@@ -119,6 +119,12 @@ export class World {
       e.ready = true;
       if (m.built) {
         e.mesh = new THREE.Mesh(this.geometry(m.built), this.mat);
+        const gg = this.glassGeometry(m.built);
+        if (gg) {
+          const gm = new THREE.Mesh(gg, this.glassMat);
+          gm.renderOrder = 2;
+          e.mesh.add(gm);
+        }
         this.root.add(e.mesh);
       }
     }
@@ -168,7 +174,8 @@ export class World {
     for (let dz = -R; dz <= R; dz++)
       for (let dx = -R; dx <= R; dx++) {
         const cx = pcx + dx, cz = pcz + dz;
-        if (getStructure(cx, cz).court) wantExt.set(`${cx},${cz}`, { key: `${cx},${cz}`, kind: "ext", f: 0, cx, cz, pri: Math.max(Math.abs(dx), Math.abs(dz)) + 0.5 });
+        const st = getStructure(cx, cz);
+        if (st.court || st.mid) wantExt.set(`${cx},${cz}`, { key: `${cx},${cz}`, kind: "ext", f: 0, cx, cz, pri: Math.max(Math.abs(dx), Math.abs(dz)) + 0.5 });
       }
 
     // unload what is well outside the wanted set
@@ -185,7 +192,7 @@ export class World {
         if (Math.max(Math.abs(cx! - pcx), Math.abs(cz! - pcz)) > 3) {
           if (e.mesh) {
             this.root.remove(e.mesh);
-            e.mesh.geometry.dispose();
+            e.mesh.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
           }
           this.exts.delete(k);
         }

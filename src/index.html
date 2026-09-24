@@ -14,10 +14,17 @@
     <div id="hud">
       <i class="br tl"></i><i class="br tr"></i><i class="br bl"></i><i class="br br2"></i>
       <div id="top-left"><span id="rec">●</span> REC <span id="tc">00:00:00:00</span></div>
-      <div id="top-right"><span class="drop">vrt</span> REYERSLAAN 52</div>
+      <div id="top-right"><span class="drop" id="logo">vrt</span> <span id="addr">REYERSLAAN 52</span></div>
+      <canvas id="minimap" width="200" height="200" style="display:none"></canvas>
       <div id="bottom-left"><div id="floor"></div><div id="loc"></div></div>
       <div id="bottom-right"><span id="zoom"></span><span id="lamp">LAMP</span><span class="bat"><b></b><b></b><b></b><b class="low"></b></span></div>
       <div id="prompt"></div>
+      <div id="liftpanel" style="display:none">
+        <div class="lp-title">KIES VERDIEPING</div>
+        <div class="lp-buttons"></div>
+        <div class="lp-help desk">↑↓ / cijfer kiezen · <b>E</b> rijden · <b>⌫</b> sluiten</div>
+        <div class="lp-help mob">tik een verdieping</div>
+      </div>
       <div id="liftdisp" style="display:none"><div class="lbl">LIFT</div><div id="liftnum"></div></div>
       <div id="cross"></div>
       <div id="quest" style="display:none"></div>
@@ -28,6 +35,7 @@
       <div id="stick"><div id="knob"></div></div>
       <div id="t-pause" class="tbtn small">❚❚</div>
       <div id="t-photo" class="tbtn small foto">FOTO</div>
+      <div id="t-map" class="tbtn small kaart">KAART</div>
       <div class="tbtns">
         <div id="t-lamp" class="tbtn">LAMP</div>
         <div id="t-quest" class="tbtn">QUEST</div>
@@ -51,6 +59,7 @@
           <span>rechterduim kijken</span>
           <span><kbd>E</kbd> gebruiken</span>
           <span><kbd>QUEST</kbd> wisselen</span>
+          <span><kbd>KAART</kbd> plattegrond</span>
           <span class="rot">liggend spelen werkt het best</span>
         </div>
         <div class="keys desk">
@@ -60,7 +69,8 @@
           <span><kbd>TAB</kbd> quest</span>
           <span><kbd>F</kbd> lamp</span>
           <span><kbd>SCROLL</kbd> zoom</span>
-          <span><kbd>M</kbd> geluid</span>
+          <span><kbd>M</kbd> kaart</span>
+          <span><kbd>N</kbd> geluid</span>
           <span><kbd>H</kbd> beeld</span>
           <span><kbd>P</kbd> foto</span>
         </div>

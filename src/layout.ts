@@ -1,7 +1,7 @@
 // Floor-plan generation. Phase 1 ("plan") decides what every cell is: corridor,
 // room, stairwell, elevator, atrium void, courtyard... It never looks at other
 // chunks, so neighbours can be queried freely without recursion.
-import { CELL, CH, DX, DZ, FLOOR_MAX, FLOOR_MIN } from "./config";
+import { CELL, CH, DX, DZ, FLOOR_MAX, FLOOR_MIN, MID_CZ } from "./config";
 import { Rng, floorDiv, hash, mod } from "./rng";
 
 export const K = {
@@ -90,6 +90,7 @@ export interface Structure {
   atrium: null | { x0: number; z0: number; x1: number; z1: number; f0: number; f1: number; kind: "lobby" | "garden" };
   court: null | { x0: number; z0: number; x1: number; z1: number };
   style: number;
+  mid?: boolean; // de middengang
 }
 
 export interface Plan {
@@ -131,7 +132,7 @@ export function getStructure(cx: number, cz: number): Structure {
   const key = cx + "," + cz;
   let s = structCache.get(key);
   if (s) return s;
-  s = makeStructure(cx, cz);
+  s = cz === MID_CZ ? makeMidStructure(cx) : cz < MID_CZ ? mirrorStructure(makeStructure(cx, 2 * MID_CZ - cz), cz) : makeStructure(cx, cz);
   if (structCache.size > 4000) structCache.clear();
   structCache.set(key, s);
   return s;
@@ -206,11 +207,12 @@ function makeStructure(cx: number, cz: number): Structure {
 
   // Atrium: a multi-storey void with galleries around it.
   let atrium: Structure["atrium"] = null;
-  if (rng.chance(0.22)) {
+  if (rng.chance(0.4)) {
     // a lobby (square, red bench and tree) or a plantentuin (long, planters, glass roof, floating stair)
-    const garden = rng.chance(0.55);
-    for (let t = 0; t < 40 && !atrium; t++) {
-      const long = rng.int(4, 6);
+    const garden = rng.chance(0.68);
+    for (let t = 0; t < 70 && !atrium; t++) {
+      // try long ones first, fall back to shorter strips so they nearly always fit
+      const long = garden ? [6, 6, 5, 5, 4][Math.min(4, Math.floor(t / 14))]! : 0;
       const alongX = rng.chance(0.5);
       const w = garden ? (alongX ? long : 2) : rng.int(2, 3), d = garden ? (alongX ? 2 : long) : rng.int(2, 3);
       const x0 = rng.int(2, CH - 2 - w), z0 = rng.int(2, CH - 2 - d);
@@ -225,8 +227,8 @@ function makeStructure(cx: number, cz: number): Structure {
           if (!isVoid && corr[idx(x, z)]) touches = true;
         }
       if (ok && touches) {
-        const f0 = garden ? rng.int(0, 3) : rng.int(0, 4);
-        const f1 = Math.min(FLOOR_MAX - 1, f0 + rng.int(2, garden ? 5 : 6));
+        const f0 = garden ? rng.int(0, 7) : rng.int(0, 4);
+        const f1 = Math.min(FLOOR_MAX - 1, f0 + rng.int(garden ? 3 : 2, 6));
         atrium = { x0, z0, x1, z1, f0, f1, kind: garden ? "garden" : "lobby" };
         for (let z = z0 - 1; z <= z1 + 1; z++)
           for (let x = x0 - 1; x <= x1 + 1; x++) if (!corr[idx(x, z)]) reserved[idx(x, z)] = 1;
@@ -255,11 +257,13 @@ function makeStructure(cx: number, cz: number): Structure {
 
 // Corridor edges can be walled off on a given floor (dead ends).
 export function edgeClosedX(f: number, cxEdge: number, cz: number) {
-  if (f <= FLOOR_MIN || f >= FLOOR_MAX) return false;
+  if (f <= FLOOR_MIN || f >= FLOOR_MAX || cz === MID_CZ) return false;
+  if (cz < MID_CZ) cz = 2 * MID_CZ - cz;
   return hash(41, f, cxEdge, cz) % 100 < 8;
 }
 export function edgeClosedZ(f: number, cx: number, czEdge: number) {
-  if (f <= FLOOR_MIN || f >= FLOOR_MAX) return false;
+  if (f <= FLOOR_MIN || f >= FLOOR_MAX || czEdge === MID_CZ || czEdge === MID_CZ + 1) return false;
+  if (czEdge < MID_CZ) czEdge = 2 * MID_CZ - czEdge + 1;
   return hash(42, f, cx, czEdge) % 100 < 8;
 }
 
@@ -294,6 +298,7 @@ function setDoor(p: Plan, a: number, d: number, door: Door, sk: number = SK.DOOR
 }
 
 function makePlan(f: number, cx: number, cz: number): Plan {
+  if (cz < MID_CZ) return mirrorPlan(getPlan(f, cx, 2 * MID_CZ - cz), cz);
   const st = getStructure(cx, cz);
   const p: Plan = {
     f,
@@ -313,6 +318,11 @@ function makePlan(f: number, cx: number, cz: number): Plan {
   p.dark = rng.chance(Math.min(0.35, 0.1 + dist * 0.01));
 
   if (f === FLOOR_MIN) return planGarage(p);
+  if (st.mid) {
+    // glass corridor + links on every floor, open air everywhere else
+    for (let i = 0; i < CH * CH; i++) p.kind[i] = st.corr[i] ? (f === FLOOR_MAX ? K.ROOF : K.CORR) : K.COURT;
+    return p;
+  }
   if (f === FLOOR_MAX) return planRoof(p);
 
   const { kind, zone } = p;
@@ -578,9 +588,28 @@ export function lightPass(f: number, gx: number, gz: number, d: number): boolean
 }
 
 // Human readable label for a cell (HUD).
+const ROOM_LABEL_FR = ["BUREAU", "SALLE DE RÉUNION", "SANITAIRES", "RÉSERVE", "SALLE DES SERVEURS", "STUDIO", "CANTINE", "ARCHIVES", "RÉGIE", "LOCAL VIDE", "MONTAGE"];
+
 export function cellLabel(f: number, gx: number, gz: number): string {
   const { p, i } = planAt(f, gx, gz);
   const k = p.kind[i];
+  if (p.st.mid && (k === K.CORR || k === K.ROOF)) return "MIDDENGANG";
+  if (p.cz < MID_CZ) {
+    switch (k) {
+      case K.CORR:
+        if (p.zone[i] === 1 || p.zone[i] === 2) return p.st.atrium?.kind === "garden" ? "JARDIN INTÉRIEUR" : "ATRIUM";
+        return "COULOIR " + "ABCDEFGH"[mod(hash(61, p.cx, p.cz), 8)] + (1 + mod(hash(62, p.cx, p.cz), 9));
+      case K.ROOM: {
+        const r = p.rooms[p.room[i]!]!;
+        return r.type === RT.STUDIO ? "STUDIO " + r.num : ROOM_LABEL_FR[r.type]!;
+      }
+      case K.STAIR: return "ESCALIER";
+      case K.ELEV: return "ASCENSEUR";
+      case K.GARAGE: return "PARKING";
+      case K.ROOF: return "TOIT";
+    }
+    return "";
+  }
   switch (k) {
     case K.CORR:
       if (p.zone[i] === 1 || p.zone[i] === 2) return p.st.atrium?.kind === "garden" ? "PLANTENTUIN" : "ATRIUM";
@@ -644,4 +673,96 @@ export function gardenRampY(g: GardenStair, x: number, z: number, H: number): nu
   const s = g.alongX ? x : z, lat = g.alongX ? z : x;
   if (Math.abs(lat - g.pc) > g.half || s < g.sb || s > g.b) return null;
   return g.f0 * H + (H * (s - g.sb)) / g.run;
+}
+
+// ---------------------------------------------------------------------------
+// De middengang and the RTBF twin
+
+function makeMidStructure(cx: number): Structure {
+  const corr = new Uint8Array(CH * CH);
+  // the long glass corridor
+  for (let x = 0; x < CH; x++) corr[idx(x, 5)] = corr[idx(x, 6)] = 1;
+  // a glass link to both buildings, lined up with the VRT chunk's north portal
+  // (the RTBF chunk is its mirror image, so its south portal sits at the same x)
+  const N = colInfo(cx, zGroup(cx, MID_CZ));
+  for (let z = 0; z < CH; z++) for (let k = 0; k < N.w; k++) corr[idx(N.x + k, z)] = 1;
+  return { cx, cz: MID_CZ, corr, stair: null, elevs: [], atrium: null, court: null, style: 1, mid: true };
+}
+
+const mi = (i: number) => idx(i % CH, CH - 1 - ((i / CH) | 0));
+const md = (d: number) => (d === 1 ? 3 : d === 3 ? 1 : d);
+
+function mirrorStructure(src: Structure, cz: number): Structure {
+  const corr = new Uint8Array(CH * CH);
+  for (let i = 0; i < CH * CH; i++) corr[mi(i)] = src.corr[i]!;
+  const a = src.atrium;
+  const c = src.court;
+  return {
+    cx: src.cx,
+    cz,
+    corr,
+    stair: src.stair ? { c: mi(src.stair.c), a: mi(src.stair.a), b: mi(src.stair.b), d: md(src.stair.d) } : null,
+    elevs: src.elevs.map((e) => ({ c: mi(e.c), e: mi(e.e), d: md(e.d) })),
+    atrium: a ? { ...a, z0: CH - 1 - a.z1, z1: CH - 1 - a.z0 } : null,
+    court: c ? { ...c, z0: CH - 1 - c.z1, z1: CH - 1 - c.z0 } : null,
+    style: src.style,
+  };
+}
+
+function mirrorPlan(src: Plan, cz: number): Plan {
+  const p: Plan = {
+    f: src.f,
+    cx: src.cx,
+    cz,
+    st: getStructure(src.cx, cz),
+    kind: new Uint8Array(CH * CH),
+    room: new Int16Array(CH * CH).fill(-1),
+    zone: new Uint8Array(CH * CH),
+    rooms: src.rooms.map((r) => ({ ...r, z0: CH - 1 - r.z1, z1: CH - 1 - r.z0, cells: r.cells.map(mi) })),
+    sides: new Map(),
+    style: src.style,
+    dark: src.dark,
+  };
+  for (let i = 0; i < CH * CH; i++) {
+    const j = mi(i);
+    p.kind[j] = src.kind[i]!;
+    p.room[j] = src.room[i]!;
+    p.zone[j] = src.zone[i]!;
+  }
+  const doors = new Map<Door, Door>();
+  for (const [key, side] of src.sides) {
+    const i = Math.floor(key / 4), d = key % 4;
+    let door = side.door;
+    if (door) {
+      if (!doors.has(door)) doors.set(door, { ...door, owner: mi(door.owner) });
+      door = doors.get(door);
+    }
+    p.sides.set(mi(i) * 4 + md(d), { sk: side.sk, door });
+  }
+  return p;
+}
+
+// ---------------------------------------------------------------------------
+// Architectural anomalies. Rare, deterministic, and more common the further you
+// wander from the start.
+export type Anomaly = "" | "low" | "chairs" | "stairs" | "flooded" | "upside";
+
+export function roomAnomaly(p: Plan, r: Room): Anomaly {
+  if (p.f <= FLOOR_MIN || p.f >= FLOOR_MAX) return "";
+  const h = hash(501, p.f, p.cx, p.cz, r.id) % 1000;
+  const k = 1 + Math.min(2, Math.hypot(p.cx, p.cz) * 0.08);
+  const w = r.x1 - r.x0 + 1, d = r.z1 - r.z0 + 1;
+  if (r.type === RT.EMPTY) {
+    if ((w === 1 || d === 1) && Math.max(w, d) >= 3 && h < 500) return "low";
+    if (h < 260 * k) return (["chairs", "stairs", "flooded"] as const)[h % 3]!;
+  }
+  if (r.type === RT.STORAGE && h < 130 * k) return "flooded";
+  if (r.type === RT.OFFICE && h < 45 * k) return "upside";
+  return "";
+}
+
+export function anomalyAt(f: number, gx: number, gz: number): Anomaly {
+  const { p, i } = planAt(f, gx, gz);
+  if (p.kind[i] !== K.ROOM) return "";
+  return roomAnomaly(p, p.rooms[p.room[i]!]!);
 }

@@ -64,6 +64,8 @@ function monitor(b: Builder, fr: Frame, lx: number, ly: number, lz: number, on: 
   fbox(b, fr, lx, ly + 0.14, lz, 0.56, 0.34, 0.03, { all: DARK, pz: on ? { layer, emit: [0.32, 0.42, 0.58] } : { layer: L.SCREEN } });
 }
 
+const LED: Spec = { layer: L.DIGITAL, emit: [1.5, 1.5, 1.5], uv: [0, 0, 1, 1] };
+
 const TV_LAYERS = [L.TV_BARS, L.TV_GEDULD, L.NOISE, L.SCREEN];
 
 export function buildProp(b: Builder, pr: Prop) {
@@ -110,8 +112,8 @@ export function buildProp(b: Builder, pr: Prop) {
       fbox(b, fr, 0, -0.04, 0.06, 1.5, 0.03, 0.08, GREY);
       break;
     case "clock":
-      cyl(b, new Frame(...fr.p(0, 0, 0.03), fr.rot), 0, -0.19, 0, 0.19, 0.05, DARK);
-      b.quad(fr.p(-0.18, -0.18, 0.056), [fr.c * 0.36, 0, -fr.s * 0.36], [0, 0.36, 0], fr.az, { layer: L.CLOCK, uv: [0, 0, 1, 1] }, 0);
+      // wall-mounted LED clock
+      fbox(b, fr, 0, -0.08, 0.05, 0.44, 0.16, 0.1, { all: DARK, pz: LED });
       break;
     case "extinguisher": {
       cyl(b, fr, 0, 0.12, 0.16, 0.09, 0.55, sp(L.WHITE, [0.8, 0.05, 0.04]));
@@ -125,7 +127,7 @@ export function buildProp(b: Builder, pr: Prop) {
       fbox(b, fr, 0, 1.25, 0.265, 0.3, 0.06, 0.01, sp(L.WHITE, [0.95, 0.95, 0.9]));
       break;
     case "poster": {
-      const layer = pr.a < 4 ? L.POSTERS1 : L.POSTERS2;
+      const layer = pr.a < 4 ? L.POSTERS1 : pr.a < 8 ? L.POSTERS2 : L.POSTERS3;
       const q = pr.a % 4;
       const u0 = (q % 2) * 0.5, v0 = q < 2 ? 0.5 : 0;
       fbox(b, fr, 0, -0.45, 0.01, 0.64, 0.9, 0.01, { all: WHITE, pz: { layer, uv: [u0, v0, u0 + 0.5, v0 + 0.5] } });
@@ -167,7 +169,7 @@ export function buildProp(b: Builder, pr: Prop) {
     case "sign": {
       const q = pr.a;
       const u0 = (q % 2) * 0.5, v0 = 0.75 - Math.floor(q / 2) * 0.25;
-      fbox(b, fr, 0, 0, 0.01, 0.34, 0.17, 0.012, { all: GREY, pz: { layer: L.SIGNS, uv: [u0, v0, u0 + 0.5, v0 + 0.25] } });
+      fbox(b, fr, 0, 0, 0.01, 0.34, 0.17, 0.012, { all: GREY, pz: { layer: pr.b ? L.SIGNS_FR : L.SIGNS, uv: [u0, v0, u0 + 0.5, v0 + 0.25] } });
       break;
     }
     case "frosted":
@@ -472,6 +474,105 @@ export function buildProp(b: Builder, pr: Prop) {
         fbox(b, fr, x, 1.1, 0.03, 0.62, 1.05, 0.06, { all: DARK, pz: { layer: x < 0 ? L.NWSWALL : L.TV_GEDULD, emit: [0.95, 0.95, 1.0], uv: x < 0 ? [0.1, 0, 0.7, 1] : [0.3, 0, 0.7, 1] } });
       }
       fbox(b, fr, 0, 0, 0, 1.3, 0.05, 0.5, DARK, true);
+      break;
+    }
+    case "hangclock": {
+      // double-sided red LED clock, hung just under the ceiling
+      for (const x of [-0.15, 0.15]) fbox(b, fr, x, -0.2, 0, 0.012, 0.2, 0.012, DARK);
+      fbox(b, fr, 0, -0.37, 0, 0.44, 0.17, 0.1, { all: DARK, pz: LED, nz: LED });
+      break;
+    }
+    case "hangsign": {
+      for (const x of [-0.7, 0.7]) fbox(b, fr, x, -0.45, 0, 0.015, 0.45, 0.015, DARK);
+      const v0 = pr.a ? 0.5 : 0;
+      fbox(b, fr, 0, -0.75, 0, 1.9, 0.32, 0.04, { all: WHITE, pz: { layer: L.MIDSIGN, uv: [0, v0, 1, v0 + 0.5] }, nz: { layer: L.MIDSIGN, uv: [0, 0.5 - v0, 1, 1 - v0] } });
+      break;
+    }
+    case "speaker":
+      fbox(b, fr, 0, -0.1, 0, 0.04, 0.12, 0.2, DARK);
+      fbox(b, fr, 0, -0.5, 0.08, 0.26, 0.42, 0.22, { all: DARK, pz: sp(L.CARPET_GREY, [0.15, 0.15, 0.16]) });
+      break;
+    case "fakedoor": {
+      // a proper door, held open... onto brick
+      const trim = sp(L.WHITE, [0.55, 0.52, 0.48]);
+      fbox(b, fr, 0, 0, 0.004, 1.0, 2.1, 0.004, sp(L.BRICK, [0.62, 0.6, 0.56]));
+      fbox(b, fr, -0.53, 0, 0.015, 0.06, 2.16, 0.03, trim);
+      fbox(b, fr, 0.53, 0, 0.015, 0.06, 2.16, 0.03, trim);
+      fbox(b, fr, 0, 2.1, 0.015, 1.12, 0.06, 0.03, trim);
+      const a = (100 * Math.PI) / 180, dx = -Math.cos(a), dz = Math.sin(a);
+      const leaf = new Frame(...fr.p(0.5 + dx * 0.5, 0, 0.05 + dz * 0.5), fr.rot + Math.atan2(-dz, dx));
+      const door: Spec = { layer: L.DOOR_WOOD, uv: [0, 0, 1, 1] };
+      fbox(b, leaf, 0, 0, 0, 1.0, 2.08, 0.04, { all: DARK, pz: door, nz: door });
+      fbox(b, leaf, -0.38, 1.0, 0.05, 0.12, 0.035, 0.035, STEEL);
+      break;
+    }
+    case "tinydoor": {
+      const x = pr.a ? 0.7 : -0.6;
+      const door: Spec = { layer: L.DOOR_WOOD, uv: [0, 0, 1, 1] };
+      fbox(b, fr, x, 0, 0.012, 0.52, 1.02, 0.025, sp(L.WHITE, [0.5, 0.48, 0.44]));
+      fbox(b, fr, x, 0, 0.03, 0.44, 0.96, 0.02, { all: DARK, pz: door });
+      fbox(b, fr, x + 0.14, 0.48, 0.045, 0.05, 0.02, 0.02, STEEL);
+      fbox(b, fr, x, 1.1, 0.01, 0.16, 0.06, 0.01, { all: GREY, pz: { layer: L.NUMBERS, uv: [0.25, 0.75, 0.5, 1] } });
+      break;
+    }
+    case "blackwindow": {
+      // an interior window into a room that is simply not there
+      const f = sp(L.WHITE, [0.25, 0.25, 0.26]);
+      fbox(b, fr, 0, 0.95, 0.004, 1.3, 1.05, 0.006, sp(L.SCREEN, [0.02, 0.02, 0.02]));
+      fbox(b, fr, 0, 0.9, 0.03, 1.4, 0.05, 0.06, f);
+      fbox(b, fr, 0, 2.0, 0.03, 1.4, 0.05, 0.06, f);
+      fbox(b, fr, -0.675, 0.95, 0.03, 0.05, 1.05, 0.06, f);
+      fbox(b, fr, 0.675, 0.95, 0.03, 0.05, 1.05, 0.06, f);
+      fbox(b, fr, 0, 0.86, 0.08, 1.46, 0.04, 0.16, sp(L.WHITE, [0.8, 0.8, 0.78]));
+      b.glass(fr.p(-0.65, 0.95, 0.03), [fr.c * 1.3, 0, -fr.s * 1.3], [0, 1.05, 0], [0.7, 0.8, 0.85, 0.12]);
+      break;
+    }
+    case "chairfield": {
+      // every chair in the building, facing the same wall
+      const W = Math.max(1, pr.a), D = Math.max(1, pr.b);
+      const seat = sp(L.WOOD_FLOOR, [0.6, 0.42, 0.28]);
+      let n = 0;
+      for (let z = -D / 2 + 0.6; z <= D / 2 && n < 140; z += 0.85)
+        for (let x = -W / 2; x <= W / 2 && n < 140; x += 0.72, n++) simpleChair(b, fr, x, z, rng.range(-0.04, 0.04), seat);
+      break;
+    }
+    case "stairsup": {
+      // twelve steps up, straight into the ceiling
+      const lino: Spec = sp(L.LINO);
+      const side = sp(L.PLASTER, [0.85, 0.85, 0.83]);
+      for (let i = 0; i < 12; i++) {
+        fbox(b, fr, 0, 0, -1.6 + i * 0.27, 1.1, (i + 1) * 0.222, 0.27, { all: side, py: lino });
+        fbox(b, fr, 0, (i + 1) * 0.222 - 0.01, -1.6 + i * 0.27 - 0.13, 1.1, 0.012, 0.025, STEEL);
+      }
+      for (let i = 0; i < 12; i += 3) fbox(b, fr, 0.58, (i + 1) * 0.222, -1.6 + i * 0.27, 0.03, 0.9, 0.03, DARK);
+      solidRect(b, fr, 0, -0.07, 1.2, 3.3);
+      break;
+    }
+    case "water": {
+      // ankle-deep, perfectly still
+      const h = 0.14;
+      b.glass([pr.x - 1.38, pr.y + h, pr.z - 1.38], [2.76, 0, 0], [0, 0, 2.76], [0.1, 0.17, 0.2, 0.55]);
+      // the tube light mirrored in the still water
+      if (pr.a) b.glass(fr.p(-0.62, h + 0.003, -0.05), [fr.c * 1.24, 0, -fr.s * 1.24], [fr.s * 0.1, 0, fr.c * 0.1], [1.8, 1.9, 2.0, 0.55]);
+      // the waterline on the walls
+      b.glass([pr.x - 1.38, pr.y + h + 0.002, pr.z - 1.38], [2.76, 0, 0], [0, 0, 0.02], [0.6, 0.7, 0.75, 0.3]);
+      if (rng.chance(0.3)) fbox(b, fr, rng.range(-0.8, 0.8), h - 0.005, rng.range(-0.8, 0.8), 0.21, 0.004, 0.3, sp(L.WHITE, [0.8, 0.8, 0.76]));
+      break;
+    }
+    case "upside": {
+      // the office, but on the ceiling
+      const up = (lx: number, ly: number, lz: number, sx: number, sy: number, sz: number, s: Parameters<typeof fbox>[8]) => fbox(b, fr, lx, CEIL - ly - sy, lz, sx, sy, sz, s);
+      for (const side of [1, -1]) {
+        const z = side * 0.4;
+        up(0, 0.72, z, 1.6, 0.03, 0.8, WHITE);
+        up(-0.77, 0, z, 0.04, 0.72, 0.72, GREY);
+        up(0.77, 0, z, 0.04, 0.72, 0.72, GREY);
+        up(0, 0.75, side * 0.18, 0.56, 0.34, 0.03, { all: DARK, [side > 0 ? "pz" : "nz"]: { layer: L.SCREEN } } as any);
+        up(0, 0.44, side * 1.1, 0.48, 0.07, 0.46, FABRIC_DARK);
+        up(0, 0.52, side * 1.33, 0.46, 0.52, 0.05, FABRIC_DARK);
+        up(0, 0.1, side * 1.1, 0.05, 0.34, 0.05, DARK);
+        up(0, 0.04, side * 1.1, 0.62, 0.04, 0.06, DARK);
+      }
       break;
     }
     case "puddle": {

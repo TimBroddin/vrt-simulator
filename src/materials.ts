@@ -1,10 +1,13 @@
 import * as THREE from "three";
+import { L } from "./layers";
 
 export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
   return new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
     uniforms: {
       atlas: { value: atlas },
+      clockTex: { value: null as THREE.Texture | null },
+      clockLayer: { value: L.DIGITAL },
       time: { value: 0 },
       fogColor: { value: new THREE.Color(0.02, 0.022, 0.024) },
       fogDensity: { value: 0.045 },
@@ -43,6 +46,8 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
     fragmentShader: /* glsl */ `
       precision highp sampler2DArray;
       uniform sampler2DArray atlas;
+      uniform sampler2D clockTex;
+      uniform float clockLayer;
       uniform vec3 fogColor;
       uniform float fogDensity;
       uniform vec3 lampPos;
@@ -55,7 +60,8 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
       in vec3 vWorld;
       out vec4 fragColor;
       void main() {
-        vec4 t = texture(atlas, vec3(vUv, floor(vLayer + 0.5)));
+        float li = floor(vLayer + 0.5);
+        vec4 t = abs(li - clockLayer) < 0.5 ? texture(clockTex, vUv) : texture(atlas, vec3(vUv, li));
         if (t.a < 0.5) discard;
         vec3 col = t.rgb * vLight;
         if (lampOn > 0.0) {

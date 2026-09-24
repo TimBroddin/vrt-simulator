@@ -1,6 +1,6 @@
 // Phase 2: lights and props. Only reads phase-1 plans (own + neighbours).
-import { CEIL, CELL, CH, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, T } from "./config";
-import { K, RT, SK, gardenStair, getPlan, idx, sideAt, stairFrame, type Plan, type Room } from "./layout";
+import { CEIL, CELL, CH, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, MID_CZ, T } from "./config";
+import { K, RT, SK, gardenStair, getPlan, idx, roomAnomaly, sideAt, stairFrame, type Plan, type Room } from "./layout";
 import { Rng, hash } from "./rng";
 import { ART, pickArt } from "./art";
 
@@ -70,6 +70,7 @@ function furnish(p: Plan): Furnished {
   const deadP = Math.min(0.45, 0.07 + dist * 0.012);
   const flickP = Math.min(0.22, 0.035 + dist * 0.005);
   const gx0 = cx * CH, gz0 = cz * CH;
+  const rtbf = cz < MID_CZ;
 
   const light = (
     x: number, y: number, z: number, col: readonly number[], int: number, range: number,
@@ -86,6 +87,7 @@ function furnish(p: Plan): Furnished {
 
   // a work from the VRT collection with its own picture light
   const hangArt = (wx: number, wz: number, d: number, gx: number, gz: number, lamp = true) => {
+    if (rtbf) return; // the VRT collection hangs on the VRT side only
     const a = pickArt(rng.next());
     const art = ART[a]!;
     const h = Math.max(1.5, 0.95 + art.h / 2);
@@ -198,6 +200,16 @@ function furnish(p: Plan): Furnished {
         flick: rng.chance(flickP),
       });
     }
+    // the studio clocks hang in every hallway (all stopped at 19:00)
+    if (p.zone[i] !== 2 && hash(78, f, c.gx, c.gz) % 100 < (p.st.mid ? 30 : 22)) {
+      const off = 0.9;
+      prop("hangclock", c.x + (axisX ? off : 0), y0 + CEIL, c.z + (axisX ? 0 : off), axisX ? Math.PI / 2 : 0, c.gx, c.gz);
+    }
+    if (p.st.mid) {
+      const lz = (i / CH) | 0;
+      if (lz === 5 && ((c.gx % 4) + 4) % 4 === 0) prop("hangsign", c.x, y0 + CEIL, c.z + CELL / 2, Math.PI / 2, c.gx, c.gz, ((c.gx % 8) + 8) % 8 === 0 ? 1 : 0);
+      if (lz === 5 && ((c.gx % 4) + 4) % 4 === 2) prop("speaker", c.x, y0 + CEIL - 0.1, c.z - 1.3, 0, c.gx, c.gz);
+    }
     const nOpen = sd.filter((s) => s.sk !== SK.WALL).length;
     let used = 0;
     for (let d = 0; d < 4; d++) {
@@ -220,7 +232,7 @@ function furnish(p: Plan): Furnished {
             const off = (s.door.w / 2 + 0.35) * (rng.chance(0.5) ? 1 : -1);
             if (sign >= 0) {
               const sp = wallPoint(i, d, -0.01, off);
-              prop("sign", sp.wx, y0 + 1.55, sp.wz, faceRot(d), c.gx, c.gz, sign);
+              prop("sign", sp.wx, y0 + 1.55, sp.wz, faceRot(d), c.gx, c.gz, sign, rtbf ? 1 : 0);
             }
           }
         }
@@ -243,6 +255,14 @@ function furnish(p: Plan): Furnished {
       if (used & (1 << d) || sd[d]!.sk !== SK.WALL) continue;
       const wp = wallPoint(i, d);
       const rot = faceRot(d);
+      // architectural oddities: a door onto brick, a door for someone very small, a window onto nothing
+      const oddK = 1 + Math.min(2, dist * 0.08);
+      const odd = rng.next();
+      if (!p.st.mid && p.zone[i] !== 1) {
+        if (odd < 0.02 * oddK) { prop("fakedoor", wp.wx, y0, wp.wz, rot, c.gx, c.gz); continue; }
+        if (odd < 0.032 * oddK) { prop("tinydoor", wp.wx, y0, wp.wz, rot, c.gx, c.gz, rng.int(0, 1)); continue; }
+        if (odd < 0.046 * oddK) { prop("blackwindow", wp.wx, y0, wp.wz, rot, c.gx, c.gz); continue; }
+      }
       if (rng.chance(p.zone[i] === 1 ? 0.35 : 0.09)) {
         hangArt(wp.wx, wp.wz, d, c.gx, c.gz);
         continue;
@@ -250,7 +270,7 @@ function furnish(p: Plan): Furnished {
       const r = rng.next();
       if (r < 0.1) prop("extinguisher", wp.wx, y0, wp.wz, rot, c.gx, c.gz);
       else if (r < 0.15) prop("hosebox", wp.wx, y0, wp.wz, rot, c.gx, c.gz);
-      else if (r < 0.26) prop("poster", wp.wx, y0 + 1.5, wp.wz, rot, c.gx, c.gz, rng.int(0, 7));
+      else if (r < 0.26) prop("poster", wp.wx, y0 + 1.5, wp.wz, rot, c.gx, c.gz, rtbf ? rng.int(8, 11) : rng.int(0, 7));
       else if (r < 0.29) prop("clock", wp.wx, y0 + 2.2, wp.wz, rot, c.gx, c.gz);
       else if (r < 0.33) prop("bench", wp.wx, y0, wp.wz, rot, c.gx, c.gz);
       else if (r < 0.36) prop("plant", wp.wx, y0, wp.wz, rot, c.gx, c.gz);
@@ -388,11 +408,11 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
   const dead = () => room.dark || rng.chance(c.deadP);
   const flick = () => rng.chance(c.flickP);
   const cells = room.cells;
-  const panelLights = (col: readonly number[], int: number, every = 1, fix = "panel") => {
+  const panelLights = (col: readonly number[], int: number, every = 1, fix = "panel", alwaysOn = false) => {
     cells.forEach((i, n) => {
       if (n % every) return;
       const q = center(i);
-      light(q.x, y0 + CEIL - 0.03, q.z, col, int, 7, q.gx, q.gz, fix, { rot, dead: dead(), flick: flick() });
+      light(q.x, y0 + CEIL - 0.03, q.z, col, int, 7, q.gx, q.gz, fix, { rot, dead: alwaysOn ? false : dead(), flick: flick() });
     });
   };
   const roomCenter = {
@@ -400,6 +420,32 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
     z: ((p.cz * CH + room.z0 + p.cz * CH + room.z1 + 1) / 2) * CELL,
   };
   const g0 = center(cells[0]!);
+  const an = roomAnomaly(p, room);
+  if (an && an !== "upside") {
+    const lw = (alongX ? w : d) * CELL, ld = (alongX ? d : w) * CELL;
+    if (an === "low") {
+      // lights further and further apart
+      cells.forEach((i, n) => {
+        if (n % 2) return;
+        const q = center(i);
+        light(q.x, y0 + 1.99, q.z, FLUO, 0.8, 5, q.gx, q.gz, "panel", { rot, dead: rng.chance(0.25 + n * 0.08), flick: rng.chance(0.3) });
+      });
+    } else if (an === "chairs") {
+      panelLights(FLUO, 1.0, 1, "panel", true);
+      prop("chairfield", roomCenter.x, y0, roomCenter.z, rot, g0.gx, g0.gz, lw - 1.4, ld - 1.4);
+    } else if (an === "stairs") {
+      panelLights(FLUO, 1.1, 1, "panel", true);
+      prop("stairsup", roomCenter.x, y0, roomCenter.z, rot + (rng.chance(0.5) ? Math.PI : 0), g0.gx, g0.gz);
+    } else if (an === "flooded") {
+      for (const i of cells) {
+        const q = center(i);
+        const off = rng.chance(0.3);
+        prop("water", q.x, y0, q.z, rot, q.gx, q.gz, off ? 0 : 1);
+        light(q.x, y0 + CEIL - 0.1, q.z, [0.8, 0.95, 1.0], 1.0, 5.5, q.gx, q.gz, "tube", { rot, dead: off, flick: rng.chance(0.3) });
+      }
+    }
+    return;
+  }
   // Walls along the room perimeter, used for big wall items.
   const perimeter: [number, number][] = [];
   for (const i of cells) for (const dd of wallDirs(i)) perimeter.push([i, dd]);
@@ -409,7 +455,7 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
       panelLights(COOL, 1.15, 1, "panel");
       for (const i of cells) {
         const q = center(i);
-        if (!hasDoor(i) && rng.chance(0.85)) prop("desks", q.x, y0, q.z, rot, q.gx, q.gz, rng.int(0, 99));
+        if (!hasDoor(i) && rng.chance(0.85)) prop(an === "upside" ? "upside" : "desks", q.x, y0, q.z, rot, q.gx, q.gz, rng.int(0, 99));
         for (const dd of wallDirs(i)) {
           const r = rng.next();
           const wp = wallPoint(i, dd);

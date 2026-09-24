@@ -412,12 +412,46 @@ const painters: Record<number, (c: Ctx) => void> = {
     ["STUDIO BRUSSEL", "#ff2d2d", "#ffffff", "100.6 FM", "LIFE IS MUSIC"],
     ["RADIO 1", "#101010", "#ffcf3f", "EN NU", "HET NIEUWS VAN HET UUR"],
   ]),
+  [L.POSTERS3]: (c) =>
+    posters(c, [
+      ["LE JT", "#0b2a5b", "#ffffff", "19H30", "LA UNE · RTBF"],
+      ["LE JARDIN EXTRAORDINAIRE", "#2f5d2a", "#f4f0d8", "DIMANCHE", "DEPUIS 1965"],
+      ["VIVACITÉ", "#f05a28", "#ffffff", "EN DIRECT", "RADIO RTBF"],
+      ["CLASSIC 21", "#111111", "#e8c547", "ROCK", "RADIO RTBF"],
+    ], rtbfLogo),
+  [L.SIGNS_FR]: (c) => {
+    const labels = ["TOILETTES", "ARCHIVES", "STUDIO", "RÉGIE", "CANTINE", "SERVEURS", "MONTAGE", "RÉUNION"];
+    labels.forEach((t, n) => {
+      const x = (n % 2) * 256, y = Math.floor(n / 2) * 128;
+      c.fillStyle = "#2b2d31";
+      c.fillRect(x, y, 256, 128);
+      c.fillStyle = "#1a64c8";
+      c.fillRect(x, y, 14, 128);
+      text(c, t, x + 135, y + 64, t.length > 9 ? 25 : 34, "#f5f5f5", "700");
+    });
+  },
+  [L.MIDSIGN]: (c) => {
+    // two hanging direction signs, each 1.9 x 0.32 m (top half / bottom half of the texture)
+    for (const [row, left, right] of [[0, "← RTBF · RÉGIES · PARKING", "VRT · STUDIO TV · PERS →"], [1, "← RTBF", "VRT · RESTAURANT →"]] as const) {
+      const y0 = row * 256;
+      c.fillStyle = "#f3f3f0";
+      c.fillRect(0, y0, S, 256);
+      aspect(c, 1.9 / 0.32, (w, h) => {
+        c.fillStyle = "#1c1c1c";
+        c.fillRect(0, 0, w, h * 0.12);
+        text(c, left, w * 0.05, h * 0.58, h * 0.3, "#1a64c8", "700", "left");
+        text(c, right, w * 0.95, h * 0.58, h * 0.3, "#222", "700", "right");
+        c.fillStyle = "#0f9d4c";
+        c.fillRect(w * 0.49, h * 0.35, h * 0.34, h * 0.34);
+      }, 0, y0, S, 256);
+    }
+  },
   [L.NUMBERS]: (c) => {
     fill(c, "#f0efe9");
     for (let n = 0; n < 16; n++) {
       const f = n + FLOOR_MIN;
       const x = (n % 4) * 128 + 64, y = Math.floor(n / 4) * 128 + 64;
-      const label = f > FLOOR_MAX ? "" : f === FLOOR_MAX ? "DAK" : String(f);
+      const label = n === 14 ? "13" : n === 15 ? "?" : f === FLOOR_MAX ? "DAK" : String(f);
       text(c, label, x, y + 4, label.length > 2 ? 44 : 92, "#141414", "800");
     }
   },
@@ -671,7 +705,13 @@ const painters: Record<number, (c: Ctx) => void> = {
   },
 };
 
-function posters(c: Ctx, list: [string, string, string, string, string][]) {
+function rtbfLogo(c: Ctx, x: number, y: number, s: number) {
+  c.fillStyle = "#1a64c8";
+  c.fillRect(x - s * 1.6, y - s * 0.7, s * 3.2, s * 1.4);
+  text(c, "rtbf", x, y + 1, s * 1.1, "#fff", "800");
+}
+
+function posters(c: Ctx, list: [string, string, string, string, string][], logo: (c: Ctx, x: number, y: number, s: number) => void = vrtLogo) {
   list.forEach(([title, bg, fg, time, sub], q) => {
     const x = (q % 2) * 256, y = q < 2 ? 0 : 256;
     aspect(c, 0.64 / 0.9, (w, h) => {
@@ -685,7 +725,7 @@ function posters(c: Ctx, list: [string, string, string, string, string][]) {
       words.forEach((wd, k) => text(c, wd, 16, h * 0.5 + k * 40 - (words.length - 1) * 20, wd.length > 8 ? 30 : 40, fg, "900", "left"));
       text(c, sub, 16, h * 0.82, 11, fg, "600", "left");
       text(c, time, 16, h * 0.9, 18, fg, "800", "left");
-      vrtLogo(c, w - 30, 30, 16);
+      logo(c, w - 30, 30, 16);
     }, x, y, 256, 256);
   });
 }

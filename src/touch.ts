@@ -9,6 +9,7 @@ export interface TouchActions {
   lamp: () => void;
   pause: () => void;
   photo: () => void;
+  map: () => void;
 }
 
 export function setupTouch(player: Player, actions: TouchActions) {
@@ -102,6 +103,7 @@ export function setupTouch(player: Player, actions: TouchActions) {
   btn("t-lamp", actions.lamp);
   btn("t-pause", actions.pause);
   btn("t-photo", actions.photo);
+  btn("t-map", actions.map);
 
   return {
     reset() {

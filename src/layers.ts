@@ -50,10 +50,14 @@ export const L = {
   VENDING: 45,
   ONAIR: 46,
   PUDDLE: 47,
+  POSTERS3: 48,
+  SIGNS_FR: 49,
+  MIDSIGN: 50,
+  DIGITAL: 51, // live LED clock face, sampled from a separate canvas texture
 } as const;
 
 // artworks and their museum labels (8 labels per layer) follow the painted layers
-export const ART0 = 48;
+export const ART0 = 52;
 export const LABEL0 = ART0 + ART.length;
 export const LAYER_COUNT = LABEL0 + Math.ceil(ART.length / 8);
 

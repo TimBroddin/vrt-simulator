@@ -1,9 +1,10 @@
 // Turns a furnished plan into geometry: floors, ceilings, walls with openings,
 // stairwells, elevator cars and the courtyard facades.
-import { CEIL, CELL, CH, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, ST_HALF, ST_U1, ST_U2, ST_VM, T } from "./config";
+import { CEIL, CELL, CH, CHUNK, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, ST_HALF, ST_U1, ST_U2, ST_VM, T } from "./config";
 import { Builder, LightCtx, UP, type Built, type RGB, type Spec, type V3 } from "./builder";
 import { getFurnished } from "./furnish";
-import { K, RT, SK, gardenStair, getStructure, kindAt, sideAt, stairFrame, type GardenStair, type Plan } from "./layout";
+import { K, RT, SK, gardenStair, getStructure, kindAt, roomAnomaly, sideAt, stairFrame, type GardenStair, type Plan } from "./layout";
+import { hash } from "./rng";
 import { L } from "./layers";
 import { buildFixture, buildProp } from "./props";
 
@@ -36,6 +37,7 @@ function surf(p: Plan, i: number): Surf {
   const k = p.kind[i];
   switch (k) {
     case K.CORR:
+      if (p.st.mid) return { floor: sp(L.TILEDARK, [2.0, 1.9, 1.7]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER), h: CEIL, base: false };
       if ((p.zone[i] === 1 || p.zone[i] === 2) && p.st.atrium?.kind === "garden")
         return p.zone[i] === 2
           ? { floor: sp(L.TILEDARK, [0.75, 0.75, 0.75]), ceil: null, wall: sp(L.PLASTER), h: CEIL, base: false }
@@ -47,6 +49,10 @@ function surf(p: Plan, i: number): Surf {
       return { floor: sp(L.CARPET_GREY), ceil: sp(L.CEILMETAL), wall: sp(L.BRICK_DOTS), h: CEIL, base: false };
     case K.ROOM: {
       const r = p.rooms[p.room[i]!]!;
+      const an = roomAnomaly(p, r);
+      // a long room with the ceiling pressing down
+      if (an === "low") return { floor: sp(L.CARPET_FLECK, [0.8, 0.78, 0.75]), ceil: sp(L.CEILTILE, [0.85, 0.85, 0.8]), wall: sp(L.PLASTER, [0.85, 0.83, 0.76]), h: 2.02, base: true };
+      if (an === "flooded") return { floor: sp(L.CONCRETE, [0.45, 0.47, 0.46]), ceil: sp(L.CONCRETE, [0.8, 0.8, 0.78]), wall: sp(L.TILE_SMALL, [0.75, 0.8, 0.8]), h: CEIL, base: false };
       switch (r.type) {
         case RT.OFFICE: return { floor: sp(L.CARPET_BLUE), ceil: sp(L.CEILMETAL), wall: sp(L.PLASTER), h: CEIL, base: true };
         case RT.MEETING: return { floor: sp(L.CARPET_GREY), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.95, 0.93, 0.88]), h: CEIL, base: true };
@@ -338,6 +344,18 @@ function emitSide(b: Builder, p: Plan, i: number, gx: number, gz: number, d: num
       break;
     }
     case SK.WINDOW: {
+      if (p.st.mid) {
+        // de middengang: floor-to-ceiling glass, slim mullions, a low wooden rail
+        const mull = sp(L.WHITE, [0.2, 0.2, 0.21]);
+        const e0 = -half, e1 = half;
+        for (const m of [e0, -0.75 + 0.0, 0.75, e1]) sbox(Math.max(e0, m - 0.03), Math.min(e1, m + 0.03), 0.0, 0.08, 0, h, mull);
+        sbox(e0, e1, 0.0, 0.08, 0, 0.1, mull);
+        sbox(e0, e1, 0.0, 0.1, h - 0.12, h, mull);
+        sbox(e0, e1, 0.1, 0.2, 0.86, 0.94, sp(L.WOOD_FLOOR, [0.85, 0.65, 0.42]));
+        b.glass(pt(e0, 0.04, 0.1), [along[0] * (e1 - e0), 0, along[2] * (e1 - e0)], [0, h - 0.22, 0], [0.75, 0.85, 0.88, 0.07]);
+        seg(e0, e1, 0, 0.12);
+        break;
+      }
       const wa = -1.1, wb = 1.1, sill = 0.9, head = Math.min(2.35, h - 0.2);
       face(s0, wa, 0, h);
       face(wb, s1, 0, h);
@@ -467,7 +485,9 @@ function buildStair(b: Builder, p: Plan) {
     solid(U1 - 0.05, U1, VM, V1);
   }
   // painted floor number on the landing wall
-  const n2 = f - FLOOR_MIN;
+  // now and then the landing insists on a floor that isn't this one
+  const odd = f > FLOOR_MIN && f < FLOOR_MAX && hash(502, f, p.cx, p.cz) % 100 < 8;
+  const n2 = odd ? [14, 15, (hash(503, f, p.cx, p.cz) % 13)][hash(504, f, p.cx, p.cz) % 3]! : f - FLOOR_MIN;
   const u0 = (n2 % 4) / 4, v0 = 1 - (Math.floor(n2 / 4) + 1) / 4;
   box(0.35, 1.05, V0, V0 + 0.012, 1.15, 1.85, { all: sp(L.WHITE, [0.9, 0.9, 0.88]), pz: { layer: L.NUMBERS, uv: [u0, v0, u0 + 0.25, v0 + 0.25] } });
 }
@@ -487,6 +507,7 @@ export function buildCarInterior(b: Builder, gx: number, gz: number, y0: number,
 // Courtyard facades + ground, independent of floor.
 export function buildExterior(cx: number, cz: number): Built | null {
   const st = getStructure(cx, cz);
+  if (st.mid) return buildMidExterior(cx, cz);
   const c = st.court;
   if (!c) return null;
   const b = new Builder(new LightCtx(0, cx, cz, "outdoor"));
@@ -555,4 +576,55 @@ function buildGardenStair(b: Builder, g: GardenStair, cx: number, cz: number) {
   }
   void cx;
   void cz;
+}
+
+// Outside the middengang: grass, the facades of both buildings, and the floor
+// slabs of the glass corridor stacked up to the roof.
+function buildMidExterior(cx: number, cz: number): Built {
+  const st = getStructure(cx, cz);
+  const b = new Builder(new LightCtx(0, cx, cz, "outdoor"));
+  const X0 = cx * CHUNK, Z0 = cz * CHUNK, X1 = X0 + CHUNK, Z1 = Z0 + CHUNK;
+  const top = FLOOR_MAX * H;
+  b.cell(cx * CH, cz * CH);
+  for (let z = 0; z < CH; z++)
+    for (let x = 0; x < CH; x++) {
+      const gx = X0 + x * CELL, gz = Z0 + z * CELL;
+      if (!st.corr[z * CH + x]) {
+        b.hrect(gx, gz, gx + CELL, gz + CELL, 0, true, sp(L.GRASS), 0);
+        continue;
+      }
+      // solid slab band per floor: fills the plenum between one ceiling and the next floor
+      for (let f = 1; f <= FLOOR_MAX; f++)
+        b.aabox(gx, f * H - (H - CEIL) + 0.02, gz, gx + CELL, f * H - 0.03, gz + CELL, { all: sp(L.CONCRETE, [0.82, 0.82, 0.8]) }, 0);
+      // the curtain wall seen from outside, on every floor (loaded floors draw their own on top)
+      for (let d = 0; d < 4; d++) {
+        const nx = x + DX[d]!, nz = z + DZ[d]!;
+        if (nx < 0 || nz < 0 || nx >= CH || nz >= CH || st.corr[nz * CH + nx]) continue;
+        const axisX = d % 2 === 0;
+        const px = axisX ? gx + (DX[d]! > 0 ? CELL : 0) : gx;
+        const pz = axisX ? gz : gz + (DZ[d]! > 0 ? CELL : 0);
+        const out = 0.03 * (axisX ? DX[d]! : DZ[d]!);
+        for (let f = 0; f < FLOOR_MAX; f++) {
+          const y0 = f * H;
+          if (axisX) b.glass([px + out, y0 + 0.1, pz], [0, 0, CELL], [0, CEIL - 0.2, 0], [0.7, 0.8, 0.85, 0.1]);
+          else b.glass([px, y0 + 0.1, pz + out], [CELL, 0, 0], [0, CEIL - 0.2, 0], [0.7, 0.8, 0.85, 0.1]);
+          for (const t of [0, 0.5, 1]) {
+            const cx2 = axisX ? px + out : px + t * CELL, cz2 = axisX ? pz + t * CELL : pz + out;
+            b.aabox(cx2 - 0.035, y0, cz2 - 0.035, cx2 + 0.035, y0 + CEIL, cz2 + 0.035, sp(L.WHITE, [0.2, 0.2, 0.21]), 0);
+          }
+        }
+      }
+    }
+  // facades, with gaps where the glass links enter the buildings
+  let lx0 = CH, lx1 = -1;
+  for (let x = 0; x < CH; x++) if (st.corr[x]) { lx0 = Math.min(lx0, x); lx1 = Math.max(lx1, x); }
+  const spans: [number, number][] = lx1 >= 0 ? [[0, lx0], [lx1 + 1, CH]] : [[0, CH]];
+  for (const [a0, a1] of spans) {
+    if (a1 <= a0) continue;
+    const u0 = X0 / CELL + a0, u1 = X0 / CELL + a1;
+    b.vrect(false, Z0, X0 + a0 * CELL, X0 + a1 * CELL, 0, top, 1, { layer: L.FACADE, uv: [u0, 0, u1, top / H] }, 0);
+    b.vrect(false, Z1, X0 + a0 * CELL, X0 + a1 * CELL, 0, top, -1, { layer: L.FACADE, uv: [u0, 0, u1, top / H] }, 0);
+  }
+  void X1;
+  return b.finish();
 }

@@ -10,9 +10,9 @@ bun run build   # static site in dist/
 
 URL options: `?seed=1234` (same building every time), `?floor=7` (start floor), `?debug` (fps / chunk stats).
 
-On phones and tablets: left thumb walks (push far to run), right thumb looks, plus buttons for E, QUEST, LAMP and pause. Play in landscape.
+On phones and tablets: left thumb walks (push far to run), right thumb looks, plus buttons for E, QUEST, LAMP, FOTO, KAART and pause. Play in landscape.
 
-Controls: WASD / ZQSD to walk, Shift to run, mouse to look, E to use things (lifts, quest items), Tab to switch quests, F for the camera lamp, scroll to zoom, M to mute, H to hide the HUD.
+Controls: WASD / ZQSD to walk, Shift to run, mouse to look, E to use things (lifts, quest items), Tab to switch quests, M for the minimap, F for the camera lamp, P for a photo, scroll to zoom, N to mute, H to hide the HUD.
 
 ## Quests
 
@@ -33,3 +33,7 @@ Add a quest by adding an entry to `ITEMS` in `src/quests.ts`. Progress is saved 
 ## Art
 
 29 wall works from the VRT collection, currently at auction at Bernaerts ("VRT & XX/XXI", lots 300–442), hang in corridors, atrium galleries, offices, meeting rooms and canteens. Each one has a picture light and a museum label with its lot number. The catalogue is in `src/art.ts` and the images are in `src/art/`. Images come from the auction listing.
+
+## De middengang and the RTBF
+
+Just north of the start, a glass corridor (de middengang) runs east–west through the whole building on every floor. Glass links branch off to both sides over an open-air gap. South of it is the VRT. North of it is the RTBF: the same building mirrored, with French labels, RTBF posters and no VRT art. The middengang row is `MID_CZ` in `src/config.ts`.

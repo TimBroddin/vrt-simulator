@@ -3,6 +3,7 @@ import { CELL, FLOOR_MAX, FLOOR_MIN, H } from "./config";
 import type { Player } from "./player";
 import type { Sound } from "./audio";
 import type { ElevRT, World } from "./world";
+import { track } from "./analytics";
 
 interface Call {
   openAt: number;
@@ -19,6 +20,7 @@ interface Ride {
   t: number;
   dur: number;
   shown: number;
+  want: number;
 }
 
 export class Lifts {
@@ -26,8 +28,72 @@ export class Lifts {
   ride: Ride | null = null;
   prompt = "";
   display: string | null = null;
+  // floor selection panel inside the car
+  panel: { e: ElevRT; sel: number } | null = null;
+  private panelEl = document.getElementById("liftpanel")!;
+  private panelKey = "";
 
-  constructor(private world: World, private player: Player, private sound: Sound) {}
+  constructor(private world: World, private player: Player, private sound: Sound) {
+    // buttons (tappable on touch screens)
+    const grid = this.panelEl.querySelector(".lp-buttons")!;
+    for (let f = FLOOR_MAX - 1; f >= FLOOR_MIN; f--) {
+      const b = document.createElement("div");
+      b.className = "lp-btn";
+      b.dataset.f = String(f);
+      b.textContent = f === FLOOR_MIN ? "P" : String(f);
+      const go = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!this.panel) return;
+        this.panel.sel = f;
+        this.panelInput("go");
+      };
+      b.addEventListener("touchstart", go, { passive: false });
+      b.addEventListener("click", go);
+      grid.appendChild(b);
+    }
+  }
+
+  get panelOpen() {
+    return !!this.panel;
+  }
+
+  // "up" / "down" / "go" / "close" or a floor number
+  panelInput(a: "up" | "down" | "go" | "close" | number) {
+    const p = this.panel;
+    if (!p) return;
+    if (a === "close") {
+      this.panel = null;
+    } else if (a === "up") p.sel = Math.min(FLOOR_MAX - 1, p.sel + 1);
+    else if (a === "down") p.sel = Math.max(FLOOR_MIN, p.sel - 1);
+    else if (typeof a === "number") p.sel = Math.max(FLOOR_MIN, Math.min(FLOOR_MAX - 1, a));
+    else if (a === "go") {
+      if (p.sel === p.e.f) {
+        this.panel = null;
+        return;
+      }
+      this.sound.beep(0.6);
+      this.calls.set(p.e.id, { openAt: -1, closeAt: 0, dinged: true });
+      this.sound.doors();
+      this.ride = { phase: "closing", gx: p.e.gx, gz: p.e.gz, from: p.e.f, to: p.e.f, t: 0, dur: 0, shown: p.e.f, want: p.sel };
+      this.panel = null;
+    }
+    if (a !== "go") this.sound.beep(0.2);
+  }
+
+  private renderPanel() {
+    const p = this.panel;
+    const key = p ? `${p.e.f}:${p.sel}` : "";
+    if (key === this.panelKey) return;
+    this.panelKey = key;
+    this.panelEl.style.display = p ? "" : "none";
+    if (!p) return;
+    for (const b of Array.from(this.panelEl.querySelectorAll<HTMLElement>(".lp-btn"))) {
+      const f = Number(b.dataset.f);
+      b.classList.toggle("sel", f === p.sel);
+      b.classList.toggle("cur", f === p.e.f);
+    }
+  }
 
   private near(): { e: ElevRT; d: number; inCar: boolean } | null {
     const p = this.player.pos;
@@ -74,19 +140,30 @@ export class Lifts {
     const n = this.near();
     this.prompt = "";
     if (!this.ride && n) {
-      if (n.inCar && n.e.open > 0.8) this.prompt = "E · RIJDEN";
+      if (n.inCar && n.e.open > 0.8 && !this.panel) this.prompt = "E · KIES VERDIEPING";
       else if (!n.inCar && n.e.open < 0.5 && !this.calls.has(n.e.id)) this.prompt = "E · LIFT ROEPEN";
       if (interact) {
         if (n.inCar && n.e.open > 0.5) {
-          this.calls.set(n.e.id, { openAt: t - 1, closeAt: t, dinged: true });
-          this.sound.doors();
-          this.ride = { phase: "closing", gx: n.e.gx, gz: n.e.gz, from: n.e.f, to: n.e.f, t: 0, dur: 0, shown: n.e.f };
+          if (this.panel) this.panelInput("go");
+          else {
+            this.panel = { e: n.e, sel: n.e.f };
+            // keep the doors open while choosing
+            const c = this.calls.get(n.e.id);
+            if (c) c.closeAt = Math.max(c.closeAt, t + 30);
+          }
         } else if (!n.inCar && !this.calls.has(n.e.id)) {
           const openAt = t + 1.2 + Math.random() * 2.5;
           this.calls.set(n.e.id, { openAt, closeAt: openAt + 7, dinged: false });
         }
       }
     }
+
+    // the panel only makes sense while standing in an open car
+    if (this.panel) {
+      const inCar = n?.inCar && n.e === this.panel.e;
+      if (!inCar || this.panel.e.open < 0.3 || this.ride) this.panel = null;
+    }
+    this.renderPanel();
 
     const r = this.ride;
     this.display = null;
@@ -96,8 +173,9 @@ export class Lifts {
     if (r.phase === "closing") {
       this.display = String(r.from);
       if (!car || car.open < 0.02) {
-        let to = r.from;
-        while (to === r.from) to = FLOOR_MIN + Math.floor(Math.random() * (FLOOR_MAX - FLOOR_MIN));
+        let to = r.want;
+        // now and then the lift has a mind of its own
+        if (Math.random() < 0.05) while (to === r.from || to === r.want) to = FLOOR_MIN + Math.floor(Math.random() * (FLOOR_MAX - FLOOR_MIN));
         r.to = to;
         r.phase = "moving";
         r.t = 0;
@@ -118,6 +196,7 @@ export class Lifts {
         this.player.pos.y += dy;
         this.player.viewY += dy;
         this.sound.motor(false);
+        track("lift_ride", { from: r.from, chosen: r.want, arrived: r.to, glitch: r.to !== r.want });
         r.phase = "arrive";
         r.t = 0;
       }

@@ -343,6 +343,29 @@ export class Sound {
     lfo.stop(t + dur + 0.1);
   }
 
+  // radio tuning whine before a station drifts in
+  tuning() {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = "sine";
+    o.frequency.setValueAtTime(2400, t);
+    o.frequency.exponentialRampToValueAtTime(700, t + 0.9);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.02, t + 0.1);
+    g.gain.linearRampToValueAtTime(0, t + 1.0);
+    o.connect(g).connect(this.dry);
+    o.start(t);
+    o.stop(t + 1.1);
+    this.burst(1.2, "bandpass", 1800, 0.8, 0.12, 0, 0, 1.2);
+  }
+
+  crackle() {
+    if (!this.ctx) return;
+    this.burst(0.02 + Math.random() * 0.04, "highpass", 2500 + Math.random() * 3000, 0.7, 0.05 + Math.random() * 0.08, 0, Math.random() * 1.4 - 0.7, 0.8);
+  }
+
   beep(k: number) {
     if (!this.ctx || this.muted) return;
     this.tone(1800 + k * 600, 0.05, 0.02 + k * 0.02, 0, "sine", 0, 0.1);
