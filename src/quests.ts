@@ -285,7 +285,7 @@ const ITEMS: ItemDef[] = [
   },
   {
     id: "karen", title: "Karen François is haar badge weer kwijt", goal: "Zoek de badge van Karen François", item: "de badge van Karen François", short: "Badge van Karen",
-    done: "Karen heeft haar badge terug. Tot de volgende keer, Karen.", hint: (w) => `"Kben mijn badge weer kwijt, mss vind ik ze daar wel haha" · ${w}`,
+    done: "Karen heeft haar badge terug. Tot de volgende keer, Karen.", hint: (w) => `"Kben mijn badge weer kwijt, haha waar zou ze nu weer liggen" · ${w}`,
     place: "rooms", types: [RT.VIPBAR], fallback: [RT.CANTEEN, RT.LOUNGE], surface: "table",
     model: (b, fr) => {
       // a VRT badge in a pink sleeve, on a blue lanyard coiled beside it
