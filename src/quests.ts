@@ -284,6 +284,21 @@ const ITEMS: ItemDef[] = [
     },
   },
   {
+    id: "karen", title: "Karen François is haar badge weer kwijt", goal: "Zoek de badge van Karen François", item: "de badge van Karen François", short: "Badge van Karen",
+    done: "Karen heeft haar badge terug. Tot de volgende keer, Karen.", hint: (w) => `"Kben mijn badge weer kwijt, mss vind ik ze daar wel haha" · ${w}`,
+    place: "rooms", types: [RT.VIPBAR], fallback: [RT.CANTEEN, RT.LOUNGE], surface: "table",
+    model: (b, fr) => {
+      // a VRT badge in a pink sleeve, on a blue lanyard coiled beside it
+      fbox(b, fr, 0, 0, 0, 0.056, 0.004, 0.09, glow([0.9, 0.9, 0.88]));
+      fbox(b, fr, 0, 0.004, 0.025, 0.056, 0.001, 0.03, glow([1.15, 0.18, 0.48]));
+      fbox(b, fr, 0, 0.004, -0.015, 0.03, 0.001, 0.036, glow([0.45, 0.45, 0.5]));
+      for (let k = 0; k < 10; k++) {
+        const a = k * 0.62;
+        fbox(b, new Frame(...fr.p(0.07 + Math.cos(a) * 0.045, 0, 0.02 + Math.sin(a) * 0.045), fr.rot + a), 0, 0.001, 0, 0.012, 0.003, 0.035, glow([0.15, 0.3, 0.8]));
+      }
+    },
+  },
+  {
     id: "badge", title: "De nieuwe stagiair is zijn badge kwijt", goal: "Zoek de badge van de stagiair", item: "de badge van de stagiair", short: "Badge",
     done: "De stagiair kan weer binnen. Welkom bij de VRT, voor de derde keer.", hint: (w) => `Hij verdwaalde in ${w}`,
     place: "corridor",
@@ -360,10 +375,10 @@ export class Quests {
       id: d.id, title: d.title, goal: d.goal, item: d.item, doneText: d.done, launchAt: 0, launched: false, done: false,
       hint: () => d.hint(where(spot)), target: () => spot,
     }));
-    // order: Ben, the CEO, Tom, Jan, Felice, the toilets, then the rest
-    const ceo = itemQuests.find((q) => q.id === "ceo")!;
-    const rest = itemQuests.slice(2).filter((q) => q !== ceo);
-    this.quests = [itemQuests[0]!, ceo, itemQuests[1]!, special[0]!, special[1]!, ...(loos ? [special[2]!] : []), ...rest];
+    // order: Ben, the CEO, Karen, Tom, Jan, Felice, the toilets, then the rest
+    const ceo = itemQuests.find((q) => q.id === "ceo")!, karen = itemQuests.find((q) => q.id === "karen")!;
+    const rest = itemQuests.slice(2).filter((q) => q !== ceo && q !== karen);
+    this.quests = [itemQuests[0]!, ceo, karen, itemQuests[1]!, special[0]!, special[1]!, ...(loos ? [special[2]!] : []), ...rest];
     this.quests.forEach((q, k) => (q.launchAt = launch[k] ?? 375 + (k - 10) * 45));
     for (const q of this.quests) if (saved.has(q.id)) q.done = true;
     for (const { d, spot } of items) if (spot) this.addItem(d.id, spot, d.short, d.model);
@@ -420,7 +435,7 @@ export class Quests {
     if (d.surface === "table") {
       const fur = getFurnished(p.f, p.cx, p.cz);
       const inRoom = (gx: number, gz: number) => p.room[idx(gx - p.cx * CH, gz - p.cz * CH)] === r.id;
-      const tops: Record<string, [number, number, number]> = { ctable: [0.745, 0, 0.8], mtable: [0.76, 0, 0.6], desks: [0.735, 0.55, 0.5], editdesk: [0.74, 0.55, 0.6], newsdesk: [0.97, -0.1, 0.9], messtable: [0.75, 0, 0.35], sdesk: [1.09, 0.05, 0.9], radiodesk: [0.76, 0.3, 0.3] };
+      const tops: Record<string, [number, number, number]> = { ctable: [0.745, 0, 0.8], mtable: [0.76, 0, 0.6], desks: [0.735, 0.55, 0.5], editdesk: [0.74, 0.55, 0.6], newsdesk: [0.97, -0.1, 0.9], messtable: [0.75, 0, 0.35], sdesk: [1.09, 0.05, 0.9], radiodesk: [0.76, 0.3, 0.3], vipbar: [1.1, 1.42, 1.2], lounge: [0.36, 0, 0.35] };
       const tables = fur.props.filter((pr) => tops[pr.t] && inRoom(pr.gx, pr.gz));
       if (tables.length) {
         const t = rng.pick(tables);
