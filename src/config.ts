@@ -12,7 +12,7 @@ export const EYE = 1.62;
 // mirror twin, the RTBF (north).
 export const MID_CZ = -1;
 export const SNAKE_HALF = 0.9; // de gang naar de parking is 1.8 m wide
-export const MID_FLOOR = 0; // the only floor with a middengang; elsewhere the gap is open air
+export const MID_FLOOR = 1; // the only floor with a middengang; elsewhere the gap is open air
 export const isRtbf = (cz: number) => cz < MID_CZ;
 
 export const FLOOR_MIN = -1; // parking garage

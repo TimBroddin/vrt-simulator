@@ -78,4 +78,4 @@ Some control rooms and server rooms are the bewaking: a wall of monitors, a desk
 
 ## De middengang and the RTBF
 
-Just north of the start, a glass corridor (de middengang) runs east–west through the whole building on the ground floor. On every other floor the gap between the two is open air, and the corridors end in windows onto it. Glass links branch off to both sides over an open-air gap. South of it is the VRT. North of it is the RTBF: the same building mirrored, with French labels, RTBF posters and no VRT art. The middengang row is `MID_CZ` in `src/config.ts`.
+Just north of the start, a glass corridor (de middengang) runs east–west through the whole building on the first floor, like the real one over the street. On every other floor the gap between the two is open air, and the corridors end in windows onto it. Glass links branch off to both sides over an open-air gap. South of it is the VRT. North of it is the RTBF: the same building mirrored, with French labels, RTBF posters and no VRT art. The middengang row is `MID_CZ` in `src/config.ts`.
