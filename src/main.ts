@@ -186,9 +186,12 @@ let lastDigitT = 0;
 let hudOn = true;
 let zoom = 0;
 const canvas = renderer.domElement;
+// Shortcuts follow the letter on the key (M is next to L on AZERTY); walking
+// follows the key's position (WASD / ZQSD). Non-Latin layouts fall back to position.
+const letter = (e: KeyboardEvent, l: string) => (/^[a-z]$/i.test(e.key) ? e.key.toLowerCase() === l : e.code === `Key${l.toUpperCase()}`);
 document.addEventListener("keydown", (e) => {
   if (worldmap.open) {
-    if (e.code === "KeyM" || e.code === "Escape") closeMap();
+    if (letter(e, "m") || e.code === "Escape") closeMap();
     return;
   }
   player.keys.add(e.code);
@@ -213,20 +216,20 @@ document.addEventListener("keydown", (e) => {
     player.keys.clear();
     return;
   }
-  if (e.code === "KeyE") interact = true;
+  if (letter(e, "e")) interact = true;
   if (e.code === "Tab") {
     e.preventDefault();
     quests.cycle();
   }
-  if (e.code === "KeyF") lampTarget = lampTarget ? 0 : 1;
-  if (e.code === "KeyN") sound.setMuted(!sound.muted);
-  if (e.code === "KeyM") openMap();
-  if (e.code === "KeyK") {
+  if (letter(e, "f")) lampTarget = lampTarget ? 0 : 1;
+  if (letter(e, "n")) sound.setMuted(!sound.muted);
+  if (letter(e, "m")) openMap();
+  if (letter(e, "k")) {
     minimap.toggle();
     if (minimap.visible) track("minimap_opened", { device: "desktop" });
   }
-  if (e.code === "KeyP") photoRequested = true;
-  if (e.code === "KeyH") {
+  if (letter(e, "p")) photoRequested = true;
+  if (letter(e, "h")) {
     hudOn = !hudOn;
     $("hud").style.display = hudOn ? "" : "none";
   }
