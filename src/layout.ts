@@ -993,7 +993,7 @@ function makeSpecialStructure(cx: number, cz: number, kind: Special): Structure 
   }
   if (kind === "tower") {
     // the Reyers tower, indoors, seven storeys high
-    const f0 = fixed ? 1 : [0, 2][hash(76, cx, cz) % 2]!;
+    const f0 = fixed ? 0 : [0, 2][hash(76, cx, cz) % 2]!;
     base.atrium = { x0: 3, z0: 2, x1: 8, z1: 9, f0, f1: f0 + 6, kind: "tower" };
   }
   if (kind === "props") {

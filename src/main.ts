@@ -28,7 +28,7 @@ const params = new URLSearchParams(location.search);
 const seedParam = params.get("seed");
 const seed = seedParam ? (/^\d+$/.test(seedParam) ? Number(seedParam) : hash(...[...seedParam].map((c) => c.charCodeAt(0)))) : (Math.random() * 1e6) | 0;
 setSeed(seed);
-const startFloor = params.has("floor") ? Math.max(FLOOR_MIN, Math.min(FLOOR_MAX, Number(params.get("floor")))) : 3 + (seed % 7);
+const startFloor = params.has("floor") ? Math.max(FLOOR_MIN, Math.min(FLOOR_MAX, Number(params.get("floor")))) : 0;
 const debug = params.has("debug");
 const touch = isTouch() || params.has("touch");
 if (touch) document.body.classList.add("touch");

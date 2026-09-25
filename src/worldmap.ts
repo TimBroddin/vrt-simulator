@@ -352,8 +352,10 @@ export class WorldMap {
         return;
       }
       moved += Math.abs(dx) + Math.abs(dy);
-      this.vx -= dx / this.s;
-      this.vz -= dy / this.s;
+      // the map turns with you: screen deltas back into the world
+      const c = Math.cos(this.player.yaw), sn = Math.sin(this.player.yaw);
+      this.vx -= (dx * c + dy * sn) / this.s;
+      this.vz -= (-dx * sn + dy * c) / this.s;
       this.clampView();
     });
     const up = (e: PointerEvent) => {
@@ -362,7 +364,9 @@ export class WorldMap {
       if (pts.size || moved > 6) return;
       // a click: set a waypoint where you can walk
       const r = cv.getBoundingClientRect();
-      const x = this.vx + (e.clientX - r.left - r.width / 2) / this.s, z = this.vz + (e.clientY - r.top - r.height / 2) / this.s;
+      const ux = (e.clientX - r.left - r.width / 2) / this.s, uy = (e.clientY - r.top - r.height / 2) / this.s;
+      const c = Math.cos(this.player.yaw), sn = Math.sin(this.player.yaw);
+      const x = this.vx + ux * c + uy * sn, z = this.vz - ux * sn + uy * c;
       if (!inSight(this.player.x, this.player.z, this.player.f, x, z, this.f)) {
         this.note = "Te ver: daar zie je niets meer";
         return;
@@ -435,24 +439,33 @@ export class WorldMap {
     g.fillStyle = "#0b0c0e";
     g.fillRect(0, 0, W, H);
     const s = this.s, f = this.f;
-    const sx = (x: number) => W / 2 + (x - this.vx) * s, sz = (z: number) => H / 2 + (z - this.vz) * s;
-    const cx0 = Math.floor((this.vx - W / 2 / s) / CHUNK), cx1 = Math.floor((this.vx + W / 2 / s) / CHUNK);
-    const cz0 = Math.floor((this.vz - H / 2 / s) / CHUNK), cz1 = Math.floor((this.vz + H / 2 / s) / CHUNK);
+    // heading up: the way you're facing is the top of the screen (like the minimap)
+    const P = this.player, rc = Math.cos(P.yaw), rs = Math.sin(P.yaw);
+    const scr = (x: number, z: number): [number, number] => {
+      const dx = (x - this.vx) * s, dz = (z - this.vz) * s;
+      return [W / 2 + dx * rc - dz * rs, H / 2 + dx * rs + dz * rc];
+    };
+    const reach = Math.hypot(W, H) / 2 / s;
+    const cx0 = Math.floor((this.vx - reach) / CHUNK), cx1 = Math.floor((this.vx + reach) / CHUNK);
+    const cz0 = Math.floor((this.vz - reach) / CHUNK), cz1 = Math.floor((this.vz + reach) / CHUNK);
     // paint the tiles, a few new ones per frame so panning stays smooth
     let budget = 10;
     g.imageSmoothingEnabled = s * CELL < PX;
-    const P = this.player;
     const near = (cx: number, cz: number) => {
       const nx = Math.max(cx * CHUNK, Math.min(P.x, (cx + 1) * CHUNK)), nz = Math.max(cz * CHUNK, Math.min(P.z, (cz + 1) * CHUNK));
       return Math.hypot(nx - P.x, nz - P.z) <= SIGHT;
     };
+    g.save();
+    g.translate(W / 2, H / 2);
+    g.rotate(P.yaw);
     for (let cz = cz0; cz <= cz1; cz++)
       for (let cx = cx0; cx <= cx1; cx++) {
         const key = `${f}:${cx},${cz}`;
         if (!near(cx, cz)) continue;
         if (!this.tiles.has(key) && budget-- <= 0) continue;
-        g.drawImage(this.tile(f, cx, cz), sx(cx * CHUNK), sz(cz * CHUNK), CHUNK * s + 0.5, CHUNK * s + 0.5);
+        g.drawImage(this.tile(f, cx, cz), (cx * CHUNK - this.vx) * s, (cz * CHUNK - this.vz) * s, CHUNK * s + 0.5, CHUNK * s + 0.5);
       }
+    g.restore();
     // landmarks: the big places always, the rest when zoomed in, never on top of each other
     g.textAlign = "center";
     g.textBaseline = "middle";
@@ -466,7 +479,7 @@ export class WorldMap {
     cand.sort((a, b) => a.tier - b.tier);
     const taken: [number, number, number, number][] = [];
     for (const m of cand) {
-      const x = sx(m.x), y = sz(m.z);
+      const [x, y] = scr(m.x, m.z);
       g.font = m.tier === 0 ? "800 13px ui-monospace, Menlo, monospace" : "700 11px ui-monospace, Menlo, monospace";
       const w = g.measureText(m.label).width + 10;
       const box: [number, number, number, number] = [x - w / 2 - 3, y - 12, x + w / 2 + 3, y + 12];
@@ -478,7 +491,7 @@ export class WorldMap {
       g.fillText(m.label, x, y + 1);
     }
     // the mist: clear around you, thickening towards the edge of what you can see
-    const fx = sx(P.x), fy = sz(P.z);
+    const [fx, fy] = scr(P.x, P.z);
     const fog = g.createRadialGradient(fx, fy, SIGHT * 0.62 * s, fx, fy, SIGHT * s);
     fog.addColorStop(0, "rgba(14,16,19,0)");
     fog.addColorStop(0.6, "rgba(14,16,19,0.75)");
@@ -500,7 +513,7 @@ export class WorldMap {
     g.globalAlpha = 1;
     // the quest target, the waypoint, you
     const pin = (x: number, z: number, pf: number, col: string, label = "") => {
-      const X = sx(x), Y = sz(z);
+      const [X, Y] = scr(x, z);
       const here = pf === f;
       g.globalAlpha = here ? 1 : 0.55;
       g.fillStyle = col;
@@ -524,8 +537,7 @@ export class WorldMap {
     if (this.quest && inSight(P.x, P.z, P.f, this.quest.x, this.quest.z, this.quest.f)) pin(this.quest.x, this.quest.z, this.quest.f, "#ff2e7e", "QUEST");
     if (this.waypoint) pin(this.waypoint.x, this.waypoint.z, this.waypoint.f, "#35d6ff", this.waypoint.label);
     g.save();
-    g.translate(sx(P.x), sz(P.z));
-    g.rotate(-P.yaw);
+    g.translate(fx, fy);
     g.globalAlpha = P.f === f ? 1 : 0.4;
     g.fillStyle = "#fff";
     g.strokeStyle = "#000";
@@ -540,6 +552,19 @@ export class WorldMap {
     g.fill();
     g.restore();
     g.globalAlpha = 1;
+    // north, on the edge of what you can see
+    {
+      const r = Math.min(SIGHT * s * 0.97, Math.min(W, H) / 2 - 18);
+      const nx = fx + rs * r, ny = fy - rc * r;
+      g.fillStyle = "rgba(10,10,12,0.8)";
+      g.beginPath();
+      g.arc(nx, ny, 12, 0, 7);
+      g.fill();
+      g.fillStyle = "#fff";
+      g.font = "800 13px ui-monospace, Menlo, monospace";
+      g.textAlign = "center";
+      g.fillText("N", nx, ny + 1);
+    }
     // scale bar and the note
     const m = [10, 20, 50, 100, 200][[10, 20, 50, 100, 200].findIndex((v) => v * s > 80)] ?? 200;
     g.fillStyle = "rgba(255,255,255,0.8)";

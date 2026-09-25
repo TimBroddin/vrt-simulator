@@ -8,7 +8,7 @@ bun run dev     # http://localhost:3000
 bun run build   # static site in dist/
 ```
 
-URL options: `?seed=1234` (same building every time), `?floor=7` (start floor), `?debug` (fps / chunk stats).
+URL options: `?seed=1234` (same building every time), `?floor=7` (start floor; the default is 0, the ground floor), `?debug` (fps / chunk stats).
 
 On phones and tablets: left thumb walks (push far to run), right thumb looks, plus buttons for E, QUEST, LAMP, FOTO, KAART (the plattegrond) and pause. Play in landscape.
 
@@ -16,7 +16,7 @@ Controls: WASD / ZQSD to walk, Shift to run, mouse to look, E to use things (lif
 
 ## De plattegrond
 
-M (or KAART) opens a misty map of what's around you, drawn from the floor plans: about 100 m, and one floor up or down (`SIGHT` in `src/worldmap.ts`). Beyond that it's fog. Drag to pan, scroll or pinch to zoom, pick a floor on the right. Click a spot to set a waypoint, or pick a place from the list (Sporthal, De Mess, Studio Brussel, Kabinet CEO, ...) and it finds the nearest one in sight. Places out of sight aren't on the list at all. The waypoint shows up on the minimap and as a line at the bottom of the screen: the direction and distance, or on another floor, how many floors up or down and the nearest stairs or lift. See `src/worldmap.ts`.
+M (or KAART) opens a misty map of what's around you, turned so the way you're facing is up, drawn from the floor plans: about 100 m, and one floor up or down (`SIGHT` in `src/worldmap.ts`). Beyond that it's fog. Drag to pan, scroll or pinch to zoom, pick a floor on the right. Click a spot to set a waypoint, or pick a place from the list (Sporthal, De Mess, Studio Brussel, Kabinet CEO, ...) and it finds the nearest one in sight. Places out of sight aren't on the list at all. The waypoint shows up on the minimap and as a line at the bottom of the screen: the direction and distance, or on another floor, how many floors up or down and the nearest stairs or lift. See `src/worldmap.ts`.
 
 ## Quests
 
@@ -66,4 +66,4 @@ Some control rooms and server rooms are the bewaking: a wall of monitors, a desk
 
 ## De middengang and the RTBF
 
-Just north of the start, a glass corridor (de middengang) runs east–west through the whole building on the first floor. On every other floor the gap between the two is open air, and the corridors end in windows onto it. Glass links branch off to both sides over an open-air gap. South of it is the VRT. North of it is the RTBF: the same building mirrored, with French labels, RTBF posters and no VRT art. The middengang row is `MID_CZ` in `src/config.ts`.
+Just north of the start, a glass corridor (de middengang) runs east–west through the whole building on the ground floor. On every other floor the gap between the two is open air, and the corridors end in windows onto it. Glass links branch off to both sides over an open-air gap. South of it is the VRT. North of it is the RTBF: the same building mirrored, with French labels, RTBF posters and no VRT art. The middengang row is `MID_CZ` in `src/config.ts`.
