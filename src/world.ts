@@ -1,10 +1,10 @@
 // Streams chunk-floors in and out around the player using a worker pool, and
 // answers physical queries (collision boxes, ground height).
 import * as THREE from "three";
-import { CELL, CH, FLOOR_MAX, FLOOR_MIN, H, ST_HALF, ST_U1, ST_U2, ST_VM } from "./config";
+import { CEIL, CELL, CH, FLOOR_MAX, FLOOR_MIN, H, ST_HALF, ST_U1, ST_U2, ST_VM } from "./config";
 import type { Built } from "./builder";
 import type { ElevOut } from "./chunk";
-import { K, gardenRampY, gardenStair, getStructure, kindAt, stairFrame } from "./layout";
+import { K, gardenRampY, gardenStair, getStructure, kindAt, stairFrame, towerGround, towerSpec } from "./layout";
 import { floorDiv } from "./rng";
 
 export interface ElevRT {
@@ -300,6 +300,12 @@ export class World {
         for (const c of cands) if (Math.abs(c - y) < 0.45 && (best === null || c > best)) best = c;
         return best;
       }
+    }
+    // the spiral stair of De Toren
+    const ts = towerSpec(getStructure(cx, cz), H, CEIL);
+    if (ts && y >= ts.y0 - 0.5 && y <= ts.y0 + ts.deck + 0.5) {
+      const tg = towerGround(ts, x, z, y);
+      if (tg !== undefined) return tg;
     }
     const k = kindAt(f, gx, gz);
     if (k === K.STAIR) {

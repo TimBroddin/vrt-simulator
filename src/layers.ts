@@ -77,10 +77,14 @@ export const L = {
   ROLLER: 72, // a loading-dock roller door
   HAZARD: 73, // yellow and black stripes
   CCTV: 74, // the security camera feeds, 3 x 2, sampled from a render target
+  PANELS: 75, // Marconi: warm wooden acoustic panels
+  CYC: 76, // De Toren: the painted sky, horizon at the bottom
+  SHOWSIGN: 77, // 2 x 4: studio numbers, APPLAUS, show logos, Marconi, Toots
+  FLATS: 78, // 2 x 2 painted decor flats
 } as const;
 
 // artworks and their museum labels (8 labels per layer) follow the painted layers
-export const ART0 = 75;
+export const ART0 = 79;
 export const LABEL0 = ART0 + ART.length;
 export const LAYER_COUNT = LABEL0 + Math.ceil(ART.length / 8);
 
@@ -113,3 +117,5 @@ SCALE[L.LEDS] = 0.6;
 SCALE[L.PLYWOOD] = 2.4;
 SCALE[L.WALLPAPER] = 1.2;
 SCALE[L.HAZARD] = 0.8;
+SCALE[L.PANELS] = 2.4;
+SCALE[L.CYC] = 6 * 3.6 + 2.7; // one sky from the floor to the ceiling of De Toren

@@ -48,10 +48,13 @@ function enterable(p: Plan, r: Room) {
 
 const TIER: Partial<Record<number, number>> = {
   [RT.MESS]: 0, [RT.KETNET]: 1, [RT.SPORZA]: 1, [RT.SET]: 1, [RT.RADIO]: 1, [RT.COSTUME]: 1, [RT.VIPBAR]: 1, [RT.VIPRESTO]: 1,
-  [RT.CEO]: 1, [RT.DOCK]: 1, [RT.SECURITY]: 1, [RT.CANTEEN]: 2, [RT.STUDIO]: 2, [RT.DRESSING]: 2, [RT.LOUNGE]: 2,
+  [RT.CEO]: 1, [RT.DOCK]: 1, [RT.SECURITY]: 1, [RT.TOOTS]: 1, [RT.CANTEEN]: 2, [RT.STUDIO]: 2, [RT.DRESSING]: 2, [RT.LOUNGE]: 2,
 };
 
 function atriumName(a: NonNullable<Structure["atrium"]>, fr: boolean) {
+  if (a.kind === "decor") return fr ? "RUE DES DÉCORS" : "DECORSTRAAT";
+  if (a.kind === "marconi") return "STUDIO MARCONI";
+  if (a.kind === "tower") return fr ? "LA TOUR" : "DE TOREN";
   return a.kind === "hall" ? (fr ? "SALLE DE SPORT" : "SPORTHAL") : a.kind === "props" ? (fr ? "ACCESSOIRES" : "REKWISIETEN") : a.kind === "garden" ? (fr ? "JARDIN INTÉRIEUR" : "PLANTENTUIN") : "ATRIUM";
 }
 
@@ -61,7 +64,7 @@ function landmarks(f: number, cx: number, cz: number): Mark[] {
   const at = (lx: number, lz: number) => ({ x: (cx * CH + lx) * CELL, z: (cz * CH + lz) * CELL });
   if (st.mid && f === MID_FLOOR && cx % 3 === 0) out.push({ ...at(6, 6), label: "MIDDENGANG", tier: 0 });
   const a = st.atrium;
-  if (a && f >= a.f0 && f <= a.f1) out.push({ ...at((a.x0 + a.x1 + 1) / 2, (a.z0 + a.z1 + 1) / 2), label: atriumName(a, fr), tier: a.kind === "hall" || a.kind === "props" ? 0 : 1 });
+  if (a && f >= a.f0 && f <= a.f1) out.push({ ...at((a.x0 + a.x1 + 1) / 2, (a.z0 + a.z1 + 1) / 2), label: atriumName(a, fr), tier: a.kind === "lobby" || a.kind === "garden" ? 1 : 0 });
   if (st.special === "park" && f >= 0 && f < FLOOR_MAX) out.push({ ...at(6, 6), label: fr ? "PARKING-TOUR" : "PARKEERTOREN", tier: 0 });
   for (const r of p.rooms) {
     const tier = TIER[r.type];
@@ -97,7 +100,7 @@ function structFinder(pick: (st: Structure, pf: number) => Found | null, R = 4):
 const atriumOf = (kind: string) => structFinder((st, pf) => {
   const a = st.atrium;
   if (!a || a.kind !== kind) return null;
-  return { x: (st.cx * CH + (a.x0 + a.x1 + 1) / 2) * CELL, z: (st.cz * CH + (a.z0 + a.z1 + 1) / 2) * CELL, f: Math.max(a.f0, Math.min(kind === "hall" ? a.f0 : a.f1, pf)) };
+  return { x: (st.cx * CH + (a.x0 + a.x1 + 1) / 2) * CELL, z: (st.cz * CH + (a.z0 + a.z1 + 1) / 2) * CELL, f: Math.max(a.f0, Math.min(kind === "props" || kind === "garden" || kind === "lobby" ? a.f1 : a.f0, pf)) };
 });
 
 // search the rooms on the floors around you, nearest floors first
@@ -151,6 +154,9 @@ const DESTS: { group: string; items: { name: string; find: Finder }[] }[] = [
     items: [
       { name: "Sporthal", find: atriumOf("hall") },
       { name: "Rekwisieten", find: atriumOf("props") },
+      { name: "De Toren", find: atriumOf("tower") },
+      { name: "Decorstraat", find: atriumOf("decor") },
+      { name: "Studio Marconi", find: atriumOf("marconi") },
       { name: "De Mess", find: structFinder((st, pf) => {
         const fs = messFloors(st);
         if (!fs.length) return null;
@@ -173,6 +179,7 @@ const DESTS: { group: string; items: { name: string; find: Finder }[] }[] = [
       { name: "Sporza", find: ofType(RT.SPORZA) },
       { name: "Decor Thuis", find: roomFinder((p, r) => r.type === RT.SET && setIsThuis(p, r)) },
       { name: "Decor De Kampioenen", find: roomFinder((p, r) => r.type === RT.SET && !setIsThuis(p, r)) },
+      { name: "Studio Toots", find: ofType(RT.TOOTS) },
       { name: "Nieuwsstudio", find: ofType(RT.STUDIO) },
     ],
   },

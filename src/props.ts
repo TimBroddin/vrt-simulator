@@ -1341,6 +1341,239 @@ export function buildProp(b: Builder, pr: Prop) {
       }
       break;
     }
+    case "lorry": {
+      // a white lorry with the VRT drop on its sides, front at +z
+      const body = sp(L.WHITE, [0.92, 0.92, 0.9]);
+      const side: Spec = { layer: L.VRT_LOGO, uv: [-0.9, -0.15, 1.9, 1.15] };
+      fbox(b, fr, 0, 0.95, -1.2, 2.5, 2.9, 6.6, { all: body, px: side, nx: side }, true);
+      fbox(b, fr, 0, 0.55, -1.2, 2.3, 0.4, 6.6, DARK);
+      fbox(b, fr, 0, 0.6, 3.25, 2.45, 2.6, 2.1, { all: sp(L.WHITE, [0.85, 0.1, 0.35]) }, true);
+      fbox(b, fr, 0, 1.9, 4.31, 2.2, 0.9, 0.02, sp(L.SCREEN, [0.5, 0.55, 0.6]));
+      for (const x of [-0.9, 0.9]) fbox(b, fr, x, 1.0, 4.32, 0.35, 0.18, 0.02, { layer: L.WHITE, emit: [1.4, 1.35, 1.2] });
+      for (const [x, z] of [[-1.15, 3.4], [1.15, 3.4], [-1.15, -0.6], [1.15, -0.6], [-1.15, -3.6], [1.15, -3.6]]) {
+        const w = fr.p(x!, 0.5, z!);
+        b.geom(CYL, w[0], w[1], w[2], fr.rot + Math.PI / 2, 0.5, 0.35, 0.5, DARK, Math.PI / 2);
+      }
+      fbox(b, fr, 0, 0.95, -4.52, 2.5, 2.9, 0.02, { all: sp(L.STEEL, [0.8, 0.8, 0.82]) });
+      for (const x of [-1.1, 1.1]) fbox(b, fr, x, 0.7, -4.55, 0.2, 0.12, 0.02, { layer: L.WHITE, emit: [1.4, 0.1, 0.05] });
+      break;
+    }
+    case "flat": {
+      // two or three decor flats leaning against the wall, painted side out
+      const n = rng.int(2, 3);
+      for (let k = 0; k < n; k++) {
+        const w = rng.range(2.2, 2.9), h = rng.range(3.2, 4.4), x = rng.range(-0.3, 0.3);
+        const lean = 0.12 + k * 0.1, zb = 0.35 + k * 0.12;
+        const f = new Frame(...fr.p(x, 0, zb - (lean * h) / 2), fr.rot);
+        const up: V3 = [f.s * -lean, 1, f.c * -lean];
+        const ul = Math.hypot(up[0], up[1], up[2]);
+        const upn: V3 = [up[0] / ul, up[1] / ul, up[2] / ul];
+        const az: V3 = [f.s * (1 / ul), lean / ul, f.c * (1 / ul)];
+        const q = rng.int(0, 3);
+        const paint: Spec = { layer: L.FLATS, uv: [(q % 2) * 0.5, q < 2 ? 0.5 : 0, (q % 2) * 0.5 + 0.5, q < 2 ? 1 : 0.5] };
+        b.obox(f.p(0, h / 2, 0), f.ax, upn, az, [w / 2, h / 2, 0.025], { all: sp(L.PLYWOOD), pz: rng.chance(0.85) ? paint : sp(L.PLYWOOD) });
+      }
+      solidRect(b, fr, 0, 0.4, 3.0, 0.8);
+      break;
+    }
+    case "blokjes": {
+      // the blocks from Blokken, stacked
+      const cols: RGB[] = [[0.9, 0.2, 0.15], [0.95, 0.78, 0.1], [0.18, 0.5, 0.9], [0.22, 0.75, 0.35], [0.62, 0.3, 0.88], [0.95, 0.5, 0.12]];
+      for (let r = 0; r < 3; r++)
+        for (let k = 0; k < 3 - r; k++) if (rng.chance(0.85)) fbox(b, fr, -0.8 + k * 0.8 + r * 0.4, r * 0.78, 0.45, 0.76, 0.76, 0.76, sp(L.WHITE, rng.pick(cols)));
+      solidRect(b, fr, 0, 0.45, 2.4, 0.8);
+      break;
+    }
+    case "showsign": {
+      const face: Spec = pr.b ? { layer: L.SHOWSIGN, emit: [1.4, 1.4, 1.4], uv: cellUV(pr.a, 2, 4) } : { layer: L.SHOWSIGN, uv: cellUV(pr.a, 2, 4) };
+      const [w, h] = pr.a < 2 ? [2.4, 1.2] : pr.a === 3 ? [1.4, 0.7] : [2.0, 1.0];
+      fbox(b, fr, 0, -h / 2, 0.02, w, h, 0.08, { all: DARK, pz: face });
+      break;
+    }
+    case "tribune": {
+      // the audience: rows rising away from the set (+z), red seats, two aisles, a rail at the back
+      const W = 11.2, rows = 7;
+      const riser = sp(L.CARPET_GREY, [0.25, 0.25, 0.28]);
+      const seat = sp(L.FABRIC, [0.62, 0.08, 0.1]);
+      for (let k = 0; k < rows; k++) {
+        const z = 5.6 - k * 0.8, y = k * 0.42;
+        if (k) fbox(b, fr, 0, 0, z - 0.4, W, y, 0.8, { all: riser, pz: sp(L.WHITE, [0.2, 0.2, 0.22]) });
+        fbox(b, fr, 0, y - 0.01, z + 0.39, W, 0.012, 0.02, { layer: L.WHITE, emit: [0.3, 0.3, 0.35] });
+        for (let x = -W / 2 + 0.4; x < W / 2 - 0.3; x += 0.56) {
+          if (Math.abs(Math.abs(x) - 2.9) < 0.45) continue;
+          fbox(b, fr, x, y + 0.42, z - 0.1, 0.48, 0.08, 0.44, seat);
+          fbox(b, fr, x, y + 0.5, z - 0.34, 0.48, 0.45, 0.06, seat);
+          fbox(b, fr, x, y, z - 0.1, 0.05, 0.42, 0.05, DARK);
+        }
+      }
+      fbox(b, fr, 0, rows * 0.42, 0.25, W, 0.05, 0.05, STEEL);
+      for (let x = -W / 2; x <= W / 2; x += 1.4) fbox(b, fr, x, (rows - 1) * 0.42, 0.25, 0.04, 1.05, 0.04, STEEL);
+      solidRect(b, fr, 0, 3.0, W, 5.6);
+      break;
+    }
+    case "talkset": {
+      // Van Gils & gasten: an LED wall, a riser, the desk, a sofa for the guests, a band corner; front at +z
+      fbox(b, fr, 0, 0.3, 0.15, 9.0, 4.2, 0.1, { all: DARK, pz: { layer: L.SHOWSIGN, emit: [0.95, 0.95, 1.0], uv: cellUV(4, 2, 4) } });
+      fbox(b, fr, 0, 0, 2.4, 8.0, 0.3, 4.0, { all: sp(L.BLACK, [1.6, 1.6, 1.7]), py: sp(L.WOOD_FLOOR, [0.4, 0.3, 0.25]) }, true);
+      fbox(b, fr, 0, 0.02, 4.41, 8.0, 0.04, 0.02, { layer: L.WHITE, emit: [0.9, 0.5, 1.2] });
+      fbox(b, fr, -1.2, 0.3, 2.6, 2.6, 0.75, 0.8, { all: sp(L.WHITE, [0.9, 0.88, 0.85]), pz: { layer: L.WHITE, emit: [0.35, 0.3, 0.45] } });
+      fbox(b, fr, -1.2, 1.05, 2.55, 2.7, 0.05, 0.95, sp(L.WOOD_FLOOR, [0.35, 0.22, 0.14]));
+      chair(b, fr, -1.2, 1.9, Math.PI);
+      const sofa = sp(L.FABRIC, [0.2, 0.25, 0.45]);
+      fbox(b, new Frame(...fr.p(1.8, 0.3, 2.4), fr.rot - 0.5), 0, 0, 0, 2.2, 0.45, 0.85, sofa);
+      fbox(b, new Frame(...fr.p(1.8, 0.3, 2.4), fr.rot - 0.5), 0, 0.45, -0.35, 2.2, 0.5, 0.2, sofa);
+      // drums
+      for (const [x, z, r] of [[3.4, 1.3, 0.3], [3.9, 1.6, 0.22], [3.0, 1.8, 0.2]] as const) cyl(b, fr, x, 0.3, z, r, 0.45, sp(L.WHITE, [0.7, 0.1, 0.12]));
+      cyl(b, fr, 3.5, 0.3, 0.8, 0.02, 1.2, STEEL);
+      b.geom(CYL, ...fr.p(3.5, 1.5, 0.8), 0, 0.35, 0.01, 0.35, sp(L.STEEL, [1.1, 0.95, 0.5]));
+      break;
+    }
+    case "blokkenset": {
+      // Blokken: a wall of glowing blocks, the logo, the host in the middle, two contestants
+      const cols: RGB[] = [[1.3, 0.25, 0.2], [1.3, 1.05, 0.15], [0.25, 0.7, 1.3], [0.3, 1.1, 0.45], [0.9, 0.4, 1.3], [1.3, 0.7, 0.18]];
+      fbox(b, fr, 0, 0, 0.12, 8.6, 5.4, 0.12, DARK);
+      for (let r = 0; r < 8; r++)
+        for (let k = 0; k < 11; k++) {
+          if (r > 4 && rng.chance(0.3 + (r - 4) * 0.2)) continue;
+          fbox(b, fr, -3.9 + k * 0.78, 0.1 + r * 0.64, 0.24, 0.72, 0.58, 0.1, { layer: L.WHITE, emit: rng.pick(cols) });
+        }
+      fbox(b, fr, 0, 5.5, 0.2, 4.0, 1.0, 0.08, { all: DARK, pz: { layer: L.SHOWSIGN, emit: [1.2, 1.2, 1.2], uv: cellUV(5, 2, 4) } });
+      fbox(b, fr, 0, 0, 2.6, 7.0, 0.2, 3.4, { all: sp(L.BLACK, [1.6, 1.6, 1.7]), py: sp(L.TILEDARK, [0.6, 0.6, 0.7]) }, true);
+      fbox(b, fr, 0, 0.2, 3.4, 0.9, 1.0, 0.6, { all: sp(L.WHITE, [0.2, 0.2, 0.25]), pz: { layer: L.WHITE, emit: [0.25, 0.7, 1.3] } });
+      for (const s of [-1, 1]) {
+        const f = new Frame(...fr.p(s * 2.3, 0.2, 3.0), fr.rot + s * 0.35);
+        fbox(b, f, 0, 0, 0, 1.2, 1.0, 0.6, { all: sp(L.WHITE, [0.2, 0.2, 0.25]), pz: { layer: L.WHITE, emit: s < 0 ? [1.3, 0.25, 0.2] : [1.3, 1.05, 0.15] } });
+        fbox(b, f, 0, 1.0, 0, 1.25, 0.04, 0.65, WHITE);
+        fbox(b, f, -0.3, 1.04, 0.1, 0.12, 0.03, 0.12, { layer: L.WHITE, emit: [1.5, 0.2, 0.1] });
+      }
+      break;
+    }
+    case "stage": {
+      // a dark stage, pr.a wide, pr.b deep, from the wall (+z into the room)
+      const w = pr.a, d = pr.b;
+      fbox(b, fr, 0, 0, d / 2, w, 0.6, d, { all: sp(L.BLACK, [1.2, 1.2, 1.25]), py: sp(L.CARPET_GREY, [0.3, 0.3, 0.32]) }, true);
+      fbox(b, fr, 0, 0.6, d - 0.03, w, 0.01, 0.06, sp(L.WHITE, [0.85, 0.85, 0.8]));
+      break;
+    }
+    case "hightable": {
+      cyl(b, fr, 0, 0, 0, 0.3, 0.03, DARK);
+      cyl(b, fr, 0, 0.03, 0, 0.04, 1.05, DARK);
+      cyl(b, fr, 0, 1.08, 0, 0.45, 0.03, sp(L.WHITE, [0.08, 0.08, 0.1]));
+      cyl(b, fr, 0, 1.08, 0, 0.46, 0.025, sp(L.WOOD_FLOOR, [0.8, 0.6, 0.3]));
+      if (pr.a) {
+        fbox(b, fr, 0, 1.11, 0.05, 0.35, 0.015, 0.24, STEEL);
+        b.obox(fr.p(0, 1.23, -0.08), fr.ax, [fr.s * -0.26, 0.97, fr.c * -0.26] as V3, [fr.s * 0.97, 0.26, fr.c * 0.97] as V3, [0.17, 0.12, 0.006], { all: STEEL, pz: { layer: L.WHITE, emit: [0.55, 0.6, 0.95] } });
+      }
+      solidRect(b, fr, 0, 0, 0.9, 0.9);
+      break;
+    }
+    case "projscreen": {
+      // a white screen with the name of the room projected on it
+      const sh = pr.b || 2.9, sw = sh * 1.72;
+      fbox(b, fr, 0, -0.1, 0.03, sw + 0.2, 0.12, 0.12, DARK);
+      fbox(b, fr, 0, -0.1 - sh, 0.06, sw, sh, 0.01, { all: WHITE, pz: { layer: L.SHOWSIGN, emit: [0.75, 0.72, 0.7], uv: cellUV(pr.a, 2, 4) } });
+      break;
+    }
+    case "truss": {
+      // a box truss with spots, a projector and speakers hanging from it
+      const len = pr.a;
+      for (const [y, z] of [[0, -0.2], [0, 0.2], [0.4, -0.2], [0.4, 0.2]]) fbox(b, fr, 0, y!, z!, len, 0.04, 0.04, STEEL);
+      for (let x = -len / 2; x <= len / 2; x += 0.5) {
+        bar(b, fr.p(x, 0, -0.2), fr.p(x + 0.25, 0.4, -0.2), 0.02, STEEL);
+        bar(b, fr.p(x, 0, 0.2), fr.p(x + 0.25, 0.4, 0.2), 0.02, STEEL);
+      }
+      for (const x of [-len / 2 + 0.3, len / 2 - 0.3]) fbox(b, fr, x, 0.4, 0, 0.012, 3.5, 0.012, DARK);
+      for (let x = -len / 2 + 0.7; x < len / 2 - 0.4; x += rng.range(0.9, 1.5)) {
+        const f = new Frame(...fr.p(x, 0, rng.pick([-0.2, 0.2])), fr.rot + rng.range(-0.6, 0.6));
+        fbox(b, f, 0, -0.08, 0, 0.03, 0.1, 0.03, DARK);
+        fbox(b, f, 0, -0.35, 0.05, 0.22, 0.24, 0.32, { all: DARK, pz: rng.chance(0.4) ? { layer: L.WHITE, emit: [1.6, 1.3, 0.9] } : GREY });
+      }
+      fbox(b, fr, 0.4, -0.5, 0, 0.5, 0.2, 0.45, { all: WHITE, pz: DARK });
+      cyl(b, fr, 0.4, -0.45, 0.25, 0.06, 0.02, { layer: L.WHITE, emit: [1.6, 1.6, 1.8] });
+      if (pr.b < 1000) for (const x of [-len / 2 + 0.6, len / 2 - 0.6]) fbox(b, fr, x, -0.9, 0, 0.5, 0.75, 0.45, { all: DARK, pz: sp(L.CARPET_GREY, [0.12, 0.12, 0.13]) });
+      break;
+    }
+    case "bistro": {
+      // a bistro chair: black steel ring back, a wooden seat
+      const f = new Frame(pr.x, pr.y, pr.z, pr.rot);
+      cyl(b, f, 0, 0.44, 0, 0.21, 0.03, sp(L.WOOD_FLOOR, [0.85, 0.62, 0.35]));
+      for (const [x, z] of [[-0.15, -0.15], [0.15, -0.15], [-0.15, 0.15], [0.15, 0.15]]) fbox(b, f, x!, 0, z!, 0.02, 0.44, 0.02, DARK);
+      for (let k = 0; k <= 6; k++) {
+        const a0 = Math.PI * (0.15 + (k / 6) * 0.7);
+        fbox(b, f, Math.cos(a0) * 0.2, 0.47 + Math.sin(a0) * 0.36, 0.19, 0.03, 0.03, 0.02, DARK);
+      }
+      break;
+    }
+    case "tallwindow": {
+      const h = pr.a;
+      fbox(b, fr, 0, 0.3, 0.02, 1.4, h, 0.04, { all: GREY, pz: { layer: L.FROSTED, emit: [1.5, 1.55, 1.6], uv: [0, 0, 1, 2] } });
+      for (const y of [0.3, 0.3 + h / 2, 0.3 + h]) fbox(b, fr, 0, y - 0.03, 0.05, 1.46, 0.06, 0.06, GREY);
+      break;
+    }
+    case "sunlamp": {
+      // the sun: a huge round softbox on the wall
+      b.geom(CYL, ...fr.p(0, 0, 0.06), fr.rot, 2.6, 0.12, 2.6, DARK, Math.PI / 2);
+      b.geom(CYL, ...fr.p(0, 0, 0.2), fr.rot, 2.4, 0.16, 2.4, { layer: L.WHITE, emit: [2.2, 2.0, 1.6] }, Math.PI / 2);
+      for (const a0 of [0, 1.57, 3.14, 4.71]) fbox(b, fr, Math.cos(a0) * 2.5, Math.sin(a0) * 2.5 - 0.1, 0.1, 0.1, 0.2, 0.2, STEEL);
+      break;
+    }
+    case "cutout": {
+      // a tree cut out of plywood, painted, on a strut with a sandbag
+      const h = rng.range(3.2, 4.6);
+      fbox(b, fr, 0, 0, 0, 0.35, h * 0.55, 0.04, sp(L.WOOD_FLOOR, [0.45, 0.3, 0.18]));
+      b.quad(fr.p(-h * 0.35, h * 0.35, 0.01), [fr.c * h * 0.7, 0, -fr.s * h * 0.7], [0, h * 0.7, 0], fr.az, { layer: L.FOLIAGE, tint: [0.7, 1.0, 0.65], uv: [0, 0, 1, 1] }, 0);
+      b.quad(fr.p(h * 0.35, h * 0.35, -0.01), [-fr.c * h * 0.7, 0, fr.s * h * 0.7], [0, h * 0.7, 0], [-fr.az[0], 0, -fr.az[2]], { layer: L.FOLIAGE, tint: [0.62, 0.48, 0.32], uv: [1, 0, 0, 1] }, 0);
+      bar(b, fr.p(0, h * 0.5, -0.05), fr.p(0, 0.05, -1.1), 0.05, sp(L.WOOD_FLOOR, [0.6, 0.48, 0.32]));
+      fbox(b, fr, 0, 0, -1.05, 0.5, 0.18, 0.35, sp(L.FABRIC, [0.36, 0.3, 0.2]));
+      solidRect(b, fr, 0, -0.5, 0.6, 1.2);
+      break;
+    }
+    case "parkbench": {
+      const wood = sp(L.WOOD_FLOOR, [0.55, 0.36, 0.2]);
+      for (const z of [-0.18, 0, 0.18]) fbox(b, fr, 0, 0.44, z, 1.8, 0.04, 0.12, wood);
+      for (const y of [0.62, 0.78]) b.obox(fr.p(0, y, -0.32 - (y - 0.62) * 0.2), fr.ax, UP, fr.az, [0.9, 0.05, 0.02], wood);
+      for (const x of [-0.75, 0.75]) {
+        fbox(b, fr, x, 0, 0, 0.06, 0.46, 0.5, DARK);
+        fbox(b, fr, x, 0.46, -0.3, 0.05, 0.45, 0.05, DARK);
+      }
+      solidRect(b, fr, 0, 0, 1.9, 0.7);
+      break;
+    }
+    case "lamppost": {
+      cyl(b, fr, 0, 0, 0, 0.14, 0.3, DARK, CYL6);
+      cyl(b, fr, 0, 0.3, 0, 0.05, 3.0, DARK);
+      b.geom(BLOB, pr.x, pr.y + 3.45, pr.z, 0, 0.25, 0.28, 0.25, { layer: L.WHITE, emit: [1.8, 1.5, 1.0] });
+      cyl(b, fr, 0, 3.7, 0, 0.18, 0.05, DARK);
+      b.solid(pr.x - 0.15, pr.z - 0.15, pr.x + 0.15, pr.z + 0.15);
+      break;
+    }
+    case "filmlight": {
+      // a big lamp on a tripod, tilted up at the tower (pr.a: tilt in degrees)
+      for (let k = 0; k < 3; k++) {
+        const a0 = (k / 3) * Math.PI * 2;
+        bar(b, fr.p(Math.cos(a0) * 0.6, 0, Math.sin(a0) * 0.6), fr.p(0, 1.4, 0), 0.04, DARK);
+      }
+      cyl(b, fr, 0, 1.4, 0, 0.035, 1.2, STEEL);
+      const tilt = (pr.a * Math.PI) / 180;
+      const hc = fr.p(0, 2.7, 0);
+      const fwd: V3 = [fr.s * Math.cos(tilt), Math.sin(tilt), fr.c * Math.cos(tilt)];
+      const upv: V3 = [-fr.s * Math.sin(tilt), Math.cos(tilt), -fr.c * Math.sin(tilt)];
+      b.obox(hc, fr.ax, upv, fwd, [0.35, 0.35, 0.4], { all: DARK, pz: { layer: L.WHITE, emit: [2.2, 2.0, 1.6] } });
+      solidRect(b, fr, 0, 0, 1.0, 1.0);
+      break;
+    }
+    case "windfan": {
+      fbox(b, fr, 0, 0, 0, 1.2, 0.5, 0.8, DARK, true);
+      const c = fr.p(0, 1.6, 0.1);
+      b.geom(CYL, c[0], c[1], c[2], fr.rot, 1.1, 0.4, 1.1, sp(L.STEEL, [0.5, 0.52, 0.55]), Math.PI / 2);
+      b.geom(CYL, ...fr.p(0, 1.6, 0.32), fr.rot, 1.0, 0.02, 1.0, DARK, Math.PI / 2);
+      for (let k = 0; k < 5; k++) {
+        const a0 = (k / 5) * Math.PI * 2;
+        fbox(b, new Frame(...fr.p(0, 0, 0.35), fr.rot), Math.cos(a0) * 0.45, 1.6 + Math.sin(a0) * 0.45 - 0.08, 0, 0.8, 0.16, 0.02, sp(L.STEEL, [0.8, 0.8, 0.82]));
+      }
+      fbox(b, fr, 0, 0.5, 0.1, 0.2, 0.7, 0.2, DARK);
+      break;
+    }
     case "puddle": {
       const s = pr.a;
       b.quad(fr.p(-s, 0.006, -s * 0.7), [fr.c * 2 * s, 0, -fr.s * 2 * s], [fr.s * 1.4 * s, 0, fr.c * 1.4 * s], [0, 1, 0], { layer: L.PUDDLE, uv: [0, 0, 1, 1] }, 0);

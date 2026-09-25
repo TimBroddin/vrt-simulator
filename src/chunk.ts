@@ -1,13 +1,13 @@
 // Turns a furnished plan into geometry: floors, ceilings, walls with openings,
 // stairwells, elevator cars and the courtyard facades.
 import { CEIL, CELL, CH, CHUNK, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, MID_FLOOR, ST_HALF, ST_U1, ST_U2, ST_VM, T, isRtbf } from "./config";
-import { Builder, LightCtx, UP, type Built, type RGB, type Spec, type V3 } from "./builder";
+import { Builder, Frame, LightCtx, UP, fbox, type Built, type RGB, type Spec, type V3 } from "./builder";
 import { getFurnished } from "./furnish";
-import { K, RT, SK, gardenStair, getStructure, kindAt, roomAnomaly, sideAt, stairFrame, type GardenStair, type Plan } from "./layout";
+import { K, RT, SK, TALL, gardenStair, getStructure, kindAt, marconiGallery, roomAnomaly, sideAt, stairFrame, tallTop, towerSpec, type GardenStair, type Plan } from "./layout";
 import { hash } from "./rng";
 import { L } from "./layers";
 import { buildFixture, buildProp } from "./props";
-import { CylinderGeometry } from "three";
+import { BufferGeometry, CylinderGeometry, RingGeometry } from "three";
 
 const DUCT = new CylinderGeometry(1, 1, 1, 16, 1, true);
 
@@ -43,6 +43,24 @@ function surf(p: Plan, i: number): Surf {
       if (p.st.atrium?.kind === "hall" && p.zone[i] === 2)
         return { floor: sp(L.SPORTFLOOR), ceil: null, wall: sp(L.PLASTER, [0.95, 0.9, 0.74]), h: CEIL, base: false };
       if (p.st.special === "park") return { floor: sp(L.CONCRETE, [0.75, 0.75, 0.72]), ceil: sp(L.STEEL, [0.7, 0.72, 0.75]), wall: sp(L.PLASTER), h: CEIL, base: false };
+      {
+        const a = p.st.atrium;
+        if (a && TALL.has(a.kind) && a.kind !== "hall" && (p.zone[i] === 1 || p.zone[i] === 2)) {
+          const top = tallTop(a, H, CEIL), x = i % CH, z = (i / CH) | 0;
+          if (a.kind === "decor") {
+            if (x === 5 || x === 6) return { floor: sp(L.CONCRETE, [0.62, 0.62, 0.6]), ceil: null, wall: sp(L.BRICK_DOTS, [0.72, 0.72, 0.72]), h: top, base: false };
+            return { floor: sp(L.BLACK, [1.3, 1.3, 1.35]), ceil: null, wall: sp(L.BLACK, [1.1, 1.1, 1.15]), h: top, base: false };
+          }
+          if (a.kind === "marconi") {
+            const panels = sp(L.PANELS);
+            if (p.zone[i] === 1) return { floor: sp(L.CARPET_GREY, [0.5, 0.5, 0.52]), ceil: null, wall: panels, h: CEIL, base: false };
+            // under the gallery the walls stop at the gallery floor
+            return { floor: sp(L.WOOD_FLOOR, [0.95, 0.9, 0.8]), ceil: null, wall: panels, h: marconiGallery(a, x, z) ? H : top, base: false };
+          }
+          // the painted sky is lit by itself, like a cyclorama
+          return { floor: sp(L.GRASS, [1.1, 1.25, 0.95]), ceil: null, wall: { layer: L.CYC, emit: [0.82, 0.84, 0.86] }, h: top, base: false };
+        }
+      }
       if (p.st.atrium?.kind === "props" && (p.zone[i] === 1 || p.zone[i] === 2))
         return { floor: sp(L.CONCRETE, [0.72, 0.72, 0.7]), ceil: sp(L.CEILMETAL, [0.7, 0.7, 0.72]), wall: sp(L.BRICK_DOTS, [0.85, 0.85, 0.84]), h: CEIL, base: false };
       if (p.st.mid) return { floor: sp(L.TILEDARK, [2.0, 1.9, 1.7]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER), h: CEIL, base: false };
@@ -77,6 +95,7 @@ function surf(p: Plan, i: number): Surf {
         case RT.VIPBAR: return { floor: sp(L.CARPET_FLECK, [0.55, 0.3, 0.38]), ceil: sp(L.BLACK, [0.7, 0.6, 0.75]), wall: sp(L.WOODSLAT, [0.45, 0.32, 0.4]), h: CEIL, base: false };
         case RT.VIPRESTO: return { floor: sp(L.CARPET_BLUE, [0.8, 0.5, 0.45]), ceil: sp(L.CEILTILE, [1.0, 0.95, 0.88]), wall: sp(L.WALLPAPER, [0.9, 0.82, 0.62]), h: CEIL, base: true };
         case RT.CEO: return { floor: sp(L.WOOD_FLOOR, [0.7, 0.5, 0.36]), ceil: sp(L.CEILTILE), wall: sp(L.WOODSLAT, [0.8, 0.62, 0.48]), h: CEIL, base: true };
+        case RT.TOOTS: return { floor: sp(L.WOOD_FLOOR, [0.95, 0.9, 0.8]), ceil: sp(L.SLATWIN, [0.75, 0.62, 0.48]), wall: sp(L.PANELS), h: 3.3, base: false };
         case RT.SECURITY: return { floor: sp(L.CARPET_GREY, [0.45, 0.46, 0.5]), ceil: sp(L.CEILTILE, [0.7, 0.72, 0.75]), wall: sp(L.PLASTER, [0.72, 0.74, 0.76]), h: CEIL, base: true };
         case RT.DOCK: return { floor: sp(L.CONCRETE, [0.62, 0.62, 0.6]), ceil: sp(L.CONCRETE, [0.72, 0.72, 0.7]), wall: sp(L.BRICK, [0.6, 0.62, 0.64]), h: CEIL, base: false };
         case RT.RADIO: return { floor: sp(L.CARPET_GREY, [0.55, 0.55, 0.6]), ceil: sp(L.CEILTILE, [0.45, 0.45, 0.48]), wall: sp(L.FABRIC, [0.3, 0.3, 0.33]), h: CEIL, base: false };
@@ -117,6 +136,7 @@ export function buildChunk(f: number, cx: number, cz: number) {
   const gs = gardenStair(p.st);
   if (gs && f === gs.f0) buildGardenStair(b, gs, cx, cz);
   if (p.st.atrium?.kind === "hall" && f === p.st.atrium.f0) buildHall(b, p);
+  if (p.st.atrium && TALL.has(p.st.atrium.kind) && p.st.atrium.kind !== "hall" && f === p.st.atrium.f0) buildTall(b, p);
   for (const l of fur.lights) buildFixture(b, l);
   for (const pr of fur.props) buildProp(b, pr);
   return { built: b.finish(), elevs };
@@ -409,8 +429,29 @@ function emitSide(b: Builder, p: Plan, i: number, gx: number, gz: number, d: num
       break;
     }
     case SK.RAIL: {
-      if (p.st.atrium?.kind === "hall") {
-        // a window from the corridor down into the sporthal
+      const ak = p.st.atrium?.kind;
+      if (ak === "marconi" && p.zone[i] === 1) {
+        // the gallery of Studio Marconi: glass panels between steel posts, open where the stair lands
+        const gs = gardenStair(p.st)!;
+        b.vrect(axisX, plane(0), A(-half), A(half), y0 - (H - CEIL), y0, Dn, sp(L.PANELS, [0.9, 0.9, 0.9]), 0, y0);
+        const segs: [number, number][] = [];
+        if (axisX === gs.alongX && Math.abs(plane(0) - gs.b) < 0.01) {
+          const g0 = (gs.pc - gs.half - 0.08 - ca) * Pc, g1 = (gs.pc + gs.half + 0.08 - ca) * Pc;
+          const lo = Math.min(g0, g1), hi = Math.max(g0, g1);
+          if (lo > -half) segs.push([-half, lo]);
+          if (hi < half) segs.push([hi, half]);
+        } else segs.push([-half, half]);
+        const post = sp(L.STEEL, [0.8, 0.8, 0.82]);
+        for (const [a0, a1] of segs) {
+          for (let m = a0 + 0.04; m <= a1; m += Math.max(0.6, (a1 - a0) / Math.max(1, Math.round((a1 - a0) / 1.0)))) sbox(m - 0.02, m + 0.02, 0.02, 0.06, 0, 1.05, post);
+          sbox(a0, a1, 0.0, 0.08, 1.02, 1.07, post);
+          b.glass(pt(a0, 0.04, 0.08), [along[0] * (a1 - a0), 0, along[2] * (a1 - a0)], [0, 0.9, 0], [0.8, 0.88, 0.9, 0.16]);
+          seg(a0, a1, 0, 0.1);
+        }
+        break;
+      }
+      if (ak && TALL.has(ak)) {
+        // a window from the corridor down into the sporthal (or the tower, the studios, Marconi)
         face(s0, s1, 0, 0.95);
         face(s0, s1, h - 0.15, h);
         const fr = sp(L.WHITE, [0.25, 0.25, 0.26]);
@@ -600,7 +641,8 @@ function buildGardenStair(b: Builder, g: GardenStair, cx: number, cz: number) {
     b.obox(c, a, up, lx, [len / 2, hh, hw], spec);
   };
   const n = 20, rise = H / n, run = g.run / n;
-  const tread = sp(L.WHITE, [0.55, 0.78, 0.82]);
+  const marconi = getStructure(cx, cz).atrium?.kind === "marconi";
+  const tread = marconi ? sp(L.STEEL, [0.7, 0.72, 0.75]) : sp(L.WHITE, [0.55, 0.78, 0.82]);
   const steel = sp(L.WHITE, [0.1, 0.09, 0.09]);
   for (let i = 0; i < n; i++) {
     const s0 = g.sb + i * run;
@@ -618,8 +660,6 @@ function buildGardenStair(b: Builder, g: GardenStair, cx: number, cz: number) {
       b.obox(P(s, side * (g.half + 0.06), y + 0.5), ax, UP, lx, [0.012, 0.5, 0.012], { all: sp(L.STEEL, [0.85, 0.86, 0.88]) });
     }
   }
-  void cx;
-  void cz;
 }
 
 // Outside the middengang / parkeertoren: grass, the facades of the buildings
@@ -735,4 +775,202 @@ function buildHall(b: Builder, p: Plan) {
     cellAt(xx + nx * 1.5, (Z0 + Z1) / 2);
     b.vrect(true, xx, Z0, Z1, y0 + spring - 0.05, y0 + spring + 0.4, nx, sp(L.WOOD_FLOOR, [0.55, 0.38, 0.24]), 3, y0);
   }
+}
+
+// --- the tall spaces: de decorstraat, Studio Marconi, De Toren -----------------
+
+const CYL32 = new CylinderGeometry(1, 1, 1, 32, 1, true);
+const CYLS = new CylinderGeometry(1, 1, 1, 16, 1);
+
+function buildTall(b: Builder, p: Plan) {
+  const a = p.st.atrium!;
+  const y0 = a.f0 * H, top = tallTop(a, H, CEIL);
+  const X0 = (p.cx * CH + a.x0 - 1) * CELL + T, X1 = (p.cx * CH + a.x1 + 2) * CELL - T;
+  const Z0 = (p.cz * CH + a.z0 - 1) * CELL + T, Z1 = (p.cz * CH + a.z1 + 2) * CELL - T;
+  const at = (x: number, z: number) => b.cell(Math.floor(Math.min(X1 - 0.1, Math.max(X0 + 0.1, x)) / CELL), Math.floor(Math.min(Z1 - 0.1, Math.max(Z0 + 0.1, z)) / CELL));
+  // the ceiling, one cell at a time for the light
+  const ceiling = (spec: Spec, sub = 1.5) => {
+    for (let z = Z0; z < Z1 - 0.01; z += CELL)
+      for (let x = X0; x < X1 - 0.01; x += CELL) {
+        at(x + 1, z + 1);
+        b.hrect(x, z, Math.min(X1, x + CELL), Math.min(Z1, z + CELL), y0 + top, false, spec, sub);
+      }
+  };
+  if (a.kind === "decor") {
+    ceiling(sp(L.CEILMETAL, [0.45, 0.46, 0.48]));
+    // lintels over the openings into the studios, the big roller door at the end of the street
+    const za = (p.cz * CH + 5) * CELL, zb = (p.cz * CH + 7) * CELL;
+    for (const xw of [(p.cx * CH + 5) * CELL, (p.cx * CH + 7) * CELL]) {
+      at(xw, za + 1);
+      b.aabox(xw - T, y0 + 5.2, za, xw + T, y0 + top, zb, { all: sp(L.BRICK_DOTS, [0.72, 0.72, 0.72]), ny: sp(L.WHITE, [0.2, 0.2, 0.22]) });
+      b.aabox(xw - T - 0.03, y0 + 5.05, za, xw + T + 0.03, y0 + 5.2, zb, sp(L.WHITE, [0.85, 0.7, 0.1]));
+    }
+    const xg0 = (p.cx * CH + 6) * CELL + 0.1, xg1 = (p.cx * CH + 7) * CELL - T - 0.05;
+    at(xg0 + 1, Z1 - 1);
+    b.vrect(true, Z1 - 0.02, xg0, xg1, y0, y0 + 4.6, -1, { layer: L.ROLLER, uv: [0, 0, 1, 1] }, 0, y0);
+    b.aabox(xg0 - 0.1, y0 + 4.6, Z1 - 0.5, xg1 + 0.1, y0 + 5.0, Z1 - 0.02, sp(L.STEEL, [0.6, 0.62, 0.65]));
+    // a lane for the lorries
+    for (const xl of [(p.cx * CH + 5) * CELL + 0.6, (p.cx * CH + 7) * CELL - 0.6]) {
+      at(xl, (Z0 + Z1) / 2);
+      b.hrect(xl - 0.06, Z0 + 0.3, xl + 0.06, Z1 - 0.3, y0 + 0.004, true, sp(L.WHITE, [0.9, 0.75, 0.1]), 0);
+    }
+    return;
+  }
+  if (a.kind === "marconi") {
+    ceiling(sp(L.SLATWIN, [0.75, 0.62, 0.48]), 1.5);
+    // the underside of the gallery
+    const gx0 = (p.cx * CH + a.x0 - 1) * CELL + T, gx1 = (p.cx * CH + a.x0) * CELL;
+    const gz0 = (p.cz * CH + a.z0 + 4) * CELL, gz1 = Z1;
+    for (let z = gz0; z < gz1 - 0.01; z += CELL) {
+      at(gx0 + 1, z + 1);
+      b.hrect(gx0, z, gx1, Math.min(gz1, z + CELL), y0 + H - 0.02, false, sp(L.PLASTER, [0.8, 0.78, 0.74]), 1);
+    }
+    return;
+  }
+  // De Toren: a painted sky overhead, a grid of lights, the tower, its stair, its deck
+  ceiling({ layer: L.WHITE, emit: [0.3, 0.46, 0.72] }, 0);
+  const t = towerSpec(p.st, H, CEIL)!;
+  const tx = t.x, tz = t.z, ty = t.y0;
+  const conc = sp(L.CONCRETE, [0.88, 0.88, 0.86]);
+  const inner = sp(L.CONCRETE, [0.7, 0.7, 0.68]);
+  const dark = sp(L.CONCRETE, [0.55, 0.57, 0.6]);
+  const white = sp(L.WHITE, [0.92, 0.92, 0.9]);
+  const steel = sp(L.STEEL, [0.8, 0.82, 0.85]);
+  const cellAtR = (r: number, ang: number) => at(tx + Math.cos(ang) * r, tz + Math.sin(ang) * r);
+  const P = (r: number, ang: number, y: number): V3 => [tx + Math.cos(ang) * r, ty + y, tz + Math.sin(ang) * r];
+  // a plinth round the foot of the shaft
+  at(tx, tz);
+  b.geom(shell(t.rWall + 0.35, 0, TWO_PI, false), tx, ty + 0.12, tz, 0, 1, 0.24, 1, sp(L.CONCRETE, [0.7, 0.7, 0.68]));
+  // the shaft, hollow, in lengths (for the light); the lowest one has the door in it
+  const shaftTop = t.deck - 1.6;
+  const [da, db] = t.door;
+  for (let y = 0; y < shaftTop; y += 3) {
+    const hgt = Math.min(3, shaftTop - y);
+    const gap = y === 0;
+    const ts0 = gap ? Math.PI / 2 - da : 0, tl = gap ? TWO_PI - (db - da) : TWO_PI;
+    for (let k = 0; k < 4; k++) cellAtR(t.rWall + 0.4, (k * Math.PI) / 2 + 0.3);
+    b.geom(shell(t.rWall, ts0, tl, false), tx, ty + y + hgt / 2, tz, 0, 1, hgt, 1, conc);
+    cellAtR(1.2, y * 0.7);
+    b.geom(shell(t.rWall - 0.1, ts0, tl, true), tx, ty + y + hgt / 2, tz, 0, 1, hgt, 1, inner);
+  }
+  // the door: jambs, a lintel, the wall above it, a lamp over it
+  for (const ang of [da, db]) {
+    cellAtR(t.rWall + 0.5, ang);
+    const f = new Frame(...P(t.rWall - 0.05, ang, 0), Math.atan2(Math.cos(ang), Math.sin(ang)));
+    fbox(b, f, 0, 0, 0, 0.12, 2.3, 0.22, dark);
+  }
+  cellAtR(t.rWall + 0.5, (da + db) / 2);
+  b.geom(shell(t.rWall + 0.01, Math.PI / 2 - db, db - da, false), tx, ty + 2.3 + 0.35, tz, 0, 1, 0.7, 1, conc);
+  b.geom(shell(t.rWall - 0.11, Math.PI / 2 - db, db - da, true), tx, ty + 2.3 + 0.35, tz, 0, 1, 0.7, 1, inner);
+  {
+    const ang = (da + db) / 2, f = new Frame(...P(t.rWall + 0.05, ang, 2.45), Math.atan2(Math.cos(ang), Math.sin(ang)));
+    fbox(b, f, 0, 0, 0.05, 0.3, 0.1, 0.1, { layer: L.WHITE, emit: [1.6, 1.4, 1.0] });
+  }
+  // lamps on the inside of the shaft, all the way up
+  for (let y = 2.2; y < t.deck; y += 2.6) {
+    const ang = y * 1.3;
+    cellAtR(1.5, ang);
+    const f = new Frame(...P(t.rWall - 0.13, ang, y), Math.atan2(-Math.cos(ang), -Math.sin(ang)));
+    fbox(b, f, 0, 0, 0, 0.3, 0.14, 0.08, { all: sp(L.WHITE, [0.3, 0.3, 0.32]), pz: { layer: L.WHITE, emit: [1.6, 1.5, 1.2] } });
+  }
+  // the newel, up to the deck
+  at(tx + 0.4, tz);
+  b.geom(CYLS, tx, ty + t.deck / 2, tz, 0, t.rNewel, t.deck, t.rNewel, steel);
+  // the saucer: a thick disc round the shaft, the deck on top
+  const R = t.rSaucer, sy = ty + t.deck - 1.6;
+  at(tx + R - 0.4, tz);
+  b.geom(CYL32, tx, sy + 0.8, tz, 0, R, 1.6, R, dark);
+  b.geom(CYL32, tx, sy + 0.25, tz, 0, R + 0.1, 0.5, R + 0.1, white);
+  cellAtR(1.2, 0);
+  b.geom(shell(t.rWall - 0.1, 0, TWO_PI, true), tx, sy + 0.8, tz, 0, 1, 1.6, 1, inner);
+  b.geom(new RingGeometry(t.rWall / (R + 0.1), 1, 40, 1), tx, sy, tz, 0, R + 0.1, R + 0.1, 1, conc, Math.PI / 2);
+  const deckS = sp(L.CONCRETE, [0.75, 0.75, 0.72]);
+  b.geom(new RingGeometry(t.rWall / R, 1, 44, 1), tx, ty + t.deck, tz, 0, R, R, 1, deckS, -Math.PI / 2);
+  // inside the rim, open where the stair comes up (ring angle θ is world angle -θ once laid flat)
+  const [ha, hb] = t.hatch;
+  const well = new RingGeometry(t.rNewel / t.rWall, 1, 32, 1, -(ha + TWO_PI), TWO_PI - (hb - ha));
+  b.geom(well, tx, ty + t.deck, tz, 0, t.rWall, t.rWall, 1, deckS, -Math.PI / 2);
+  // windows round the saucer, lit
+  for (let k = 0; k < 32; k++) {
+    const ang = (k / 32) * TWO_PI;
+    cellAtR(R + 0.2, ang);
+    const f = new Frame(...P(R + 0.02, ang, t.deck - 0.65), Math.atan2(Math.cos(ang), Math.sin(ang)));
+    fbox(b, f, 0, 0, 0, 0.6, 0.35, 0.02, { layer: L.WHITE, emit: [1.1, 1.0, 0.8] });
+  }
+  // the dishes round the rim, the mast, the red light
+  for (let k = 0; k < 6; k++) {
+    const ang = (k / 6) * TWO_PI + 0.3;
+    cellAtR(R - 0.6, ang);
+    b.geom(CYLS, ...P(R - 0.8, ang, t.deck + 0.55), -ang, 0.42, 0.18, 0.42, white, Math.PI / 2);
+  }
+  at(tx + 0.5, tz);
+  b.geom(CYLS, tx, ty + t.deck + 2.6, tz, 0, 0.22, 5.2, 0.22, steel);
+  b.geom(CYLS, tx, ty + t.deck + 5.35, tz, 0, 0.12, 0.3, 0.12, { layer: L.WHITE, emit: [2.2, 0.15, 0.08] });
+  // a railing round the deck, and round the hatch
+  for (let k = 0; k < 48; k++) {
+    const a0 = (k / 48) * TWO_PI, a1 = ((k + 1) / 48) * TWO_PI;
+    cellAtR(t.rDeck, a0);
+    const p0 = P(t.rDeck + 0.08, a0, t.deck);
+    b.geom(CYLS, p0[0], p0[1] + 0.55, p0[2], 0, 0.025, 1.1, 0.025, steel);
+    rod(b, P(t.rDeck + 0.08, a0, t.deck + 1.08), P(t.rDeck + 0.08, a1, t.deck + 1.08), 0.03, steel);
+  }
+  for (let k = 0; k <= 8; k++) {
+    const a0 = ha + ((hb - ha) * k) / 8, a1 = ha + ((hb - ha) * (k + 1)) / 8;
+    cellAtR(t.rOut, a0);
+    b.geom(CYLS, ...P(t.rOut + 0.1, a0, t.deck + 0.55), 0, 0.02, 1.1, 0.02, steel);
+    if (k < 8) rod(b, P(t.rOut + 0.1, a0, t.deck + 1.08), P(t.rOut + 0.1, a1, t.deck + 1.08), 0.03, steel);
+  }
+  // the spiral stair inside the shaft: treads round the newel, a handrail on the wall
+  const turns = t.deck / t.rise, steps = Math.round(turns * 17), dphi = (turns * TWO_PI) / steps;
+  const tread = sp(L.STEEL, [0.62, 0.64, 0.68]);
+  const rm = (t.rIn + t.rOut) / 2, w = t.rOut - t.rIn + 0.1;
+  for (let s = 0; s < steps; s++) {
+    const ph = db + (s + 0.5) * dphi, h = ((s + 1) / steps) * t.deck;
+    cellAtR(rm, ph);
+    const c = Math.cos(ph), sn = Math.sin(ph);
+    b.obox(P(rm, ph, h - 0.03), [c, 0, sn], UP, [-sn, 0, c], [w / 2, 0.03, (rm * dphi) / 2 + 0.04], tread);
+    const n0 = db + s * dphi, n1 = db + (s + 1) * dphi, h0 = (s / steps) * t.deck;
+    rod(b, P(t.rOut + 0.02, n0, h0 + 0.95), P(t.rOut + 0.02, n1, h + 0.95), 0.035, BLACKSTEEL);
+  }
+  // cables holding it up: from the mast to the corners of the ceiling
+  for (const [cx, cz] of [[X0 + 1, Z0 + 1], [X1 - 1, Z0 + 1], [X0 + 1, Z1 - 1], [X1 - 1, Z1 - 1]]) {
+    at((cx! + tx) / 2, (cz! + tz) / 2);
+    rod(b, [tx, ty + t.deck + 4.6, tz], [cx!, ty + top - 0.05, cz!], 0.02, BLACKSTEEL);
+  }
+}
+
+const TWO_PI = Math.PI * 2;
+// a length of cylinder wall (height 1, scale y to taste), seen from outside or from inside
+const shells = new Map<string, BufferGeometry>();
+function shell(r: number, thetaStart: number, thetaLength: number, inside: boolean) {
+  const key = `${r}:${thetaStart}:${thetaLength}:${inside}`;
+  let g = shells.get(key);
+  if (g) return g;
+  g = new CylinderGeometry(r, r, 1, 40, 1, true, thetaStart, thetaLength).toNonIndexed() as BufferGeometry;
+  if (inside) {
+    const pos = g.getAttribute("position"), nor = g.getAttribute("normal"), uv = g.getAttribute("uv");
+    for (let i = 0; i < pos.count; i += 3)
+      for (const a of [pos, nor, uv])
+        for (let c = 0; c < a.itemSize; c++) {
+          const tmp = a.getComponent(i + 1, c);
+          a.setComponent(i + 1, c, a.getComponent(i + 2, c));
+          a.setComponent(i + 2, c, tmp);
+        }
+    for (let i = 0; i < nor.count; i++) nor.setXYZ(i, -nor.getX(i), -nor.getY(i), -nor.getZ(i));
+  }
+  shells.set(key, g);
+  return g;
+}
+
+// a thin bar from p0 to p1
+function rod(b: Builder, p0: V3, p1: V3, th: number, s: Spec) {
+  const d: V3 = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
+  const l = Math.hypot(d[0], d[1], d[2]);
+  const ax: V3 = [d[0] / l, d[1] / l, d[2] / l];
+  let ref: V3 = Math.abs(ax[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+  const az: V3 = [ax[1] * ref[2] - ax[2] * ref[1], ax[2] * ref[0] - ax[0] * ref[2], ax[0] * ref[1] - ax[1] * ref[0]];
+  const al = Math.hypot(az[0], az[1], az[2]);
+  ref = [az[0] / al, az[1] / al, az[2] / al];
+  const ay: V3 = [ref[1] * ax[2] - ref[2] * ax[1], ref[2] * ax[0] - ref[0] * ax[2], ref[0] * ax[1] - ref[1] * ax[0]];
+  b.obox([(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (p0[2] + p1[2]) / 2], ax, ay, ref, [l / 2, th / 2, th / 2], s);
 }

@@ -1,6 +1,6 @@
 // Phase 2: lights and props. Only reads phase-1 plans (own + neighbours).
 import { CEIL, CELL, CH, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, MID_CZ, T, isRtbf } from "./config";
-import { K, RT, SK, gardenStair, getPlan, idx, radioStation, roomAnomaly, setIsThuis, sideAt, stairFrame, type Plan, type Room } from "./layout";
+import { K, RT, SK, TALL, gardenStair, getPlan, idx, radioStation, roomAnomaly, setIsThuis, sideAt, stairFrame, tallTop, towerSpec, type Plan, type Room } from "./layout";
 import { Rng, hash } from "./rng";
 import { ART, pickArt } from "./art";
 
@@ -188,7 +188,7 @@ function furnish(p: Plan): Furnished {
     const k = p.kind[i];
     const c = center(i);
     if (k === K.VOID || (k === K.CORR && p.zone[i] === 2)) {
-      if (inAtrium && atr!.kind !== "hall" && atr!.kind !== "props") {
+      if (inAtrium && (atr!.kind === "lobby" || atr!.kind === "garden")) {
         const fall = 1 - (atr!.f1 - f) * 0.09;
         light(c.x, y0 + 2.4, c.z, DAY, 0.95 * fall, 7.5, c.gx, c.gz, null);
       }
@@ -409,6 +409,8 @@ function furnish(p: Plan): Furnished {
     }
   }
 
+  if (inAtrium && f === atr!.f0 && TALL.has(atr!.kind) && atr!.kind !== "hall") furnishTall(p, rng, { light, prop, center, wallPoint, wallDirs, hasDoor, deadP, flickP, y0, hangArt });
+
   // De parkeertoren: an open deck, parked cars, daylight from all sides.
   if (p.st.special === "park" && f < FLOOR_MAX) {
     for (let i = 0; i < CH * CH; i++) {
@@ -431,7 +433,7 @@ function furnish(p: Plan): Furnished {
 
   // Plantentuin: planters with trees along the floating stair, two info screens.
   const gs = gardenStair(p.st);
-  if (inAtrium && f === atr!.f0 && gs) {
+  if (inAtrium && f === atr!.f0 && gs && atr!.kind === "garden") {
     for (let z = atr!.z0; z <= atr!.z1; z++)
       for (let x = atr!.x0; x <= atr!.x1; x++) {
         const c = center(idx(x, z));
@@ -602,8 +604,9 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
   for (const i of cells) for (const dd of wallDirs(i)) perimeter.push([i, dd]);
 
   roomCamera(p, room, c, perimeter, roomCenter);
+  if (room.type === RT.TOOTS && !isRtbf(p.cz)) return furnishToots(p, room, rng, c, perimeter, roomCenter);
   if (furnishService(p, room, rng, c, perimeter, roomCenter)) return;
-  const brand = room.type === RT.KETNET || room.type === RT.SPORZA || room.type === RT.SET;
+  const brand = room.type === RT.KETNET || room.type === RT.SPORZA || room.type === RT.SET || room.type === RT.TOOTS;
   if (brand && !isRtbf(p.cz)) return furnishBrandStudio(p, room, rng, c, perimeter, roomCenter);
   // on the RTBF side the brand studios are ordinary studios
   switch (brand ? RT.STUDIO : room.type) {
@@ -977,7 +980,7 @@ function furnishBrandStudio(p: Plan, room: Room, rng: Rng, c: Ctx, perimeter: Pe
 // Security cameras in the rooms worth watching (the one in the bewaking watches the bewaking).
 const CAM_CHANCE: Partial<Record<number, number>> = {
   [RT.SECURITY]: 100, [RT.MESS]: 100, [RT.DOCK]: 80, [RT.SET]: 60, [RT.VIPBAR]: 60, [RT.STUDIO]: 45, [RT.KETNET]: 50, [RT.SPORZA]: 50,
-  [RT.CANTEEN]: 50, [RT.COSTUME]: 50, [RT.VIPRESTO]: 50, [RT.SERVER]: 50, [RT.CEO]: 40, [RT.LOUNGE]: 40, [RT.ARCHIVE]: 35, [RT.RADIO]: 35,
+  [RT.CANTEEN]: 50, [RT.TOOTS]: 60, [RT.COSTUME]: 50, [RT.VIPRESTO]: 50, [RT.SERVER]: 50, [RT.CEO]: 40, [RT.LOUNGE]: 40, [RT.ARCHIVE]: 35, [RT.RADIO]: 35,
 };
 function roomCamera(p: Plan, room: Room, c: Ctx, perimeter: Perimeter, rc: { x: number; z: number }) {
   const chance = CAM_CHANCE[room.type];
@@ -1183,4 +1186,171 @@ function furnishService(p: Plan, room: Room, rng: Rng, c: Ctx, perimeter: Perime
     }
   }
   return true;
+}
+
+// --- de decorstraat, Studio Marconi, De Toren ---------------------------------
+
+function furnishTall(p: Plan, rng: Rng, c: Ctx) {
+  const a = p.st.atrium!;
+  const { light, prop, y0 } = c;
+  const top = tallTop(a, H, CEIL);
+  const gx0 = p.cx * CH, gz0 = p.cz * CH;
+  const W = (lx: number, lz: number) => ({ x: (gx0 + lx) * CELL, z: (gz0 + lz) * CELL, gx: gx0 + Math.floor(lx), gz: gz0 + Math.floor(lz) });
+
+  if (a.kind === "decor") {
+    // the street: high lights, the lorry, decor flats against both walls
+    for (let lz = 1; lz <= 10; lz += 2) {
+      const q = W(6, lz + 0.5);
+      light(q.x, y0 + top - 0.3, q.z, [0.95, 1.0, 0.9], 1.7, 11, q.gx, q.gz, "tube", { rot: Math.PI / 2, dead: rng.chance(0.1), flick: rng.chance(0.1) });
+    }
+    const lo = W(6, 8.6);
+    prop("lorry", lo.x, y0, lo.z, Math.PI, lo.gx, lo.gz, rng.int(0, 9));
+    for (const [lx, rot] of [[5.06, Math.PI / 2], [6.94, -Math.PI / 2]] as const)
+      for (const lz of [1.5, 2.6, 3.8, 7.3, 8.4, 9.5]) {
+        const q = W(lx, lz);
+        prop(rng.chance(0.75) ? "flat" : rng.chance(0.5) ? "blokjes" : "flightcase", q.x, y0, q.z, rot, q.gx, q.gz, rng.int(0, 999));
+      }
+    // over the openings: which studio, and whether they're recording
+    for (const [lx, rot, n] of [[5.04, Math.PI / 2, 0], [6.96, -Math.PI / 2, 1]] as const) {
+      const q = W(lx, 6);
+      prop("showsign", q.x, y0 + 5.9, q.z, rot, q.gx, q.gz, n, 0);
+      const on = rng.chance(0.6);
+      const r = W(lx, 7.5);
+      prop("showsign", r.x, y0 + 4.2, r.z, rot, r.gx, r.gz, 3, on ? 1 : 0);
+      if (on) light(r.x + Math.sin(rot) * 0.6, y0 + 4.2, r.z + Math.cos(rot) * 0.6, [1.0, 0.2, 0.1], 0.6, 4, r.gx, r.gz, null);
+    }
+    // studio 5 (west) and studio 3 (east): the audience at the north end, the set at the south end
+    for (const [x0, show] of [[1, 5], [7, 3]] as const) {
+      const cx = x0 + 2;
+      for (let lz = 1; lz <= 10; lz++)
+        for (let lx = x0; lx < x0 + 4; lx += 2) {
+          const q = W(lx + 1, lz + 0.5);
+          prop("rig", q.x, y0 + top - 0.35, q.z, 0, q.gx, q.gz);
+        }
+      const tr = W(cx, 1.05);
+      prop("tribune", tr.x, y0, tr.z, 0, tr.gx, tr.gz, rng.int(0, 99));
+      // house lights over the audience and down the studio, bright on the set
+      for (let lz = 1.5; lz <= 9.5; lz += 2)
+        for (const lx of [cx - 1.1, cx + 1.1]) {
+          const q = W(lx, lz);
+          light(q.x, y0 + 3.9, q.z, [1.0, 0.88, 0.72], lz < 4 ? 1.7 : 1.3, 10, q.gx, q.gz, null);
+        }
+      const st = W(cx, 10.98);
+      prop(show === 5 ? "talkset" : "blokkenset", st.x, y0, st.z, Math.PI, st.gx, st.gz, rng.int(0, 99));
+      for (const lx of [cx - 1.4, cx, cx + 1.4]) {
+        const q = W(lx, 8.8);
+        light(q.x, y0 + 3.6, q.z, [1.0, 0.92, 0.8], 2.0, 10, q.gx, q.gz, null);
+      }
+      const ap = W(cx, 7.4);
+      prop("showsign", ap.x, y0 + 4.4, ap.z, 0, ap.gx, ap.gz, 2, 1);
+      for (let k = -1; k <= 1; k++) {
+        const q = W(cx + k * 1.1, 6.6 - Math.abs(k) * 0.3);
+        prop("camera", q.x, y0, q.z, k * 0.25, q.gx, q.gz, k === 0 ? 1 : 0);
+      }
+    }
+    return;
+  }
+
+  if (a.kind === "marconi") {
+    // the room: stage at the north end, chairs, a truss with spots, a projector, a lectern
+    for (let lz = 2; lz <= 10; lz++)
+      for (let lx = 3; lx <= 9; lx += 2) {
+        const q = W(lx + 0.5, lz + 0.5);
+        prop("downlights", q.x, y0 + top, q.z, 0, q.gx, q.gz);
+        light(q.x, y0 + top - 0.2, q.z, [1.0, 0.86, 0.66], 1.0, 9, q.gx, q.gz, null);
+      }
+    const stg = W(6.5, 2.1);
+    prop("stage", stg.x, y0, stg.z, 0, stg.gx, stg.gz, 11, 4.2);
+    const ht = W(8.2, 3.3);
+    prop("hightable", ht.x, y0 + 0.6, ht.z, rng.range(0, 6), ht.gx, ht.gz, 1);
+    const le = W(5.2, 4.9);
+    prop("lectern", le.x, y0, le.z, 0, le.gx, le.gz);
+    const scr = W(6.5, 2.0);
+    prop("projscreen", scr.x, y0 + 4.7, scr.z, 0, scr.gx, scr.gz, 6, 2.9);
+    const tr1 = W(6.5, 5.6);
+    prop("truss", tr1.x, y0 + top - 1.1, tr1.z, 0, tr1.gx, tr1.gz, 12, rng.int(0, 99));
+    const tr2 = W(4.6, 8.2);
+    prop("truss", tr2.x, y0 + top - 1.4, tr2.z, 0.35, tr2.gx, tr2.gz, 7, rng.int(0, 99));
+    for (let k = 0; k < 16; k++) {
+      const q = W(rng.range(4, 9.2), rng.range(5.5, 10.2));
+      prop("bistro", q.x, y0, q.z, Math.PI + rng.range(-0.5, 0.5), q.gx, q.gz, rng.int(0, 99));
+    }
+    // a tall window onto nothing, the name on the wall by the door
+    const tw = W(9.9, 6);
+    prop("tallwindow", tw.x, y0, tw.z, -Math.PI / 2, tw.gx, tw.gz, 5.2);
+    light(tw.x - 0.8, y0 + 2.5, tw.z, DAY, 1.3, 9, tw.gx, tw.gz, null);
+    const sg = W(4.2, 10.94);
+    prop("showsign", sg.x, y0 + 2.2, sg.z, Math.PI, sg.gx, sg.gz, 6, 0);
+    return;
+  }
+
+  // De Toren: the model in the middle, a park round it, a sun on the wall, film lights
+  const t = towerSpec(p.st, H, CEIL)!;
+  for (const [ang, r, hgt, int] of [[0.4, 7, 20, 1.7], [2.2, 7.5, 21, 1.6], [3.9, 7, 19, 1.6], [5.3, 7.5, 22, 1.7], [1.3, 8, 12, 1.2], [4.6, 8, 12, 1.2], [0.2, 6, 7, 1.0], [3.1, 6, 7, 1.0], [0, 1.2, 4, 0.7], [2, 1.2, 9, 0.7], [4, 1.2, 14, 0.7]] as const) {
+    const x = t.x + Math.cos(ang) * r, z = t.z + Math.sin(ang) * r;
+    light(x, y0 + hgt, z, [1.0, 0.96, 0.86], int, 14, Math.floor(x / CELL), Math.floor(z / CELL), null);
+  }
+  for (let lz = 1.5; lz <= 10; lz += 3)
+    for (let lx = 2.5; lx <= 9.5; lx += 3.5) {
+      const q = W(lx, lz);
+      light(q.x, y0 + 2.8, q.z, [0.9, 0.95, 1.0], 0.8, 8, q.gx, q.gz, null);
+    }
+  const sun = W(9.95, 5.5);
+  prop("sunlamp", sun.x, y0 + 15, sun.z, -Math.PI / 2, sun.gx, sun.gz);
+  light(sun.x - 2, y0 + 15, sun.z, [1.0, 0.92, 0.72], 2.0, 14, sun.gx, sun.gz, null);
+  // fake trees, benches, lampposts, film lights on the tower, a wind machine
+  const ring = (ang: number, r: number) => {
+    const x = t.x + Math.cos(ang) * r, z = t.z + Math.sin(ang) * r;
+    return { x, z, gx: Math.floor(x / CELL), gz: Math.floor(z / CELL) };
+  };
+  for (let k = 0; k < 9; k++) {
+    const q = ring(k * 0.7 + rng.range(-0.2, 0.2), rng.range(8.2, 10.8));
+    prop("cutout", q.x, y0, q.z, rng.range(0, 6.28), q.gx, q.gz, rng.int(0, 99));
+  }
+  for (let k = 0; k < 4; k++) {
+    const ang = k * 1.57 + 0.8, q = ring(ang, 6.4);
+    prop("parkbench", q.x, y0, q.z, Math.atan2(t.x - q.x, t.z - q.z), q.gx, q.gz);
+    const l = ring(ang + 0.3, 6.9);
+    prop("lamppost", l.x, y0, l.z, 0, l.gx, l.gz);
+    light(l.x, y0 + 3.3, l.z, [1.0, 0.85, 0.6], 0.6, 5, l.gx, l.gz, null);
+  }
+  for (const ang of [0.9, 2.6, 4.2, 5.8]) {
+    const q = ring(ang, 9.3);
+    prop("filmlight", q.x, y0, q.z, Math.atan2(t.x - q.x, t.z - q.z), q.gx, q.gz, 55);
+  }
+  const wf = ring(3.5, 10);
+  prop("windfan", wf.x, y0, wf.z, Math.atan2(t.x - wf.x, t.z - wf.z), wf.gx, wf.gz);
+}
+
+// Studio Toots: a small Marconi, one storey
+function furnishToots(p: Plan, room: Room, rng: Rng, c: Ctx, perimeter: Perimeter, rc: { x: number; z: number }) {
+  const { light, prop, center, wallPoint, y0 } = c;
+  for (const i of room.cells) {
+    const q = center(i);
+    prop("downlights", q.x, y0 + 3.3, q.z, 0, q.gx, q.gz);
+    light(q.x, y0 + 3.1, q.z, [1.0, 0.86, 0.66], 1.0, 7, q.gx, q.gz, null);
+  }
+  if (!perimeter.length) return;
+  const { bd, pieces } = mainWall(p, perimeter);
+  const w = room.x1 - room.x0 + 1, d = room.z1 - room.z0 + 1;
+  const len = (bd % 2 === 0 ? d : w) * CELL, depth = (bd % 2 === 0 ? w : d) * CELL;
+  const [mi] = pieces[Math.floor(pieces.length / 2)]!;
+  const wp = wallPoint(mi, bd);
+  const r0 = faceRot(bd), ix = -DX[bd]!, iz = -DZ[bd]!;
+  const wx = rc.x - ix * (depth / 2 - T), wz = rc.z - iz * (depth / 2 - T);
+  const at = (lx: number, lz: number) => {
+    const x = wx + lx * Math.cos(r0) + lz * Math.sin(r0), z = wz - lx * Math.sin(r0) + lz * Math.cos(r0);
+    return { x, z, gx: Math.floor(x / CELL), gz: Math.floor(z / CELL) };
+  };
+  const st = at(0, 1.2);
+  prop("stage", st.x, y0, st.z, r0, st.gx, st.gz, Math.min(8, len - 1), 2.4);
+  prop("projscreen", wp.wx, y0 + 3.15, wp.wz, r0, wp.gx, wp.gz, 7, 1.9);
+  const tr = at(0, Math.min(4.5, depth / 2));
+  prop("truss", tr.x, y0 + 3.3 - 0.55, tr.z, r0, tr.gx, tr.gz, Math.min(7, len - 1.5), 1000 + rng.int(0, 99));
+  const le = at(len / 4, 3.0);
+  prop("lectern", le.x, y0, le.z, r0, le.gx, le.gz);
+  for (let k = 0; k < Math.min(14, room.cells.length * 2); k++) {
+    const q = at(rng.range(-len / 2 + 0.8, len / 2 - 0.8), rng.range(3.8, depth - 0.8));
+    prop("bistro", q.x, y0, q.z, r0 + Math.PI + rng.range(-0.5, 0.5), q.gx, q.gz, rng.int(0, 99));
+  }
 }

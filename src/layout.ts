@@ -42,6 +42,7 @@ export const RT = {
   CEO: 21,
   DOCK: 22, // laadperrons, on the ground floor
   SECURITY: 23, // de bewaking: the camera feeds
+  TOOTS: 24, // Studio Toots: a small Marconi
 } as const;
 
 export const ROOM_LABEL = [
@@ -69,6 +70,7 @@ export const ROOM_LABEL = [
   "KABINET CEO",
   "LAADPERRON",
   "BEWAKING",
+  "STUDIO TOOTS",
 ];
 
 // Side kinds
@@ -114,7 +116,7 @@ export interface Structure {
   corr: Uint8Array;
   stair: null | { c: number; a: number; b: number; d: number };
   elevs: { c: number; e: number; d: number }[];
-  atrium: null | { x0: number; z0: number; x1: number; z1: number; f0: number; f1: number; kind: "lobby" | "garden" | "hall" | "props" };
+  atrium: null | { x0: number; z0: number; x1: number; z1: number; f0: number; f1: number; kind: AtriumKind };
   court: null | { x0: number; z0: number; x1: number; z1: number };
   style: number;
   mid?: boolean; // de middengang
@@ -122,17 +124,24 @@ export interface Structure {
   deck?: { x0: number; z0: number; x1: number; z1: number }; // parkeertoren deck
 }
 
-export type Special = "sport" | "mess" | "park" | "props";
+export type Special = "sport" | "mess" | "park" | "props" | "decor" | "marconi" | "tower";
+export type AtriumKind = "lobby" | "garden" | "hall" | "props" | "decor" | "marconi" | "tower";
+// the tall spaces: one volume from the floor of f0 to the ceiling of f1
+export const TALL = new Set<AtriumKind>(["hall", "decor", "marconi", "tower"]);
+// height of a tall space, from its floor to its ceiling
+export const tallTop = (a: { f0: number; f1: number }, H: number, CEIL: number) => (a.f1 - a.f0) * H + CEIL;
+// Studio Marconi: the gallery runs along its west side, from this row on
+export const marconiGallery = (a: { x0: number; z0: number }, x: number, z: number) => x === a.x0 - 1 && z >= a.z0 + 4;
 
 // Where the big places are: one of each near the start, then scattered around.
-const FIXED: Record<string, Special> = { "-2,1": "sport", "2,0": "mess", "0,2": "park", "2,2": "props" };
+const FIXED: Record<string, Special> = { "-2,1": "sport", "2,0": "mess", "0,2": "park", "2,2": "props", "-2,3": "decor", "3,1": "marconi", "0,4": "tower" };
 function rawSpecial(cx: number, cz: number): Special | null {
   if (cz <= MID_CZ) return null;
   const f = FIXED[`${cx},${cz}`];
   if (f) return f;
   if (Math.max(Math.abs(cx), Math.abs(cz)) <= 1) return null;
   const h = hash(71, cx, cz) % 1000;
-  return h < 55 ? "sport" : h < 110 ? "mess" : h < 135 ? "park" : h < 165 ? "props" : null;
+  return h < 55 ? "sport" : h < 110 ? "mess" : h < 135 ? "park" : h < 165 ? "props" : h < 185 ? "decor" : h < 205 ? "marconi" : h < 215 ? "tower" : null;
 }
 function specialFor(cx: number, cz: number): Special | null {
   const s = rawSpecial(cx, cz);
@@ -413,10 +422,14 @@ function makePlan(f: number, cx: number, cz: number): Plan {
         if (isVoid) {
           kind[i] = f === a.f0 ? K.CORR : K.VOID;
           zone[i] = 2;
-        } else if (a.kind === "hall") {
-          // the sporthal: one volume, three storeys high
+        } else if (TALL.has(a.kind) && !(a.kind === "marconi" && f > a.f0 && marconiGallery(a, x, z))) {
+          // the sporthal and the other tall spaces: one volume, several storeys high
           kind[i] = f === a.f0 ? K.CORR : K.VOID;
           zone[i] = 2;
+        } else if (a.kind === "marconi") {
+          // the gallery of Studio Marconi
+          kind[i] = K.CORR;
+          zone[i] = 1;
         } else {
           if (kind[i] !== K.CORR) zone[i] = 1;
           kind[i] = K.CORR;
@@ -428,7 +441,7 @@ function makePlan(f: number, cx: number, cz: number): Plan {
   const free = (x: number, z: number) => inside(x, z) && kind[idx(x, z)] === K.SOLID;
 
   // Sporthal entrances: solid walls to the corridor, with a pair of double doors
-  if (a && ((a.kind === "hall" && f === a.f0) || (a.kind === "props" && f >= a.f0 && f <= a.f1))) {
+  if (a && ((TALL.has(a.kind) && f === a.f0) || (a.kind === "props" && f >= a.f0 && f <= a.f1))) {
     const doors: [number, number][] = [];
     for (let z = a.z0 - 1; z <= a.z1 + 1; z++)
       for (let x = a.x0 - 1; x <= a.x1 + 1; x++)
@@ -442,6 +455,16 @@ function makePlan(f: number, cx: number, cz: number): Plan {
           if (x === Math.floor((a.x0 + a.x1) / 2)) doors.push([i, d]);
         }
     for (const [i, d] of doors) setDoor(p, i, d, { kind: "double", open: true, owner: i, w: 1.8 });
+    // de decorstraat: walls between the street and studios 5 and 3, open where the decors roll in
+    if (a.kind === "decor")
+      for (let z = a.z0 - 1; z <= a.z1 + 1; z++) {
+        if (z === 5 || z === 6) continue;
+        for (const [xa, d] of [[4, 0], [7, 2]] as const) {
+          const ia = idx(xa, z), ib = idx(xa + DX[d]!, z);
+          p.sides.set(ia * 4 + d, { sk: SK.WALL });
+          p.sides.set(ib * 4 + ((d + 2) % 4), { sk: SK.WALL });
+        }
+      }
   }
 
   // De Mess: the whole inside of the chunk is one enormous canteen
@@ -524,13 +547,14 @@ function makePlan(f: number, cx: number, cz: number): Plan {
       const x = i % CH, z = (i / CH) | 0;
       for (let d = 0; d < 4; d++) {
         const nx = x + DX[d]!, nz = z + DZ[d]!;
-        if (inside(nx, nz) && kind[idx(nx, nz)] === K.CORR) cands.push([i, d]);
+        // (not onto the floor of a tall space: that's a hall, not a corridor)
+        if (inside(nx, nz) && kind[idx(nx, nz)] === K.CORR && zone[idx(nx, nz)] !== 2) cands.push([i, d]);
       }
     }
     if (!cands.length) continue;
     connected.add(room.id);
     const t = room.type;
-    const big = t === RT.STUDIO || t === RT.CANTEEN || t === RT.MESS || t === RT.KETNET || t === RT.SPORZA || t === RT.SET || t === RT.COSTUME || t === RT.VIPRESTO || t === RT.DOCK;
+    const big = t === RT.STUDIO || t === RT.CANTEEN || t === RT.MESS || t === RT.KETNET || t === RT.SPORZA || t === RT.SET || t === RT.TOOTS || t === RT.COSTUME || t === RT.VIPRESTO || t === RT.DOCK;
     if (t === RT.MESS) continue; // its doors were placed above
     const openP = t === RT.STORAGE || t === RT.SERVER ? 0.45 : t === RT.BATH ? 0.9 : 0.78;
     // (rooms converted from offices, meetings and edit suites make the same draw, so the rest of the floor stays the same)
@@ -590,7 +614,7 @@ function makePlan(f: number, cx: number, cz: number): Plan {
 // Some studios became the studio of a VRT brand, some edit suites a radio
 // studio. Decided by hash, so the random stream (and the floor plan) is unchanged.
 function brandRoom(t: number, area: number, h: number): number {
-  if (t === RT.STUDIO) return h < 18 ? RT.KETNET : h < 36 ? RT.SPORZA : h < 62 ? RT.SET : t;
+  if (t === RT.STUDIO) return h < 18 ? RT.KETNET : h < 36 ? RT.SPORZA : h < 62 ? RT.SET : h < 74 ? RT.TOOTS : t;
   if (t === RT.EDIT && area >= 4) return h < 45 ? RT.RADIO : t;
   return t;
 }
@@ -623,6 +647,7 @@ export const setIsThuis = (p: Plan, r: Room) => roomVariant(p, r, 2) === 0;
 export function roomLabel(p: Plan, r: Room): string {
   if (p.cz < MID_CZ) {
     if (r.type === RT.STUDIO || r.type === RT.KETNET || r.type === RT.SPORZA || r.type === RT.SET) return "STUDIO " + r.num;
+    if (r.type === RT.TOOTS) return "STUDIO TOOTS";
     if (r.type === RT.RADIO) return "STUDIO RADIO";
     if (r.type === RT.DRESSING) return "LOGE " + r.num;
     return ROOM_LABEL_FR[r.type]!;
@@ -748,7 +773,7 @@ export function lightPass(f: number, gx: number, gz: number, d: number): boolean
 }
 
 // Human readable label for a cell (HUD).
-const ROOM_LABEL_FR = ["BUREAU", "SALLE DE RÉUNION", "SANITAIRES", "RÉSERVE", "SALLE DES SERVEURS", "STUDIO", "CANTINE", "ARCHIVES", "RÉGIE", "LOCAL VIDE", "MONTAGE", "LE MESS", "SALLE DE DÉTENTE", "STUDIO RADIO", "STUDIO", "STUDIO", "STUDIO", "COSTUMES", "LOGE", "BAR VIP", "RESTAURANT VIP", "BUREAU DU CEO", "QUAI DE CHARGEMENT", "SÉCURITÉ"];
+const ROOM_LABEL_FR = ["BUREAU", "SALLE DE RÉUNION", "SANITAIRES", "RÉSERVE", "SALLE DES SERVEURS", "STUDIO", "CANTINE", "ARCHIVES", "RÉGIE", "LOCAL VIDE", "MONTAGE", "LE MESS", "SALLE DE DÉTENTE", "STUDIO RADIO", "STUDIO", "STUDIO", "STUDIO", "COSTUMES", "LOGE", "BAR VIP", "RESTAURANT VIP", "BUREAU DU CEO", "QUAI DE CHARGEMENT", "SÉCURITÉ", "STUDIO TOOTS"];
 
 export function cellLabel(f: number, gx: number, gz: number): string {
   const { p, i } = planAt(f, gx, gz);
@@ -757,6 +782,15 @@ export function cellLabel(f: number, gx: number, gz: number): string {
   if (p.st.special === "park") return k === K.CORR ? (p.cz < MID_CZ ? "PASSERELLE" : "LOOPBRUG") : p.cz < MID_CZ ? "PARKING-TOUR" : "PARKEERTOREN";
   if (p.st.atrium?.kind === "hall" && p.zone[i] === 2) return p.cz < MID_CZ ? "SALLE DE SPORT" : "SPORTHAL";
   if (p.st.atrium?.kind === "props" && (p.zone[i] === 1 || p.zone[i] === 2) && p.f >= p.st.atrium.f0 && p.f <= p.st.atrium.f1) return p.cz < MID_CZ ? "ACCESSOIRES" : "REKWISIETEN";
+  const ta = p.st.atrium;
+  if (ta && TALL.has(ta.kind) && ta.kind !== "hall" && (p.zone[i] === 1 || p.zone[i] === 2) && p.f >= ta.f0 && p.f <= ta.f1) {
+    const fr = p.cz < MID_CZ;
+    if (ta.kind === "decor") {
+      const x = i % CH;
+      return x <= 4 ? "STUDIO 5" : x >= 7 ? "STUDIO 3" : fr ? "RUE DES DÉCORS" : "DECORSTRAAT";
+    }
+    return ta.kind === "marconi" ? "STUDIO MARCONI" : fr ? "LA TOUR" : "DE TOREN";
+  }
   if (p.cz < MID_CZ) {
     switch (k) {
       case K.CORR:
@@ -815,6 +849,11 @@ export interface GardenStair {
 
 export function gardenStair(st: Structure): GardenStair | null {
   const a = st.atrium;
+  if (a && a.kind === "marconi") {
+    // a steel stair up the west wall of Studio Marconi, landing on the gallery
+    const b = (st.cz * CH + a.z0 + 4) * CELL;
+    return { alongX: false, b, sb: b - 6.3, pc: (st.cx * CH + a.x0 - 1) * CELL + 0.95, half: 0.62, run: 6.3, f0: a.f0 };
+  }
   if (!a || a.kind !== "garden") return null;
   const alongX = a.x1 - a.x0 > a.z1 - a.z0;
   const X0 = (st.cx * CH + a.x0) * CELL, X1 = (st.cx * CH + a.x1 + 1) * CELL;
@@ -941,6 +980,22 @@ function makeSpecialStructure(cx: number, cz: number, kind: Special): Structure 
     return { ...base, deck: dk };
   }
   for (let i = 0; i < CH; i++) corr[idx(i, 0)] = corr[idx(i, CH - 1)] = corr[idx(0, i)] = corr[idx(CH - 1, i)] = 1;
+  const fixed = !!FIXED[`${cx},${cz}`];
+  if (kind === "decor") {
+    // de decorstraat between studios 5 and 3, on the ground floor, two storeys high
+    base.atrium = { x0: 2, z0: 2, x1: 9, z1: 9, f0: 0, f1: 1, kind: "decor" };
+  }
+  if (kind === "marconi") {
+    // an event space, two storeys, with a gallery; a corridor on the west reaches the gallery
+    const f0 = fixed ? 0 : [0, 2, 4][hash(75, cx, cz) % 3]!;
+    base.atrium = { x0: 3, z0: 3, x1: 8, z1: 9, f0, f1: f0 + 1, kind: "marconi" };
+    corr[idx(1, 8)] = 1;
+  }
+  if (kind === "tower") {
+    // the Reyers tower, indoors, seven storeys high
+    const f0 = fixed ? 1 : [0, 2][hash(76, cx, cz) % 2]!;
+    base.atrium = { x0: 3, z0: 2, x1: 8, z1: 9, f0, f1: f0 + 6, kind: "tower" };
+  }
   if (kind === "props") {
     // two storeys: racks on the floor, a gallery all around upstairs
     const f0 = FIXED[`${cx},${cz}`] ? 2 : [1, 3, 5, 7][hash(74, cx, cz) % 4]!;
@@ -951,4 +1006,79 @@ function makeSpecialStructure(cx: number, cz: number, kind: Special): Structure 
     base.atrium = { x0: 3, z0: 2, x1: 8, z1: 9, f0, f1: f0 + 2, kind: "hall" };
   }
   return base;
+}
+
+// ---------------------------------------------------------------------------
+// De Toren: the Reyers tower indoors. The shaft is hollow: a door at its foot,
+// a spiral stair inside round a steel newel, up through the saucer to a deck on
+// top. All in metres, world space.
+export interface TowerSpec {
+  x: number;
+  z: number;
+  y0: number; // the floor of the hall
+  deck: number; // height of the deck above y0
+  rise: number; // metres per turn
+  rNewel: number;
+  rIn: number; // the stair runs between rIn and rOut
+  rOut: number;
+  rWall: number; // outside of the shaft
+  rSaucer: number;
+  rDeck: number; // the deck is walkable out to here
+  top: number; // hall height
+  door: [number, number]; // angles of the door at the foot of the shaft
+  hatch: [number, number]; // angles where the stair comes up through the deck
+}
+
+const TWO_PI = Math.PI * 2;
+const inArc = (phi: number, [a, b]: [number, number]) => (phi - a + TWO_PI * 4) % TWO_PI < b - a;
+
+export function towerSpec(st: Structure, H: number, CEIL: number): TowerSpec | null {
+  const a = st.atrium;
+  if (!a || a.kind !== "tower") return null;
+  // the stair starts at the door (south) and turns counter-clockwise
+  const door: [number, number] = [Math.PI / 2 - 0.42, Math.PI / 2 + 0.42];
+  const deck = 16.2, rise = 2.8, end = door[1] + ((deck / rise) % 1) * TWO_PI;
+  return {
+    x: (st.cx * CH + (a.x0 + a.x1 + 1) / 2) * CELL,
+    z: (st.cz * CH + (a.z0 + a.z1 + 1) / 2) * CELL,
+    y0: a.f0 * H, deck, rise, rNewel: 0.22, rIn: 0.34, rOut: 1.92, rWall: 2.15, rSaucer: 4.6, rDeck: 4.25,
+    top: tallTop(a, H, CEIL),
+    door,
+    hatch: [end - 2.2, end],
+  };
+}
+
+// Height of the stair (or the deck) under (x, z) for feet at y. undefined: not
+// the tower's business (the plain floor); null: not walkable.
+export function towerGround(t: TowerSpec, x: number, z: number, y: number): number | null | undefined {
+  const dx = x - t.x, dz = z - t.z, r = Math.hypot(dx, dz);
+  if (r > t.rDeck) return undefined;
+  const phi = (Math.atan2(dz, dx) + TWO_PI) % TWO_PI;
+  const ground = y < t.y0 + 1.2;
+  // outside the shaft, on the ground: the plain floor
+  if (r > t.rWall + 0.2 && ground) return undefined;
+  const cands: number[] = [];
+  // the deck on top of the saucer (not over the hatch)
+  if (r > t.rNewel + 0.1 && !(r <= t.rOut + 0.1 && inArc(phi, t.hatch))) cands.push(t.y0 + t.deck);
+  if (r < t.rIn) {
+    // the newel
+  } else if (r <= t.rOut) {
+    // the spiral: every turn passes over this angle once, measured from the door
+    const u = ((phi - t.door[1] + TWO_PI * 2) % TWO_PI) / TWO_PI;
+    for (let k = 0; ; k++) {
+      const h = (k + u) * t.rise;
+      if (h > t.deck) break;
+      cands.push(t.y0 + h);
+    }
+    // the floor inside the shaft, where there's headroom under the stair (or the first steps)
+    const first = u * t.rise;
+    if (first < 0.45 || first > 2.1) cands.push(t.y0);
+  } else if (ground && inArc(phi, t.door)) {
+    // the doorway through the shaft wall
+    cands.push(t.y0);
+  }
+  // step onto the stair rather than stay on the floor under it
+  let best: number | null = null;
+  for (const c of cands) if (Math.abs(c - y) < 0.45 && (best === null || c > best)) best = c;
+  return best;
 }

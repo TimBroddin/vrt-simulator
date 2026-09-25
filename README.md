@@ -52,6 +52,14 @@ The rekwisieten fill a warehouse two storeys high: rows of tall pallet racks ful
 
 Among the rooms: the kostuumdienst (rails of costumes, mannequins, hats, a lending counter), kleedkamers with mirrors framed in bulbs and a star on the door, a VIP bar (backlit bottles, a velvet rope), a VIP restaurant (round tables, chandeliers, a wine wall), the CEO's office on the top floors, and loading docks on the ground floor with roller doors, one of them half open onto daylight that isn't there. These rooms are converted by hash in `serviceRoom` (`src/layout.ts`), so existing floor plans stay the same.
 
+## Big places
+
+Like the sporthal and the rekwisieten, these fill a whole block, and the first one of each is near the start:
+
+- **De Decorstraat**: a street inside the building, 6 m wide and two storeys high, where a lorry fits. Decor flats lean against both walls, a lorry is parked in it, and it opens straight into **Studio 5** and **Studio 3**: audience studios with a tribune, an APPLAUS sign, a lighting grid, cameras, and a set (Van Gils & gasten, Blokken).
+- **Studio Marconi**: an event space two storeys high, with warm wooden acoustic panels, a gallery behind a glass balustrade reached by a steel stair, a stage, a truss with spots, a projector, bistro chairs. **Studio Toots** is a smaller Marconi, one storey, among the rooms.
+- **De Toren**: the Reyers tower indoors, in a hall seven storeys high. The floor is fake grass, the walls and ceiling are a painted sky with the city along the bottom, there's a studio sun on the wall, film lights, plywood trees, and cables holding the tower up. The shaft is hollow: go in through the door at its foot and climb the spiral stair inside, up through the saucer onto the deck on top. The corridors on the floors around it have windows onto it. See `towerSpec` in `src/layout.ts`.
+
 ## De bewaking
 
 Some control rooms and server rooms are the bewaking: a wall of monitors, a desk with a joystick and a logbook, a key cabinet. Security cameras hang at the ends of corridors and in the corners of studios, canteens, De Mess, the docks, the sporthal, the rekwisieten and the parking. When you're near a bewaking, six cameras around it (on its floor and the ones above and below) are rendered live into the monitors, one feed per frame, with timestamps and the camera's location. The bewaking's own camera shows the bewaking. You're on the feeds too: someone with a camera on their shoulder. See `src/cctv.ts`.

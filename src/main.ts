@@ -407,7 +407,7 @@ function updateEnv(dt: number) {
     trackOnce(`floor${f}`, "floor_visited", { floor: f });
     const area = onRoof ? "roof" : f === FLOOR_MIN ? "parking" : /PLANTENTUIN|JARDIN/.test(label) ? "plantentuin" : label === "MIDDENGANG" ? "middengang"
       : label === "ATRIUM" ? "atrium" : STATIONS.some((st) => st.label === label) ? "radio" : /^STUDIO/.test(label) ? "studio" : /REGIE|RÉGIE/.test(label) ? "regie" : /ARCHIEF|ARCHIVES/.test(label) ? "archive"
-      : /KANTINE|CANTINE/.test(label) ? "canteen" : /^KETNET/.test(label) ? "ketnet" : /^SPORZA/.test(label) ? "sporza" : /^DECOR/.test(label) ? "tvset" : /BEWAKING|SÉCURITÉ/.test(label) ? "security" : "";
+      : /KANTINE|CANTINE/.test(label) ? "canteen" : /^KETNET/.test(label) ? "ketnet" : /^SPORZA/.test(label) ? "sporza" : /^DECOR/.test(label) ? "tvset" : /BEWAKING|SÉCURITÉ/.test(label) ? "security" : /DECORSTRAAT|RUE DES/.test(label) ? "decorstraat" : /MARCONI/.test(label) ? "marconi" : /TOOTS/.test(label) ? "toots" : /TOREN|LA TOUR/.test(label) ? "tower" : "";
     if (area) trackOnce(`area:${area}`, "area_discovered", { area });
     if (fr) trackOnce("area:rtbf", "area_discovered", { area: "rtbf" });
   }

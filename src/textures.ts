@@ -497,6 +497,138 @@ const painters: Record<number, (c: Ctx) => void> = {
     for (let k = -S; k < S * 2; k += 128) { c.beginPath(); c.moveTo(k, 0); c.lineTo(k + 64, 0); c.lineTo(k + 64 - S, S); c.lineTo(k - S, S); c.fill(); }
     noise(c, 16);
   },
+  [L.PANELS]: (c) => {
+    // Marconi: big warm acoustic panels with dark seams, a grey band
+    fill(c, "#3a2a1e");
+    const rows = [[0, 150, "#c9906a"], [150, 110, "#6f6a70"], [260, 252, "#c48a62"]] as const;
+    for (const [y, h, col] of rows)
+      for (let k = 0; k < 2; k++) {
+        const v = (R() - 0.5) * 12;
+        c.fillStyle = col;
+        c.fillRect(k * 256 + 3, y + 3, 250, h - 6);
+        c.fillStyle = `rgba(${v > 0 ? 255 : 0},${v > 0 ? 230 : 0},${v > 0 ? 200 : 0},0.06)`;
+        c.fillRect(k * 256 + 3, y + 3, 250, h - 6);
+      }
+    c.globalAlpha = 0.12;
+    for (let i = 0; i < 1500; i++) { c.fillStyle = R() > 0.5 ? "#000" : "#fff"; c.fillRect(R() * S, R() * S, 1.5, 1.5); }
+    c.globalAlpha = 1;
+    noise(c, 8);
+  },
+  [L.CYC]: (c) => {
+    // De Toren: a painted sky, the Brussels skyline at the bottom, a seam where two backdrops meet
+    const g = c.createLinearGradient(0, 0, 0, S);
+    g.addColorStop(0, "#3f6fb0");
+    g.addColorStop(0.55, "#8db4de");
+    g.addColorStop(0.9, "#dfe9f0");
+    g.addColorStop(1, "#f1ece0");
+    c.fillStyle = g;
+    c.fillRect(0, 0, S, S);
+    // painted clouds, tileable
+    for (let i = 0; i < 14; i++) {
+      const x = R() * S, y = 40 + R() * S * 0.62, w = 60 + R() * 120;
+      for (const ox of [-S, 0, S])
+        for (let k = 0; k < 6; k++) {
+          c.fillStyle = `rgba(255,255,255,${0.35 + R() * 0.3})`;
+          c.beginPath();
+          c.ellipse(x + ox + (k - 3) * w * 0.18, y + (R() - 0.5) * 10, w * (0.2 + R() * 0.15), w * 0.1, 0, 0, 7);
+          c.fill();
+        }
+    }
+    // the skyline: blocks, a cathedral, the Atomium, far away
+    c.fillStyle = "#7b8a99";
+    let x = 0;
+    while (x < S) {
+      const w = 8 + R() * 22, h = 6 + R() * 22;
+      c.fillRect(x, S - 14 - h, w, h + 14);
+      x += w;
+    }
+    c.fillStyle = "#6c7a88";
+    c.fillRect(120, S - 52, 10, 40); c.fillRect(140, S - 52, 10, 40);
+    c.beginPath(); c.moveTo(118, S - 52); c.lineTo(125, S - 66); c.lineTo(132, S - 52); c.fill();
+    c.beginPath(); c.moveTo(138, S - 52); c.lineTo(145, S - 66); c.lineTo(152, S - 52); c.fill();
+    c.strokeStyle = "#6c7a88"; c.lineWidth = 2;
+    for (const [ax, ay] of [[380, S - 60], [370, S - 48], [390, S - 48], [380, S - 36], [372, S - 58], [388, S - 58]]) { c.beginPath(); c.arc(ax!, ay!, 4, 0, 7); c.fillStyle = "#6c7a88"; c.fill(); }
+    c.beginPath(); c.moveTo(380, S - 60); c.lineTo(380, S - 20); c.stroke();
+    // the seam and a crease
+    c.fillStyle = "rgba(40,50,70,0.25)";
+    c.fillRect(S - 3, 0, 3, S);
+    c.fillStyle = "rgba(255,255,255,0.08)";
+    c.fillRect(S * 0.37, 0, 6, S);
+    noise(c, 6);
+  },
+  [L.SHOWSIGN]: (c) => {
+    const cell = (k: number, fn: (w: number, h: number) => void) => aspect(c, 2, fn, (k % 2) * 256, Math.floor(k / 2) * 128, 256, 128);
+    for (const [k, n] of [[0, "5"], [1, "3"]] as const)
+      cell(k, (w, h) => {
+        c.fillStyle = "#15161a"; c.fillRect(0, 0, w, h);
+        text(c, "STUDIO", w * 0.3, h * 0.5, h * 0.24, "#f2f2f2", "800");
+        text(c, n, w * 0.75, h * 0.52, h * 0.85, "#ffd21f", "900");
+      });
+    cell(2, (w, h) => {
+      c.fillStyle = "#200404"; c.fillRect(0, 0, w, h);
+      text(c, "APPLAUS", w / 2, h * 0.54, h * 0.52, "#ff3a26", "900");
+    });
+    cell(3, (w, h) => {
+      c.fillStyle = "#200404"; c.fillRect(0, 0, w, h);
+      text(c, "OPNAME · STILTE", w / 2, h * 0.54, h * 0.28, "#ff3a26", "900");
+    });
+    cell(4, (w, h) => {
+      const g = c.createLinearGradient(0, 0, w, h);
+      g.addColorStop(0, "#161b3a"); g.addColorStop(1, "#6b2a5a");
+      c.fillStyle = g; c.fillRect(0, 0, w, h);
+      text(c, "VAN GILS", w / 2, h * 0.38, h * 0.3, "#fff", "900");
+      text(c, "& GASTEN", w / 2, h * 0.7, h * 0.22, "#ffcf5a", "800");
+    });
+    cell(5, (w, h) => {
+      c.fillStyle = "#0d0d12"; c.fillRect(0, 0, w, h);
+      const cols = ["#e23a2e", "#f5c518", "#2e8be2", "#3cc45a", "#a04de0", "#f07f1f"];
+      "BLOKKEN".split("").forEach((ch, k) => {
+        c.fillStyle = cols[k % cols.length]!;
+        c.fillRect(8 + k * (w - 16) / 7 + 2, h * 0.22, (w - 16) / 7 - 4, h * 0.56);
+        text(c, ch, 8 + (k + 0.5) * (w - 16) / 7, h * 0.52, h * 0.4, "#fff", "900");
+      });
+    });
+    cell(6, (w, h) => {
+      c.fillStyle = "#c48a62"; c.fillRect(0, 0, w, h);
+      text(c, "STUDIO", w / 2, h * 0.32, h * 0.18, "#2a1a10", "700");
+      text(c, "MARCONI", w / 2, h * 0.64, h * 0.34, "#2a1a10", "900");
+    });
+    cell(7, (w, h) => {
+      c.fillStyle = "#6f6a70"; c.fillRect(0, 0, w, h);
+      text(c, "STUDIO", w / 2, h * 0.32, h * 0.18, "#f4eee6", "700");
+      text(c, "TOOTS", w / 2, h * 0.64, h * 0.38, "#f4eee6", "900");
+    });
+  },
+  [L.FLATS]: (c) => {
+    // four painted decor flats: a city at night, a forest, a living room, a castle
+    aspect(c, 1, (w, h) => {
+      c.fillStyle = "#101a3a"; c.fillRect(0, 0, w, h);
+      for (let i = 0; i < 40; i++) { c.fillStyle = "#fff"; c.fillRect(R() * w, R() * h * 0.5, 1.5, 1.5); }
+      let x = 0;
+      while (x < w) { const bw = 20 + R() * 30, bh = 60 + R() * 120; c.fillStyle = "#1c2a55"; c.fillRect(x, h - bh, bw, bh); for (let y = h - bh + 8; y < h - 6; y += 12) for (let xx = x + 4; xx < x + bw - 6; xx += 9) if (R() < 0.5) { c.fillStyle = "#ffd76a"; c.fillRect(xx, y, 4, 6); } x += bw + 2; }
+    }, 0, 0, 256, 256);
+    aspect(c, 1, (w, h) => {
+      c.fillStyle = "#a9d4e6"; c.fillRect(0, 0, w, h);
+      c.fillStyle = "#3f7a3a"; c.fillRect(0, h * 0.7, w, h * 0.3);
+      for (let i = 0; i < 9; i++) { const x = R() * w; c.fillStyle = "#5a3a22"; c.fillRect(x - 4, h * 0.45, 8, h * 0.3); c.fillStyle = R() > 0.5 ? "#2f6e2e" : "#3b8a3a"; c.beginPath(); c.arc(x, h * 0.42, 22 + R() * 14, 0, 7); c.fill(); }
+    }, 256, 0, 256, 256);
+    aspect(c, 1, (w, h) => {
+      c.fillStyle = "#d9c9a0"; c.fillRect(0, 0, w, h);
+      for (let x = 0; x < w; x += 24) { c.fillStyle = "rgba(140,90,60,0.25)"; c.fillRect(x, 0, 10, h); }
+      c.fillStyle = "#6b4a2e"; c.fillRect(0, h * 0.82, w, h * 0.18);
+      c.fillStyle = "#ffffff"; c.fillRect(w * 0.35, h * 0.2, w * 0.3, h * 0.35);
+      c.fillStyle = "#8fb7d9"; c.fillRect(w * 0.37, h * 0.22, w * 0.26, h * 0.31);
+      c.fillStyle = "#b03a3a"; c.fillRect(w * 0.1, h * 0.6, w * 0.8, h * 0.22);
+    }, 0, 256, 256, 256);
+    aspect(c, 1, (w, h) => {
+      c.fillStyle = "#e8d6a8"; c.fillRect(0, 0, w, h);
+      c.fillStyle = "#9a9486";
+      c.fillRect(w * 0.15, h * 0.35, w * 0.7, h * 0.65);
+      for (const x of [0.1, 0.4, 0.7]) { c.fillRect(w * x, h * 0.2, w * 0.2, h * 0.8); for (let k = 0; k < 3; k++) c.fillRect(w * x + k * w * 0.075, h * 0.15, w * 0.05, h * 0.06); }
+      c.fillStyle = "#3a2a1a"; c.beginPath(); c.arc(w * 0.5, h * 0.8, w * 0.1, Math.PI, 0); c.fill(); c.fillRect(w * 0.4, h * 0.8, w * 0.2, h * 0.2);
+    }, 256, 256, 256, 256);
+    noise(c, 8);
+  },
   [L.MIDSIGN]: (c) => {
     // two hanging direction signs, each 1.9 x 0.32 m (top half / bottom half of the texture)
     for (const [row, left, right] of [[0, "← RTBF · RÉGIES · PARKING", "VRT · STUDIO TV · PERS →"], [1, "← RTBF", "VRT · RESTAURANT →"]] as const) {
