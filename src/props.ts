@@ -1023,10 +1023,11 @@ export function buildProp(b: Builder, pr: Prop) {
     }
     case "vipbar": {
       // back bar with backlit bottles, a dark counter with a purple glow, stools; pr.a: the neon sign
-      fbox(b, fr, 0, 0, 0.2, 2.9, 0.9, 0.4, sp(L.WOOD_FLOOR, [0.2, 0.12, 0.1]));
+      fbox(b, fr, 0, 0, 0.2, 2.9, 0.9, 0.4, sp(L.WOOD_FLOOR, [0.2, 0.12, 0.1]), true);
       fbox(b, fr, 0, 0.95, 0.06, 2.9, 1.0, 0.1, { all: DARK, pz: { layer: L.MISC, emit: [1.0, 0.85, 0.75], uv: [0.5, 0, 1, 0.5] } });
       fbox(b, fr, 0, 1.95, 0.15, 2.9, 0.05, 0.3, sp(L.WOOD_FLOOR, [0.2, 0.12, 0.1]));
       if (pr.a) fbox(b, fr, 0, 2.08, 0.03, 1.1, 0.55, 0.03, { all: DARK, pz: { layer: L.PLAQUES, emit: [1.4, 1.3, 1.2], uv: cellUV(0, 2, 4) } });
+      if (pr.b) break; // a narrow room: just the shelves
       fbox(b, fr, 0, 0, 1.4, 2.9, 1.05, 0.5, { all: sp(L.WOOD_FLOOR, [0.16, 0.09, 0.1]), pz: sp(L.CARPET_GREY, [0.3, 0.12, 0.25]) }, true);
       fbox(b, fr, 0, 1.05, 1.42, 2.95, 0.05, 0.62, sp(L.BLACK, [1.6, 1.4, 1.6]));
       fbox(b, fr, 0, 0.05, 1.66, 2.9, 0.03, 0.02, { layer: L.WHITE, emit: [0.9, 0.3, 1.4] });

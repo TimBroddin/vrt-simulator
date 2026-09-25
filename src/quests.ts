@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { IcosahedronGeometry } from "three";
 import { CELL, CH, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, floorName } from "./config";
 import { Builder, Frame, LightCtx, fbox, type RGB, type Spec } from "./builder";
-import { getFurnished } from "./furnish";
+import { getFurnished, propSolids } from "./furnish";
 import { K, RT, cellLabel, getPlan, idx, radioStation, roomAnomaly, roomLabel, type Plan, type Room } from "./layout";
 import { MNM } from "./stations";
 import { L } from "./layers";
@@ -432,21 +432,83 @@ export class Quests {
     if (!c.length) return null;
     const { p, r } = rng.pick(c);
     const label = lc(roomLabel(p, r));
+    // everything in the way in this chunk (and the room it has to be in)
+    const solids = getFurnished(p.f, p.cx, p.cz).props.flatMap((pr) => propSolids(pr));
+    const inRoomAt = (x: number, z: number) => {
+      const lx = Math.floor(x / CELL) - p.cx * CH, lz = Math.floor(z / CELL) - p.cz * CH;
+      if (lx < 0 || lz < 0 || lx >= CH || lz >= CH || p.room[idx(lx, lz)] !== r.id) return false;
+      // not against a wall either
+      const fx = x / CELL - Math.floor(x / CELL), fz = z / CELL - Math.floor(z / CELL), m = 0.35 / CELL;
+      return (fx > m || p.room[idx(Math.max(0, lx - 1), lz)] === r.id) && (fx < 1 - m || p.room[idx(Math.min(CH - 1, lx + 1), lz)] === r.id) &&
+        (fz > m || p.room[idx(lx, Math.max(0, lz - 1))] === r.id) && (fz < 1 - m || p.room[idx(lx, Math.min(CH - 1, lz + 1))] === r.id);
+    };
+    const free = (x: number, z: number) => {
+      if (!inRoomAt(x, z)) return false;
+      for (let k = 0; k < solids.length; k += 4)
+        if (x > solids[k]! - 0.35 && x < solids[k + 2]! + 0.35 && z > solids[k + 1]! - 0.35 && z < solids[k + 3]! + 0.35) return false;
+      return true;
+    };
+    // where you can actually walk in this room: a flood fill from its doors on a 20 cm grid
+    const STEP = 0.2, bx0 = (p.cx * CH + r.x0) * CELL, bz0 = (p.cz * CH + r.z0) * CELL;
+    const nx = Math.ceil(((r.x1 - r.x0 + 1) * CELL) / STEP), nz = Math.ceil(((r.z1 - r.z0 + 1) * CELL) / STEP);
+    const walk = new Uint8Array(nx * nz);
+    const queue: number[] = [];
+    for (const i of r.cells)
+      for (let dd = 0; dd < 4; dd++) {
+        const sd = p.sides.get(i * 4 + dd);
+        if (!sd?.door || !sd.door.open || sd.door.w <= 0) continue;
+        const cxw = (p.cx * CH + (i % CH) + 0.5) * CELL + DX[dd]! * 0.9, czw = (p.cz * CH + ((i / CH) | 0) + 0.5) * CELL + DZ[dd]! * 0.9;
+        const gi = Math.floor((cxw - bx0) / STEP), gj = Math.floor((czw - bz0) / STEP);
+        if (gi >= 0 && gj >= 0 && gi < nx && gj < nz && !walk[gj * nx + gi] && free(bx0 + (gi + 0.5) * STEP, bz0 + (gj + 0.5) * STEP)) {
+          walk[gj * nx + gi] = 1;
+          queue.push(gi, gj);
+        }
+      }
+    while (queue.length) {
+      const gj = queue.pop()!, gi = queue.pop()!;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const a = gi + di, c = gj + dj;
+        if (a < 0 || c < 0 || a >= nx || c >= nz || walk[c * nx + a]) continue;
+        walk[c * nx + a] = 2; // tried
+        if (!free(bx0 + (a + 0.5) * STEP, bz0 + (c + 0.5) * STEP)) continue;
+        walk[c * nx + a] = 1;
+        queue.push(a, c);
+      }
+    }
+    // somewhere you can walk to within arm's reach of (x, z)
+    const reachable = (x: number, z: number, y: number) => {
+      // you pick things up from 1.8 m (eye to the object, 10 cm above where it lies)
+      const dy = 1.62 - (y + 0.1), horiz = Math.sqrt(Math.max(0, 1.8 * 1.8 - dy * dy)) - 0.1;
+      const i0 = Math.max(0, Math.floor((x - horiz - bx0) / STEP)), i1 = Math.min(nx - 1, Math.floor((x + horiz - bx0) / STEP));
+      const j0 = Math.max(0, Math.floor((z - horiz - bz0) / STEP)), j1 = Math.min(nz - 1, Math.floor((z + horiz - bz0) / STEP));
+      for (let j = j0; j <= j1; j++)
+        for (let i = i0; i <= i1; i++)
+          if (walk[j * nx + i] === 1 && Math.hypot(bx0 + (i + 0.5) * STEP - x, bz0 + (j + 0.5) * STEP - z) <= horiz) return true;
+      return false;
+    };
     if (d.surface === "table") {
       const fur = getFurnished(p.f, p.cx, p.cz);
       const inRoom = (gx: number, gz: number) => p.room[idx(gx - p.cx * CH, gz - p.cz * CH)] === r.id;
       const tops: Record<string, [number, number, number]> = { ctable: [0.745, 0, 0.8], mtable: [0.76, 0, 0.6], desks: [0.735, 0.55, 0.5], editdesk: [0.74, 0.55, 0.6], newsdesk: [0.97, -0.1, 0.9], messtable: [0.75, 0, 0.35], sdesk: [1.09, 0.05, 0.9], radiodesk: [0.76, 0.3, 0.3], vipbar: [1.1, 1.42, 1.2], lounge: [0.36, 0, 0.35] };
-      const tables = fur.props.filter((pr) => tops[pr.t] && inRoom(pr.gx, pr.gz));
-      if (tables.length) {
+      // (a narrow VIP-bar has no counter)
+      const tables = fur.props.filter((pr) => tops[pr.t] && inRoom(pr.gx, pr.gz) && !(pr.t === "vipbar" && pr.b));
+      for (let tries = 0; tries < 24 && tables.length; tries++) {
         const t = rng.pick(tables);
         const [y, lz, span] = tops[t.t]!;
         const lx = rng.range(-span, span);
         const x = t.x + Math.cos(t.rot) * lx + Math.sin(t.rot) * lz, z = t.z - Math.sin(t.rot) * lx + Math.cos(t.rot) * lz;
-        return { f: p.f, x, z, y: p.f * H + y, gx: t.gx, gz: t.gz, rot: rng.range(0, 6.28), label };
+        if (reachable(x, z, y)) return { f: p.f, x, z, y: p.f * H + y, gx: t.gx, gz: t.gz, rot: rng.range(0, 6.28), label };
       }
     }
-    const i = rng.pick(r.cells);
-    return cellSpot(p.f, p.cx * CH + (i % CH), p.cz * CH + ((i / CH) | 0), label);
+    // on the floor, but never inside a piece of furniture or out of reach
+    let s: Spot | null = null;
+    for (let tries = 0; tries < 60; tries++) {
+      const i = rng.pick(r.cells);
+      const c = cellSpot(p.f, p.cx * CH + (i % CH), p.cz * CH + ((i / CH) | 0), label);
+      if (free(c.x, c.z) && reachable(c.x, c.z, 0)) return c;
+      s ??= c;
+    }
+    return s!;
   }
 
   private placeToilets(cx0: number, cz0: number) {

@@ -3,6 +3,8 @@ import { CEIL, CELL, CH, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, MID_CZ, SNAKE_
 import { K, RT, SK, TALL, gardenStair, getPlan, idx, mazeAt, radioStation, roomAnomaly, setIsThuis, sideAt, stairFrame, tallTop, towerSpec, type Plan, type Room } from "./layout";
 import { Rng, hash } from "./rng";
 import { ART, pickArt } from "./art";
+import { Builder, LightCtx } from "./builder";
+import { buildProp } from "./props";
 
 export interface Light {
   x: number;
@@ -507,7 +509,71 @@ function furnish(p: Plan): Furnished {
         }
     }
 
+  keepDoorsClear(p, props);
   return { plan: p, lights, props };
+}
+
+// --- every door must stay usable ------------------------------------------------
+
+// The floor-plan footprint of a prop: its collision boxes (x0, z0, x1, z1 ...),
+// found by building it once into a scratch builder (unlit, so it's cheap).
+// (made on first use: builder.ts imports this module, so it isn't ready at load time)
+let scratch: LightCtx | null = null;
+export function propSolids(pr: Prop): number[] {
+  scratch ??= new LightCtx(0, 0, 0, "outdoor");
+  const b = new Builder(scratch);
+  buildProp(b, pr);
+  return b.boxes;
+}
+
+// the space just inside each door of the rooms in this chunk, both sides
+export function doorZones(p: Plan): number[] {
+  const out: number[] = [];
+  const DEPTH = 1.3;
+  for (let i = 0; i < CH * CH; i++) {
+    if (p.kind[i] !== K.ROOM) continue;
+    const gx = p.cx * CH + (i % CH), gz = p.cz * CH + ((i / CH) | 0);
+    const cx = (gx + 0.5) * CELL, cz = (gz + 0.5) * CELL;
+    for (let d = 0; d < 4; d++) {
+      const s = sideAt(p.f, gx, gz, d);
+      const w = s.door?.w ?? 0;
+      if (!(s.sk === SK.DOOR || (s.sk === SK.GLASS && w > 0))) continue;
+      const hw = w / 2 + 0.2;
+      const px = cx + DX[d]! * CELL / 2, pz = cz + DZ[d]! * CELL / 2; // the middle of the door
+      const ix = -DX[d]!, iz = -DZ[d]!; // into this cell
+      const ax = Math.abs(DZ[d]!), az = Math.abs(DX[d]!); // along the wall
+      const x0 = px + Math.min(0, ix * DEPTH) - ax * hw, x1 = px + Math.max(0, ix * DEPTH) + ax * hw;
+      const z0 = pz + Math.min(0, iz * DEPTH) - az * hw, z1 = pz + Math.max(0, iz * DEPTH) + az * hw;
+      out.push(x0, z0, x1, z1);
+    }
+  }
+  return out;
+}
+
+const overlaps = (a: number[], b: number[]) => {
+  for (let i = 0; i < a.length; i += 4)
+    for (let j = 0; j < b.length; j += 4)
+      if (a[i]! < b[j + 2]! && a[i + 2]! > b[j]! && a[i + 1]! < b[j + 3]! && a[i + 3]! > b[j + 1]!) return true;
+  return false;
+};
+
+// props that reach far from where they stand
+const BIG = new Set(["tvset", "tribune", "talkset", "blokkenset", "lorry", "stage", "chairfield", "mtable", "vipbar", "radiodesk", "kdesk", "sdesk", "newsdesk", "ceodesk", "palletrack", "counter", "stairsup", "pooltable"]);
+
+// Drop anything whose footprint lands in a doorway, so every room can be entered.
+function keepDoorsClear(p: Plan, props: Prop[]) {
+  const zones = doorZones(p);
+  if (!zones.length) return;
+  for (let k = props.length - 1; k >= 0; k--) {
+    const pr = props[k]!;
+    // only what stands near a door can block it
+    const r = BIG.has(pr.t) ? 10 : 4;
+    let near = false;
+    for (let j = 0; j < zones.length && !near; j += 4) near = Math.abs(pr.x - (zones[j]! + zones[j + 2]!) / 2) < r && Math.abs(pr.z - (zones[j + 1]! + zones[j + 3]!) / 2) < r;
+    if (!near) continue;
+    const s = propSolids(pr);
+    if (s.length && overlaps(s, zones)) props.splice(k, 1);
+  }
 }
 
 function kindAtLocal(p: Plan, i: number, ox: number, oz: number) {
@@ -1094,15 +1160,17 @@ function furnishService(p: Plan, room: Room, rng: Rng, c: Ctx, perimeter: Perime
     case RT.VIPBAR: {
       // dark, purple, a backlit bar and lounge corners; a velvet rope at the door
       lights(WARM, 0.5, "bulb", 1, CEIL - 0.1);
+      const depth = (bd % 2 === 0 ? w : d) * CELL;
+      // in a narrow room there's only space for the shelves: no counter, no stools
+      const short = depth < 6 ? 1 : 0;
       pieces.forEach(([i], k) => {
         const wp = wallPoint(i, bd);
-        prop("vipbar", wp.wx, y0, wp.wz, faceRot(bd), wp.gx, wp.gz, k === mid ? 1 : 0);
+        prop("vipbar", wp.wx, y0, wp.wz, faceRot(bd), wp.gx, wp.gz, k === mid ? 1 : 0, short);
         light(wp.wx - DX[bd]! * 1.6, y0 + 2.2, wp.wz - DZ[bd]! * 1.6, [1.0, 0.7, 0.45], 0.9, 4.5, wp.gx, wp.gz, null);
       });
-      const depth = (bd % 2 === 0 ? w : d) * CELL;
       for (const i of cells) {
         const q = center(i);
-        const nearBar = (q.x - rc.x) * DX[bd]! + (q.z - rc.z) * DZ[bd]! > depth / 2 - 2.9 && depth > 3;
+        const nearBar = (q.x - rc.x) * DX[bd]! + (q.z - rc.z) * DZ[bd]! > depth / 2 - (short ? 1.2 : 2.9);
         if (hasDoor(i)) {
           const dd = doorDir(i);
           if (dd >= 0) {
