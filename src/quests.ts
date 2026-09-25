@@ -937,9 +937,21 @@ export class Quests {
       (this.extra ? `<div class="qk">${this.extra}</div>` : "");
   }
 
+  private resumeAt = 0;
+  private resumeActive: string | null = null;
+  // continuing a saved game: the quests' clock picks up where it was, without the fanfare
+  restore(elapsed: number, active: string | null) {
+    this.resumeAt = Math.max(0, elapsed);
+    this.resumeActive = active;
+  }
+
   start() {
     if (this.running) return;
     this.running = true;
-    this.startedAt = this.t;
+    this.startedAt = this.t - this.resumeAt;
+    for (const q of this.quests) if (q.launchAt <= this.resumeAt) q.launched = true;
+    const a = this.resumeActive && this.quests.find((q) => q.id === this.resumeActive && q.launched && !q.done);
+    if (a) this.active = a.id;
+    this.pickNext();
   }
 }

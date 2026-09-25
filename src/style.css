@@ -44,10 +44,10 @@ canvas { display: block; }
 #liftnum { font: 700 44px var(--osd); }
 #debug { position: fixed; left: 8px; top: 8px; font: 12px var(--osd); background: rgba(0, 0, 0, 0.6); padding: 4px 8px; display: none; }
 
-#overlay { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at center, rgba(10, 12, 16, 0.55), rgba(0, 0, 0, 0.92)); cursor: wait; transition: opacity 0.4s; }
+#overlay { position: fixed; inset: 0; display: flex; overflow-y: auto; background: radial-gradient(ellipse at center, rgba(10, 12, 16, 0.55), rgba(0, 0, 0, 0.92)); cursor: wait; transition: opacity 0.4s; }
 #overlay.ready { cursor: pointer; }
 #overlay.hidden { opacity: 0; pointer-events: none; }
-.card { width: min(640px, 90vw); text-align: center; }
+.card { width: min(640px, 90vw); text-align: center; margin: auto; padding: 24px 0; position: relative; }
 .bars { display: flex; height: 10px; margin: 0 auto 36px; width: 70%; }
 .bars i { flex: 1; }
 .bars i:nth-child(1) { background: #c0c0c0; } .bars i:nth-child(2) { background: #c0c000; } .bars i:nth-child(3) { background: #00c0c0; }
@@ -263,3 +263,14 @@ body.touch #waypoint { bottom: 12px; }
 #plekken.new { animation: plek 2.4s ease-out; }
 @keyframes plek { 0%, 30% { opacity: 1; color: var(--pink); } 100% { opacity: 0.55; color: inherit; } }
 @media (max-width: 900px), (max-height: 520px) { #plekken, #stappen { font-size: 10px; margin-top: 0; } }
+
+/* autosave: continue, or start over */
+#savebar { display: none; margin: -12px auto 24px; font: 12px var(--osd); letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.6); cursor: default; }
+body.has-save #overlay:not(.paused) #savebar, #overlay.paused #savebar { display: flex; justify-content: center; align-items: center; gap: 14px; flex-wrap: wrap; }
+#saveinfo:empty { display: none; }
+#restart { font: 700 11px var(--osd); letter-spacing: 0.14em; color: #fff; background: transparent; border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 3px; padding: 6px 10px; cursor: pointer; }
+#restart:hover { border-color: var(--pink); color: var(--pink); }
+.go .cont { display: none; }
+body.has-save .go .new { display: none; }
+body.has-save .go .cont { display: inline; }
+#overlay.paused .review { display: none; }

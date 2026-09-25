@@ -684,6 +684,16 @@ function buildMidExterior(cx: number, cz: number): Built {
         b.hrect(gx, gz, gx + CELL, gz + CELL, 0, true, sp(L.GRASS), 0);
         continue;
       }
+      if (st.mid && MID_FLOOR > 0) {
+        // the middengang is a bridge: grass underneath, and a concrete pillar every other cell
+        b.hrect(gx, gz, gx + CELL, gz + CELL, 0, true, sp(L.GRASS), 0);
+        const row = st.corr[z * CH + x - 1] || st.corr[z * CH + x + 1]; // part of the long run (east-west)
+        const long = z === 5 || z === 6;
+        if (long ? z === 5 && ((cx * CH + x) & 1) === 0 : ((cz * CH + z) & 1) === 0 && !row) {
+          const px = long ? gx + CELL / 2 : gx + CELL / 2, pz = long ? gz + CELL : gz + CELL / 2;
+          b.aabox(px - 0.35, 0, pz - 0.35, px + 0.35, MID_FLOOR * H - (H - CEIL) + 0.02, pz + 0.35, { all: slab, py: null, ny: null }, 1.5);
+        }
+      }
       const deck = isDeck(x, z);
       // slab band per floor, filling the plenum between one ceiling and the next floor
       // (the middengang is a single-storey bridge: its floor and its roof)

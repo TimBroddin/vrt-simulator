@@ -25,12 +25,17 @@ import { Places, placeAt } from "./places";
 import { layPostcards } from "./postcards";
 import { track, trackOnce } from "./analytics";
 import { Quests } from "./quests";
+import { ago, clearSave, loadSave, writeSave } from "./save";
 
 const params = new URLSearchParams(location.search);
 const seedParam = params.get("seed");
-const seed = seedParam ? (/^\d+$/.test(seedParam) ? Number(seedParam) : hash(...[...seedParam].map((c) => c.charCodeAt(0)))) : (Math.random() * 1e6) | 0;
+const seedFromParam = seedParam ? (/^\d+$/.test(seedParam) ? Number(seedParam) : hash(...[...seedParam].map((c) => c.charCodeAt(0)))) : null;
+// continue where you were, unless the URL asks for another world or floor
+const saved = loadSave();
+const resume = saved && !params.has("floor") && (seedFromParam === null || seedFromParam === saved.seed) ? saved : null;
+const seed = seedFromParam ?? resume?.seed ?? (Math.random() * 1e6) | 0;
 setSeed(seed);
-const startFloor = params.has("floor") ? Math.max(FLOOR_MIN, Math.min(FLOOR_MAX, Number(params.get("floor")))) : 0;
+const startFloor = params.has("floor") ? Math.max(FLOOR_MIN, Math.min(FLOOR_MAX, Number(params.get("floor")))) : resume ? resume.of : 0;
 const debug = params.has("debug");
 const touch = isTouch() || params.has("touch");
 if (touch) document.body.classList.add("touch");
@@ -132,6 +137,14 @@ function surfaceAt(f: number, gx: number, gz: number): { s: Surface; wet: number
 }
 
 const quests = new Quests(world, player, sound, startFloor);
+// (the quests are placed around where the world started; then back to where you were)
+if (resume) {
+  player.pos.set(resume.x, resume.y, resume.z);
+  player.viewY = resume.y;
+  player.yaw = resume.yaw;
+  player.pitch = resume.pitch;
+  quests.restore(resume.elapsed, resume.active);
+}
 const radio = new GhostRadio(sound);
 // the station on the air: its studios light up ON AIR, and its logo flashes up in the HUD
 let stationTimer = 0;
@@ -186,7 +199,7 @@ quests.onFinish = (secs) => {
 $("endcard").addEventListener("click", () => $("endcard").classList.remove("show"));
 
 // the pedometer: every footstep you hear, and how far you've walked
-let steps = 0, pedMeters = 0;
+let steps = resume?.steps ?? 0, pedMeters = resume?.meters ?? 0;
 let stepsShown = "";
 player.onStep = (run) => {
   steps++;
@@ -368,6 +381,7 @@ $("overlay").addEventListener("click", () => {
   sound.start();
   radio.unlock();
   quests.start();
+  $("saveinfo").textContent = "Het spel wordt automatisch bewaard";
   if (touch) {
     playing = true;
     $("overlay").classList.add("hidden");
@@ -458,7 +472,7 @@ world.onChunkMs = (ms) => (chunkMs = chunkMs * 0.9 + ms * 0.1);
 
 let last = performance.now();
 let t = 0;
-let recT = 0;
+let recT = resume?.rec ?? 0;
 let fpsAcc = 0, fpsN = 0;
 const fwd = new THREE.Vector3();
 
@@ -477,6 +491,13 @@ function frame() {
     if (r >= 1) {
       ready = true;
       $("overlay").classList.add("ready");
+      // a save from before the building changed can put you inside a wall: start over on that floor
+      if (resume && world.groundAt(player.pos.x, player.pos.z, player.pos.y) === null) {
+        const s = spawn(player.floor);
+        player.pos.set(s.x, player.floor * H, s.z);
+        player.viewY = player.pos.y;
+        player.yaw = s.yaw;
+      }
     }
   }
 
@@ -572,6 +593,42 @@ function frame() {
     }
   }
 }
+
+// --- autosave, every few seconds and when you leave
+let restarting = false;
+function save() {
+  if (!started || !ready || restarting) return;
+  const P = player.pos, gx = Math.floor(P.x / CELL), gz = Math.floor(P.z / CELL);
+  writeSave({
+    v: 1, seed, of: startFloor, f: player.floor, x: P.x, y: P.y, z: P.z, yaw: player.yaw, pitch: player.pitch,
+    steps, meters: pedMeters, elapsed: quests.t - quests.startedAt, active: quests.active, rec: recT, at: Date.now(),
+    where: `${cellLabel(player.floor, gx, gz)} · ${floorName(player.floor, isRtbf(Math.floor(gz / CH))).toLowerCase()}`,
+  });
+}
+setInterval(save, 3000);
+addEventListener("pagehide", save);
+document.addEventListener("visibilitychange", () => document.hidden && save());
+if (resume) {
+  $("saveinfo").textContent = `Verder waar je was: ${resume.where} · ${ago(resume.at)}`;
+  document.body.classList.add("has-save");
+}
+let sure = false;
+$("restart").addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (!sure) {
+    sure = true;
+    $("restart").textContent = "ZEKER? KLIK NOG EENS";
+    setTimeout(() => {
+      sure = false;
+      $("restart").textContent = "OPNIEUW BEGINNEN";
+    }, 4000);
+    return;
+  }
+  track("restart", { seed, seconds: Math.round(playSecs) });
+  restarting = true;
+  clearSave(seed);
+  location.href = location.pathname; // a new world
+});
 
 // expose for automation / debugging
 const api = { player, world, camera, lifts, sound, quests, minimap, worldmap, openMap, closeMap, radio, live, cctv, places, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };

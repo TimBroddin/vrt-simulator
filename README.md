@@ -12,7 +12,9 @@ URL options: `?seed=1234` (same building every time), `?floor=7` (start floor; t
 
 On phones and tablets: left thumb walks (push far to run), right thumb looks, plus buttons for E, QUEST, LAMP, FOTO, KAART (the plattegrond) and pause. Play in landscape.
 
-The HUD also has a pedometer: the steps you've taken and how far you've walked this visit.
+The HUD also has a pedometer: the steps you've taken and how far you've walked.
+
+The game saves itself every few seconds (the world, where you are, the quests, the pedometer) and continues there next time; OPNIEUW BEGINNEN on the start or pause screen starts over in a new world. The places you've found are kept either way. See `src/save.ts`.
 
 Controls: WASD / ZQSD to walk, Shift to run, mouse to look, E to use things (lifts, quest items), Tab to switch quests, M for the map (plattegrond), K for the minimap, F for the camera lamp, P for a photo, scroll to zoom, N to mute, H to hide the HUD.
 
