@@ -1,6 +1,6 @@
 // Prop and light-fixture geometry, all made from boxes and a few primitives.
-import { CylinderGeometry, IcosahedronGeometry, SphereGeometry } from "three";
-import { CEIL, DOOR_H } from "./config";
+import { CylinderGeometry, ExtrudeGeometry, IcosahedronGeometry, Shape, SphereGeometry } from "three";
+import { CEIL, CELL, DOOR_H } from "./config";
 import { Builder, Frame, UP, fbox, type RGB, type Spec, type V3 } from "./builder";
 import type { Light, Prop } from "./furnish";
 import { ART0, L, LABEL0 } from "./layers";
@@ -8,6 +8,16 @@ import { ART } from "./art";
 import { Rng } from "./rng";
 
 const CYL = new CylinderGeometry(1, 1, 1, 14, 1);
+// the head of a pop: a disc of r 0.25 with its top sliced off at +0.16, 18 mm thick
+// (drawn squeezed sideways: as tall as that, but narrower)
+const POP_HEAD = (() => {
+  const r = 0.25, top = 0.16, a0 = Math.asin(top / r);
+  const sh = new Shape();
+  sh.moveTo(r * Math.cos(a0), top);
+  sh.absarc(0, 0, r, a0, Math.PI - a0, true);
+  sh.lineTo(r * Math.cos(a0), top);
+  return new ExtrudeGeometry(sh, { depth: 0.018, bevelEnabled: false, curveSegments: 24 });
+})();
 const CYL6 = new CylinderGeometry(1, 1, 1, 6, 1);
 const BLOB = new IcosahedronGeometry(1, 1);
 const DISH = new SphereGeometry(1, 14, 5, 0, Math.PI * 2, 0, Math.PI * 0.28);
@@ -1574,6 +1584,48 @@ export function buildProp(b: Builder, pr: Prop) {
       fbox(b, fr, 0, 0.5, 0.1, 0.2, 0.7, 0.2, DARK);
       break;
     }
+    case "pipes": {
+      // along the ceiling: a duct, three pipes (one red, for the sprinklers), a cable tray, brackets
+      const L3 = pr.b || CELL + 0.02;
+      fbox(b, fr, -0.55, -0.34, 0, 0.36, 0.26, L3, sp(L.STEEL, [0.78, 0.8, 0.82]));
+      const pipe = (x: number, y: number, r: number, s: Spec) => {
+        const p = fr.p(x, y, 0);
+        b.geom(CYL, p[0], p[1], p[2], fr.rot, r, L3, r, s, Math.PI / 2);
+      };
+      pipe(-0.15, -0.14, 0.06, sp(L.WHITE, [0.82, 0.82, 0.8]));
+      pipe(0.08, -0.12, 0.045, sp(L.WHITE, [0.7, 0.08, 0.06]));
+      pipe(0.32, -0.18, 0.08, sp(L.STEEL, [0.6, 0.62, 0.64]));
+      fbox(b, fr, 0.66, -0.1, 0, 0.24, 0.04, L3, sp(L.STEEL, [0.55, 0.57, 0.6]));
+      for (let k = 0; k < 3; k++) fbox(b, fr, 0.66 + rng.range(-0.08, 0.08), -0.08, rng.range(-L3 / 2 + 0.4, L3 / 2 - 0.4), 0.03, 0.03, 0.7, sp(L.WHITE, rng.pick([[0.1, 0.1, 0.1], [0.8, 0.8, 0.8], [0.9, 0.5, 0.1]] as RGB[])));
+      for (const z of [-L3 / 4, L3 / 4]) fbox(b, fr, 0, -0.22, z, 1.76, 0.03, 0.04, DARK);
+      break;
+    }
+    case "stencil": {
+      const q = pr.a;
+      const u0 = (q % 2) * 0.5, v0 = 0.75 - Math.floor(q / 2) * 0.25;
+      b.quad(fr.p(-0.6, 0, 0.004), [fr.c * 1.2, 0, -fr.s * 1.2], [0, 0.6, 0], fr.az, { layer: L.STENCIL, uv: [u0, v0, u0 + 0.5, v0 + 0.25] }, 0);
+      break;
+    }
+    case "pop": {
+      // de vakbond: a figure cut out of MDF, standing in a pine block. Facing +z.
+      const mdf = sp(L.WHITE, [0.9, 0.56, 0.48]);
+      const pine = sp(L.WOOD_FLOOR, [1.05, 0.95, 0.72]);
+      const t = 0.018;
+      const f = new Frame(pr.x, pr.y, pr.z, pr.rot + rng.range(-0.08, 0.08));
+      fbox(b, f, 0, 0.0, 0.02, 0.56, 0.07, 0.2, pine);
+      fbox(b, f, 0, 0.07, -0.06, 0.56, 0.1, 0.035, pine);
+      // legs
+      for (const x of [-0.13, 0.13]) fbox(b, f, x, 0.08, 0, 0.18, 0.68, t, mdf);
+      // body, arms either side of a slot, shoulders
+      fbox(b, f, 0, 0.76, 0, 0.44, 0.56, t, mdf);
+      for (const x of [-0.29, 0.29]) fbox(b, f, x, 0.66, 0, 0.08, 0.66, t, mdf);
+      fbox(b, f, 0, 1.32, 0, 0.66, 0.1, t, mdf);
+      // the head: a circle with the top cut straight off, sunk into the shoulders
+      const h = f.p(0, 1.56, -t / 2);
+      b.geom(POP_HEAD, h[0], h[1], h[2], f.rot, 0.64, 1, 1, mdf);
+      solidRect(b, f, 0, 0.02, 0.6, 0.25);
+      break;
+    }
     case "puddle": {
       const s = pr.a;
       b.quad(fr.p(-s, 0.006, -s * 0.7), [fr.c * 2 * s, 0, -fr.s * 2 * s], [fr.s * 1.4 * s, 0, fr.c * 1.4 * s], [0, 1, 0], { layer: L.PUDDLE, uv: [0, 0, 1, 1] }, 0);
@@ -1607,6 +1659,13 @@ export function buildFixture(b: Builder, l: Light) {
       fbox(b, fr, 0, -0.3, 0, 0.012, 0.3, 0.012, DARK);
       const t: Spec = on ? { layer: L.WHITE, emit: bright, flick: l.flick || undefined } : { layer: L.WHITE, tint: [0.4, 0.4, 0.4] };
       fbox(b, fr, 0, -0.42, 0, 0.1, 0.12, 0.1, t);
+      break;
+    }
+    case "roundlamp": {
+      // a round bulkhead lamp on the wall
+      b.geom(CYL, ...fr.p(0, 0, -0.095), fr.rot, 0.16, 0.05, 0.16, GREY, Math.PI / 2);
+      const g: Spec = on ? { layer: L.WHITE, emit: bright, flick: l.flick || undefined } : { layer: L.WHITE, tint: [0.45, 0.45, 0.45] };
+      b.geom(CYL, ...fr.p(0, 0, -0.055), fr.rot, 0.13, 0.04, 0.13, g, Math.PI / 2);
       break;
     }
     case "chandelier": {

@@ -1,6 +1,6 @@
 // Phase 2: lights and props. Only reads phase-1 plans (own + neighbours).
-import { CEIL, CELL, CH, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, MID_CZ, T, isRtbf } from "./config";
-import { K, RT, SK, TALL, gardenStair, getPlan, idx, radioStation, roomAnomaly, setIsThuis, sideAt, stairFrame, tallTop, towerSpec, type Plan, type Room } from "./layout";
+import { CEIL, CELL, CH, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, MID_CZ, SNAKE_HALF, T, isRtbf } from "./config";
+import { K, RT, SK, TALL, gardenStair, getPlan, idx, mazeAt, radioStation, roomAnomaly, setIsThuis, sideAt, stairFrame, tallTop, towerSpec, type Plan, type Room } from "./layout";
 import { Rng, hash } from "./rng";
 import { ART, pickArt } from "./art";
 
@@ -146,6 +146,7 @@ function furnish(p: Plan): Furnished {
   }
 
   if (f === FLOOR_MIN) {
+    if (mazeAt(f, p.st)) furnishSnake(p, rng, { light, prop, center, wallPoint, wallDirs, hasDoor, deadP, flickP, y0, hangArt });
     for (let i = 0; i < CH * CH; i++) {
       if (p.kind[i] !== K.GARAGE) continue;
       const c = center(i);
@@ -180,6 +181,10 @@ function furnish(p: Plan): Furnished {
   }
 
   // --- Office floors
+  if (mazeAt(f, p.st)) {
+    furnishSnake(p, rng, { light, prop, center, wallPoint, wallDirs, hasDoor, deadP, flickP, y0, hangArt });
+    return { plan: p, lights, props };
+  }
   const style = p.style;
   const atr = p.st.atrium;
   const inAtrium = atr && f >= atr.f0 && f <= atr.f1;
@@ -304,6 +309,11 @@ function furnish(p: Plan): Furnished {
         if (scr !== 3) light(wp.wx - DX[d]! * 0.5, y0 + 1.8, wp.wz - DZ[d]! * 0.5, COOL, 0.35, 3, c.gx, c.gz, null);
       } else if (r < 0.46) prop("bin", wp.wx, y0, wp.wz, rot, c.gx, c.gz);
       else if (r < 0.475) prop("vending", wp.wx, y0, wp.wz, rot, c.gx, c.gz, rng.int(0, 1));
+      else if (r < 0.482 && !rtbf) {
+        // de vakbond was here
+        const pp = wallPoint(i, d, 0.35);
+        prop("pop", pp.wx, y0, pp.wz, rot, c.gx, c.gz, rng.int(0, 99));
+      }
     }
     // security cameras where a corridor run ends, looking down it
     for (let d = 0; d < 4; d++) {
@@ -589,6 +599,20 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
     } else if (an === "stairs") {
       panelLights(FLUO, 1.1, 1, "panel", true);
       prop("stairsup", roomCenter.x, y0, roomCenter.z, rot + (rng.chance(0.5) ? Math.PI : 0), g0.gx, g0.gz);
+    } else if (an === "poppen") {
+      // a room full of them: 77 poppen voor 77 collega's, all facing the door
+      panelLights(FLUO, 0.9, 1, "panel", true);
+      const door = cells.find((i) => hasDoor(i)) ?? cells[0]!;
+      const dq = center(door);
+      const x0 = (p.cx * CH + room.x0) * CELL, z0 = (p.cz * CH + room.z0) * CELL;
+      const W = w * CELL, D = d * CELL;
+      let n = 0;
+      for (let z = z0 + 0.6; z < z0 + D - 0.4 && n < 77; z += 0.85)
+        for (let x = x0 + 0.55; x < x0 + W - 0.4 && n < 77; x += 0.72) {
+          const jx = x + rng.range(-0.1, 0.1), jz = z + rng.range(-0.1, 0.1);
+          if (Math.hypot(jx - dq.x, jz - dq.z) < 1.3) continue;
+          prop("pop", jx, y0, jz, Math.atan2(dq.x - jx, dq.z - jz) + rng.range(-0.15, 0.15), Math.floor(jx / CELL), Math.floor(jz / CELL), n++);
+        }
     } else if (an === "flooded") {
       for (const i of cells) {
         const q = center(i);
@@ -1353,4 +1377,53 @@ function furnishToots(p: Plan, room: Room, rng: Rng, c: Ctx, perimeter: Perimete
     const q = at(rng.range(-len / 2 + 0.8, len / 2 - 0.8), rng.range(3.8, depth - 0.8));
     prop("bistro", q.x, y0, q.z, r0 + Math.PI + rng.range(-0.5, 0.5), q.gx, q.gz, rng.int(0, 99));
   }
+}
+
+// De gang naar de parking: round lamps on the walls, pipes along the ceiling, the
+// distance stencilled on the wall every fifty metres. The walls are the same everywhere.
+function furnishSnake(p: Plan, rng: Rng, c: Ctx) {
+  const { light, prop, center, y0 } = c;
+  const maze = mazeAt(p.f, p.st)!;
+  const path = maze.path;
+  // a point on the inner (narrow) wall of side d
+  const face = (i: number, d: number, off = 0) => {
+    const q = center(i);
+    return { wx: q.x + DX[d]! * (SNAKE_HALF - off), wz: q.z + DZ[d]! * (SNAKE_HALF - off) };
+  };
+  path.forEach((i, n) => {
+    if (p.kind[i] !== K.CORR) return;
+    const q = center(i);
+    const sd = [0, 1, 2, 3].map((d) => sideAt(p.f, q.gx, q.gz, d).sk);
+    const opens = [0, 1, 2, 3].filter((d) => sd[d] === SK.OPEN || sd[d] === SK.DOOR);
+    // pipes along the ceiling, into every arm of the cell
+    if (opens.length === 2 && (opens[0]! + 2) % 4 === opens[1]) prop("pipes", q.x, y0 + 2.5, q.z, opens[0]! % 2 === 0 ? Math.PI / 2 : 0, q.gx, q.gz, n, 3.02);
+    else for (const d of opens) prop("pipes", q.x + DX[d]! * 0.75, y0 + 2.5, q.z + DZ[d]! * 0.75, d % 2 === 0 ? Math.PI / 2 : 0, q.gx, q.gz, n, 1.5);
+    // a lamp every other cell, on whichever wall is there
+    const walls = [0, 1, 2, 3].filter((d) => !opens.includes(d));
+    if (n % 2 === 0 && walls.length) {
+      const d = walls[(n >> 1) % walls.length]!;
+      const wp = face(i, d, -0.02);
+      light(wp.wx - DX[d]! * 0.12, y0 + 2.12, wp.wz - DZ[d]! * 0.12, [1.0, 0.94, 0.82], 1.35, 7, q.gx, q.gz, "roundlamp", {
+        rot: faceRot(d), dead: rng.chance(0.08 + n * 0.002), flick: rng.chance(0.07),
+      });
+    }
+    // the markings: the way at the start, then how far you've come
+    const mark = n === 0 ? (maze.parking ? 0 : 1) : n % 17 === 0 && n / 17 <= 5 ? [2, 3, 4, 5, 7][n / 17 - 1]! : n % 23 === 11 ? 6 : -1;
+    if (mark >= 0 && walls.length) {
+      const d = walls[walls.length - 1]!;
+      const wp = face(i, d, 0.012);
+      prop("stencil", wp.wx, y0 + 1.45, wp.wz, faceRot(d), q.gx, q.gz, mark);
+    } else if (!maze.parking && n === path.length - 1 && walls.length) {
+      // where it goes: nowhere. Someone from the vakbond is waiting.
+      const d = walls.find((w) => (opens[0]! + 2) % 4 === w) ?? walls[0]!;
+      const wp = face(i, d, 0.3);
+      prop("pop", wp.wx, y0, wp.wz, faceRot(d), q.gx, q.gz, 0);
+      const lp = face(i, d, -0.02);
+      light(lp.wx - DX[d]! * 0.12, y0 + 2.2, lp.wz - DZ[d]! * 0.12, [1.0, 0.9, 0.75], 1.1, 5, q.gx, q.gz, "roundlamp", { rot: faceRot(d), flick: true });
+    } else if (walls.length && hash(85, q.gx, q.gz) % 100 < 7) {
+      const d = walls[0]!;
+      const wp = face(i, d);
+      prop("extinguisher", wp.wx, y0, wp.wz, faceRot(d), q.gx, q.gz);
+    }
+  });
 }

@@ -836,11 +836,12 @@ export class Quests {
   }
 
   private hudKey = "";
+  extra = ""; // a line under the quest count (the places found)
   listUntil = 0;
   private renderHud(q: Quest | null, bars: number) {
     const list = this.quests.filter((x) => x.launched);
     const showList = this.t < this.listUntil;
-    const key = `${this.active}|${bars}|${showList}|${list.map((x) => x.id + x.done).join()}|${q?.hint()}`;
+    const key = `${this.active}|${bars}|${showList}|${list.map((x) => x.id + x.done).join()}|${q?.hint()}|${this.extra}`;
     if (key === this.hudKey) return;
     this.hudKey = key;
     const box = document.getElementById("quest")!;
@@ -855,7 +856,8 @@ export class Quests {
         ? `<div class="qa"><div class="qt">${q.goal}</div><div class="qh">${q.hint()}</div><div class="sig">SIGNAAL ${sig}</div></div>`
         : `<div class="qa"><div class="qt">Geen actieve quest</div></div>`) +
       (showList ? `<ul>${list.map((x) => `<li class="${x.done ? "done" : x.id === this.active ? "act" : ""}">${x.done ? "✓" : x.id === this.active ? "▶" : "·"} ${x.title}</li>`).join("")}</ul>` : "") +
-      `<div class="qk">${this.quests.filter((x) => x.done).length}/${this.quests.length} gehaald${list.filter((x) => !x.done).length > 1 ? ` · <kbd>TAB</kbd><span class="mob">QUEST</span> andere quest` : ""}</div>`;
+      `<div class="qk">${this.quests.filter((x) => x.done).length}/${this.quests.length} gehaald${list.filter((x) => !x.done).length > 1 ? ` · <kbd>TAB</kbd><span class="mob">QUEST</span> andere quest` : ""}</div>` +
+      (this.extra ? `<div class="qk">${this.extra}</div>` : "");
   }
 
   start() {

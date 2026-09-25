@@ -1,9 +1,9 @@
 // Turns a furnished plan into geometry: floors, ceilings, walls with openings,
 // stairwells, elevator cars and the courtyard facades.
-import { CEIL, CELL, CH, CHUNK, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, MID_FLOOR, ST_HALF, ST_U1, ST_U2, ST_VM, T, isRtbf } from "./config";
+import { CEIL, CELL, CH, CHUNK, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, MID_FLOOR, SNAKE_HALF, ST_HALF, ST_U1, ST_U2, ST_VM, T, isRtbf } from "./config";
 import { Builder, Frame, LightCtx, UP, fbox, type Built, type RGB, type Spec, type V3 } from "./builder";
 import { getFurnished } from "./furnish";
-import { K, RT, SK, TALL, gardenStair, getStructure, kindAt, marconiGallery, roomAnomaly, sideAt, stairFrame, tallTop, towerSpec, type GardenStair, type Plan } from "./layout";
+import { K, RT, SK, TALL, gardenStair, getStructure, kindAt, mazeAt, marconiGallery, roomAnomaly, sideAt, stairFrame, tallTop, towerSpec, type GardenStair, type Plan } from "./layout";
 import { hash } from "./rng";
 import { L } from "./layers";
 import { buildFixture, buildProp } from "./props";
@@ -40,6 +40,8 @@ function surf(p: Plan, i: number): Surf {
   const k = p.kind[i];
   switch (k) {
     case K.CORR:
+      // de gang naar de parking: painted blocks, a concrete floor, a low ceiling full of pipes
+      if (mazeAt(p.f, p.st)) return { floor: sp(L.CONCRETE, [0.72, 0.72, 0.7]), ceil: sp(L.CONCRETE, [0.62, 0.62, 0.6]), wall: sp(L.BLOCKWALL), h: 2.5, base: false };
       if (p.st.atrium?.kind === "hall" && p.zone[i] === 2)
         return { floor: sp(L.SPORTFLOOR), ceil: null, wall: sp(L.PLASTER, [0.95, 0.9, 0.74]), h: CEIL, base: false };
       if (p.st.special === "park") return { floor: sp(L.CONCRETE, [0.75, 0.75, 0.72]), ceil: sp(L.STEEL, [0.7, 0.72, 0.75]), wall: sp(L.PLASTER), h: CEIL, base: false };
@@ -137,6 +139,7 @@ export function buildChunk(f: number, cx: number, cz: number) {
   if (gs && f === gs.f0) buildGardenStair(b, gs, cx, cz);
   if (p.st.atrium?.kind === "hall" && f === p.st.atrium.f0) buildHall(b, p);
   if (p.st.atrium && TALL.has(p.st.atrium.kind) && p.st.atrium.kind !== "hall" && f === p.st.atrium.f0) buildTall(b, p);
+  if (mazeAt(f, p.st)) buildSnake(b, p);
   for (const l of fur.lights) buildFixture(b, l);
   for (const pr of fur.props) buildProp(b, pr);
   return { built: b.finish(), elevs };
@@ -973,4 +976,32 @@ function rod(b: Builder, p0: V3, p1: V3, th: number, s: Spec) {
   ref = [az[0] / al, az[1] / al, az[2] / al];
   const ay: V3 = [ref[1] * ax[2] - ref[2] * ax[1], ref[2] * ax[0] - ref[0] * ax[2], ref[0] * ax[1] - ref[1] * ax[0]];
   b.obox([(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (p0[2] + p1[2]) / 2], ax, ay, ref, [l / 2, th / 2, th / 2], s);
+}
+
+// De gang naar de parking: thick block walls inside every cell of the route,
+// so the corridor is only 1.8 m wide. Open sides get an arm, closed sides a wall.
+function buildSnake(b: Builder, p: Plan) {
+  const y0 = p.f * H, hh = 2.5, w = SNAKE_HALF, e = CELL / 2;
+  const wall = sp(L.BLOCKWALL);
+  for (let i = 0; i < CH * CH; i++) {
+    if (p.kind[i] !== K.CORR) continue;
+    const gx = p.cx * CH + (i % CH), gz = p.cz * CH + ((i / CH) | 0);
+    const cx = (gx + 0.5) * CELL, cz = (gz + 0.5) * CELL;
+    b.cell(gx, gz);
+    const open = [0, 1, 2, 3].map((d) => {
+      const k = sideAt(p.f, gx, gz, d).sk;
+      return k === SK.OPEN || k === SK.DOOR;
+    });
+    const box = (x0: number, z0: number, x1: number, z1: number) => {
+      b.aabox(cx + x0, y0, cz + z0, cx + x1, y0 + hh, cz + z1, { all: wall, py: null, ny: null }, 1);
+      b.solid(cx + x0, cz + z0, cx + x1, cz + z1);
+    };
+    // the four corners, always
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(sx < 0 ? -e : w, sz < 0 ? -e : w, sx < 0 ? -w : e, sz < 0 ? -w : e);
+    // a wall across every side the route doesn't go through
+    if (!open[0]) box(w, -w, e, w);
+    if (!open[2]) box(-e, -w, -w, w);
+    if (!open[1]) box(-w, w, w, e);
+    if (!open[3]) box(-w, -e, w, -w);
+  }
 }

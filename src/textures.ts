@@ -629,6 +629,38 @@ const painters: Record<number, (c: Ctx) => void> = {
     }, 256, 256, 256, 256);
     noise(c, 8);
   },
+  [L.BLOCKWALL]: (c) => {
+    // painted concrete blocks (39 x 19 cm), a dark band along the bottom, scuffs
+    fill(c, "#e9e5d8");
+    const bw = S / 6.4, bh = S / 13;
+    c.fillStyle = "#c9c4b4";
+    for (let r = 0; r < 14; r++) {
+      const y = r * bh;
+      c.fillRect(0, y, S, 2);
+      const off = r % 2 ? bw / 2 : 0;
+      for (let x = -bw + off; x < S; x += bw) c.fillRect(x, y, 2, bh);
+    }
+    blotches(c, 30, "#d6d0bf", 10, 40, 0.25);
+    // the band: ~0.8 m of dark grey paint, a bit uneven at the top
+    const band = S * (1 - 0.8 / 2.5);
+    c.fillStyle = "#2c2d30";
+    c.fillRect(0, band, S, S - band);
+    c.fillStyle = "rgba(44,45,48,0.5)";
+    for (let x = 0; x < S; x += 6) c.fillRect(x, band - R() * 3, 6, 3);
+    c.globalAlpha = 0.18;
+    for (let i = 0; i < 25; i++) { c.fillStyle = R() > 0.5 ? "#6b6a64" : "#fff"; c.fillRect(R() * S, band - 20 + R() * 30, 20 + R() * 60, 2 + R() * 3); }
+    c.globalAlpha = 1;
+    noise(c, 10);
+  },
+  [L.STENCIL]: (c) => {
+    // stencilled on the wall: the way to the parking, and how far you've come
+    c.clearRect(0, 0, S, S);
+    const labels = ["→ PARKING", "→ NERGENS", "50 M", "100 M", "150 M", "200 M", "NIET ROKEN", "250 M"];
+    labels.forEach((t, k) => {
+      const x = (k % 2) * 256, y = Math.floor(k / 2) * 128;
+      text(c, t, x + 128, y + 66, t.length > 8 ? 34 : 56, k === 6 ? "#b3261e" : "#2a2b2e", "900", "center", "Impact, 'Arial Black', sans-serif");
+    });
+  },
   [L.MIDSIGN]: (c) => {
     // two hanging direction signs, each 1.9 x 0.32 m (top half / bottom half of the texture)
     for (const [row, left, right] of [[0, "← RTBF · RÉGIES · PARKING", "VRT · STUDIO TV · PERS →"], [1, "← RTBF", "VRT · RESTAURANT →"]] as const) {

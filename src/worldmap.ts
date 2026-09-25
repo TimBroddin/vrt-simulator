@@ -2,7 +2,7 @@
 // You see about 100 m, and one floor up or down; beyond that it's fog. Click to
 // set a waypoint, or pick a place from the list and it finds the nearest one in sight.
 import { CELL, CH, CHUNK, FLOOR_MAX, FLOOR_MIN, MID_CZ, MID_FLOOR, floorName, isRtbf } from "./config";
-import { K, RT, SK, cellLabel, getPlan, getStructure, messFloors, radioStation, roomLabel, setIsThuis, type Plan, type Room, type Structure } from "./layout";
+import { K, RT, SK, cellLabel, getPlan, getStructure, mazeAt, messFloors, radioStation, roomLabel, setIsThuis, type Plan, type Room, type Structure } from "./layout";
 import { paintCells } from "./minimap";
 import { STATIONS } from "./stations";
 
@@ -66,6 +66,8 @@ function landmarks(f: number, cx: number, cz: number): Mark[] {
   const a = st.atrium;
   if (a && f >= a.f0 && f <= a.f1) out.push({ ...at((a.x0 + a.x1 + 1) / 2, (a.z0 + a.z1 + 1) / 2), label: atriumName(a, fr), tier: a.kind === "lobby" || a.kind === "garden" ? 1 : 0 });
   if (st.special === "park" && f >= 0 && f < FLOOR_MAX) out.push({ ...at(6, 6), label: fr ? "PARKING-TOUR" : "PARKEERTOREN", tier: 0 });
+  const mz = mazeAt(f, st);
+  if (mz) out.push({ ...at((mz.path[0]! % CH) + 0.5, ((mz.path[0]! / CH) | 0) + 0.5), label: mz.parking ? (fr ? "VERS LE PARKING" : "GANG NAAR DE PARKING") : fr ? "VERS NULLE PART" : "GANG NAAR NERGENS", tier: 0 });
   for (const r of p.rooms) {
     const tier = TIER[r.type];
     if (tier === undefined || p.kind[r.cells[0]!] !== K.ROOM) continue;
@@ -169,6 +171,17 @@ const DESTS: { group: string; items: { name: string; find: Finder }[] }[] = [
         return inSight(px, pz, pf, m.x, m.z, m.f) ? m : null;
       } },
       { name: "Parking", find: cellFinder(K.GARAGE, () => FLOOR_MIN) },
+      { name: "Gang naar de parking", find: structFinder((st) => {
+        const m = mazeAt(FLOOR_MIN, st);
+        return m ? { x: (st.cx * CH + (m.path[0]! % CH) + 0.5) * CELL, z: (st.cz * CH + ((m.path[0]! / CH) | 0) + 0.5) * CELL, f: FLOOR_MIN } : null;
+      }) },
+      { name: "Gang naar nergens", find: structFinder((st, pf) => {
+        for (const f of [pf, pf - 1, pf + 1]) {
+          const m = f >= 0 ? mazeAt(f, st) : null;
+          if (m && !m.parking) return { x: (st.cx * CH + (m.path[0]! % CH) + 0.5) * CELL, z: (st.cz * CH + ((m.path[0]! / CH) | 0) + 0.5) * CELL, f };
+        }
+        return null;
+      }) },
       { name: "Dak", find: cellFinder(K.ROOF, () => FLOOR_MAX) },
     ],
   },

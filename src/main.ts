@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { CELL, CH, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, floorName, isRtbf } from "./config";
-import { K, RT, SK, anomalyAt, cellLabel, getPlan, getStructure, sideAt, stairFrame } from "./layout";
+import { K, RT, SK, anomalyAt, cellLabel, getPlan, getStructure, mazeAt, sideAt, stairFrame } from "./layout";
 import { getFurnished } from "./furnish";
 import { hash, setSeed } from "./rng";
 import { makeTextureArray } from "./textures";
@@ -21,6 +21,8 @@ import { ClockFace } from "./clockface";
 import { GhostRadio } from "./radio";
 import { LiveTV } from "./live";
 import { CCTV } from "./cctv";
+import { Places, placeAt } from "./places";
+import { layPostcards } from "./postcards";
 import { track, trackOnce } from "./analytics";
 import { Quests } from "./quests";
 
@@ -83,7 +85,7 @@ function spawn(f: number) {
         const p = getPlan(f, cx, cz);
         let best = -1, bd = 1e9;
         for (let i = 0; i < CH * CH; i++) {
-          if (p.kind[i] !== K.CORR || p.zone[i]) continue;
+          if (p.kind[i] !== K.CORR || p.zone[i] || mazeAt(f, p.st)) continue;
           const x = i % CH, z = (i / CH) | 0;
           const d = Math.hypot(x - CH / 2, z - CH / 2);
           if (d < bd) { bd = d; best = i; }
@@ -109,6 +111,7 @@ function surfaceAt(f: number, gx: number, gz: number): { s: Surface; wet: number
   const i = (gz - cz * CH) * CH + (gx - cx * CH);
   switch (p.kind[i]) {
     case K.CORR:
+      if (mazeAt(f, p.st)) return { s: "concrete", wet: 0.85 };
       if (p.zone[i] && p.st.atrium?.kind === "garden") return p.zone[i] === 2 ? { s: "tile", wet: 0.6 } : { s: "carpet", wet: 0.4 };
       if (p.zone[i] === 1 || p.zone[i] === 2) return { s: "wood", wet: 0.55 };
       return p.style === 0 ? { s: "tile", wet: 0.5 } : { s: "carpet", wet: 0.28 };
@@ -147,6 +150,20 @@ const minimap = new Minimap(!touch);
 const worldmap = new WorldMap();
 const live = new LiveTV(mat.uniforms);
 const cctv = new CCTV(renderer, scene, mat, world, player, touch);
+// plekken: the places you've found, kept across visits
+const places = new Places();
+$("plekken").textContent = `PLEKKEN ${places.count}`;
+places.onFound = (id, name) => {
+  $("plekken").textContent = `PLEKKEN ${places.count}`;
+  $("plekken").classList.remove("new");
+  void $("plekken").offsetWidth;
+  $("plekken").classList.add("new");
+  quests.toast("PLEK ONTDEKT", `${name} · ${places.count}`, "new");
+  sound.chime();
+  track("place_found", { place: id, found: places.found.size });
+};
+places.render($("places"));
+layPostcards($("postcards"));
 // the radio studio you're standing near (checked a few times a second)
 let nearStudio = -1, nearT = 0;
 function studioNear(): number {
@@ -250,6 +267,7 @@ document.addEventListener("pointerlockchange", () => {
   locked = document.pointerLockElement === canvas;
   $("overlay").classList.toggle("hidden", locked || worldmap.open);
   if (!locked && started && !worldmap.open) {
+    places.render($("places"));
     $("overlay").classList.add("paused");
     player.keys.clear();
   }
@@ -332,6 +350,7 @@ const touchUi = touch
       photo: () => (photoRequested = true),
       map: () => (worldmap.open ? closeMap() : openMap()),
       pause: () => {
+        places.render($("places"));
         playing = false;
         touchUi?.reset();
         $("overlay").classList.remove("hidden");
@@ -404,6 +423,7 @@ function updateEnv(dt: number) {
   const label = cellLabel(f, gx, gz);
   const fr = isRtbf(Math.floor(gz / CH));
   if (started) {
+    places.visit(placeAt(f, player.pos.x, player.pos.z, player.pos.y));
     trackOnce(`floor${f}`, "floor_visited", { floor: f });
     const area = onRoof ? "roof" : f === FLOOR_MIN ? "parking" : /PLANTENTUIN|JARDIN/.test(label) ? "plantentuin" : label === "MIDDENGANG" ? "middengang"
       : label === "ATRIUM" ? "atrium" : STATIONS.some((st) => st.label === label) ? "radio" : /^STUDIO/.test(label) ? "studio" : /REGIE|RÉGIE/.test(label) ? "regie" : /ARCHIEF|ARCHIVES/.test(label) ? "archive"
@@ -547,7 +567,7 @@ function frame() {
 }
 
 // expose for automation / debugging
-const api = { player, world, camera, lifts, sound, quests, minimap, worldmap, openMap, closeMap, radio, live, cctv, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished };
+const api = { player, world, camera, lifts, sound, quests, minimap, worldmap, openMap, closeMap, radio, live, cctv, places, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
 (window as any).__vrt = api;
 if (debug) $("debug").style.display = "block";
 frame();

@@ -11,6 +11,7 @@ export const EYE = 1.62;
 // De middengang: a band of chunks along z between the VRT (south) and its
 // mirror twin, the RTBF (north).
 export const MID_CZ = -1;
+export const SNAKE_HALF = 0.9; // de gang naar de parking is 1.8 m wide
 export const MID_FLOOR = 0; // the only floor with a middengang; elsewhere the gap is open air
 export const isRtbf = (cz: number) => cz < MID_CZ;
 

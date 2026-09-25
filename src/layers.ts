@@ -81,10 +81,12 @@ export const L = {
   CYC: 76, // De Toren: the painted sky, horizon at the bottom
   SHOWSIGN: 77, // 2 x 4: studio numbers, APPLAUS, show logos, Marconi, Toots
   FLATS: 78, // 2 x 2 painted decor flats
+  BLOCKWALL: 79, // de gang naar de parking: painted concrete blocks, a dark band at the bottom
+  STENCIL: 80, // 2 x 4 stencilled wall markings, on transparent
 } as const;
 
 // artworks and their museum labels (8 labels per layer) follow the painted layers
-export const ART0 = 79;
+export const ART0 = 81;
 export const LABEL0 = ART0 + ART.length;
 export const LAYER_COUNT = LABEL0 + Math.ceil(ART.length / 8);
 
@@ -118,4 +120,5 @@ SCALE[L.PLYWOOD] = 2.4;
 SCALE[L.WALLPAPER] = 1.2;
 SCALE[L.HAZARD] = 0.8;
 SCALE[L.PANELS] = 2.4;
+SCALE[L.BLOCKWALL] = 2.5; // one wall height: the band stays at the bottom
 SCALE[L.CYC] = 6 * 3.6 + 2.7; // one sky from the floor to the ceiling of De Toren

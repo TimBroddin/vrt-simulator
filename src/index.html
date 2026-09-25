@@ -17,7 +17,7 @@
       <div id="top-right"><span class="drop" id="logo">vrt</span> <span id="addr">REYERSLAAN 52</span></div>
       <div id="station"><img id="stationlogo" alt="" /><div><span class="lbl">ERGENS SPEELT EEN RADIO</span><span id="stationname"></span></div></div>
       <canvas id="minimap" width="200" height="200"></canvas>
-      <div id="bottom-left"><div id="floor"></div><div id="loc"></div></div>
+      <div id="bottom-left"><div id="floor"></div><div id="loc"></div><div id="plekken"></div></div>
       <div id="bottom-right"><span id="zoom"></span><span id="lamp">LAMP</span><span class="bat"><b></b><b></b><b></b><b class="low"></b></span></div>
       <div id="prompt"></div>
       <div id="liftpanel" style="display:none">
@@ -62,6 +62,7 @@
     </div>
 
     <div id="overlay">
+      <div id="postcards"></div>
       <div class="card">
         <div class="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
         <div class="titles">
@@ -77,6 +78,7 @@
         <div class="load"><div id="loadbar"></div></div>
         <p class="go"><span class="desk">Klik</span><span class="mob">Tik</span> om binnen te gaan</p>
         <p class="resume"><span class="desk">Klik</span><span class="mob">Tik</span> om verder te gaan</p>
+        <div id="places" onclick="event.stopPropagation()"></div>
         <div class="keys mob">
           <span>linkerduim lopen (ver duwen = rennen)</span>
           <span>rechterduim kijken</span>

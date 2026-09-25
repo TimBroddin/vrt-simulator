@@ -60,6 +60,18 @@ Like the sporthal and the rekwisieten, these fill a whole block, and the first o
 - **Studio Marconi**: an event space two storeys high, with warm wooden acoustic panels, a gallery behind a glass balustrade reached by a steel stair, a stage, a truss with spots, a projector, bistro chairs. **Studio Toots** is a smaller Marconi, one storey, among the rooms.
 - **De Toren**: the Reyers tower indoors, in a hall seven storeys high. The floor is fake grass, the walls and ceiling are a painted sky with the city along the bottom, there's a studio sun on the wall, film lights, plywood trees, and cables holding the tower up. The shaft is hollow: go in through the door at its foot and climb the spiral stair inside, up through the saucer onto the deck on top. The corridors on the floors around it have windows onto it. See `towerSpec` in `src/layout.ts`.
 
+## De gang naar de parking, and de gang naar nergens
+
+In some blocks floor -1 isn't parking but one narrow corridor (1.8 m) twisting through the whole block like a maze, but with only one way: no side turnings, from the foot of the stairwell to the parking next door, often 300 m or more. Where the route passes itself there's a wall in between. Painted concrete blocks with a dark band along the bottom, a concrete floor, a low ceiling full of pipes (the red one is for the sprinklers), round lamps on the walls, and the distance stencilled on the wall. Rarely, a whole block on an office floor is the same maze: de gang naar nergens. It starts at a corridor and simply ends, and someone from the vakbond is waiting there. See `mazeAt` in `src/layout.ts`.
+
+## De poppen van de vakbond
+
+Flat figures cut out of MDF, standing in a block of pine, placed around the building by the vakbond ("77 poppen voor 77 collega's"). Now and then one stands against a corridor wall, and very rarely a meeting room or an empty room is full of them, all facing the door.
+
+## Plekken and postkaarten
+
+About 45 places are worth finding: the big places, every kind of room, each radio studio, the strange rooms, the top of De Toren. Walk into one and it's yours ("PLEK ONTDEKT"); the count is under the quests and the pause screen lists them all, the ones you haven't found blanked out. They're kept in the browser across worlds. See `src/places.ts`. The start screen has postcards from the building (`src/postcards/`).
+
 ## De bewaking
 
 Some control rooms and server rooms are the bewaking: a wall of monitors, a desk with a joystick and a logbook, a key cabinet. Security cameras hang at the ends of corridors and in the corners of studios, canteens, De Mess, the docks, the sporthal, the rekwisieten and the parking. When you're near a bewaking, six cameras around it (on its floor and the ones above and below) are rendered live into the monitors, one feed per frame, with timestamps and the camera's location. The bewaking's own camera shows the bewaking. You're on the feeds too: someone with a camera on their shoulder. See `src/cctv.ts`.

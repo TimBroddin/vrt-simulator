@@ -398,6 +398,10 @@ function makePlan(f: number, cx: number, cz: number): Plan {
     return p;
   }
   if (f === FLOOR_MAX) return planRoof(p);
+  if (isNergens(f, st)) {
+    planMaze(p, nergensPath(f, st), false);
+    return p;
+  }
 
   const { kind, zone } = p;
   for (let i = 0; i < CH * CH; i++) if (st.corr[i]) kind[i] = K.CORR;
@@ -678,7 +682,152 @@ function planGarage(p: Plan): Plan {
     kind[e.e] = K.ELEV;
     setDoor(p, e.c, e.d, { kind: "elev", open: false, owner: e.c, w: 1.1 });
   }
+  if (isSnake(st)) planMaze(p, snakePath(st), true);
   return p;
+}
+
+// De gang naar de parking: in some blocks floor -1 isn't parking but one long
+// narrow corridor twisting through the whole block like a maze, but with only one
+// way: no side turnings, from the foot of the stairwell to the parking next door.
+// Only in blocks with a stairwell and no lifts or light well, never two side by side.
+export function isSnake(st: Structure) {
+  if (st.special || st.mid || st.cz <= MID_CZ || !st.stair || st.elevs.length || st.court || ((st.cx + st.cz) & 1) !== 0 || hash(84, st.cx, st.cz) % 100 >= 45) return false;
+  // it has to be worth the walk
+  return snakePath(st).length >= 60;
+}
+
+// is the cell next door (in block cx, cz) plain parking?
+function parkingAt(cx: number, cz: number, lx: number, lz: number) {
+  const st = getStructure(cx, cz), i = idx(lx, lz);
+  const c = st.court;
+  if (c && lx >= c.x0 && lx <= c.x1 && lz >= c.z0 && lz <= c.z1) return false;
+  if (st.stair && (i === st.stair.a || i === st.stair.b)) return false;
+  return !st.elevs.some((e) => e.e === i);
+}
+
+const snakeCache = new WeakMap<Structure, number[]>();
+
+// A long self-avoiding walk that keeps turning, from `start`, avoiding `blocked`;
+// cut off at the last cell where exitOK (if given). The longest of many tries.
+function mazeWalk(start: number, blocked: number[], seed: number, exitOK?: (i: number) => boolean): number[] {
+  const rng = new Rng(seed);
+  let best: number[] = [];
+  for (let attempt = 0; attempt < 90; attempt++) {
+    const seen = new Uint8Array(CH * CH);
+    for (const b of blocked) seen[b] = 1;
+    const path = [start];
+    seen[start] = 1;
+    let lastD = -1, run = 0;
+    const greed = 0.45 + rng.next() * 0.45;
+    for (;;) {
+      const i = path[path.length - 1]!, x = i % CH, z = (i / CH) | 0;
+      const opts: { d: number; j: number; on: number }[] = [];
+      for (let d = 0; d < 4; d++) {
+        const nx = x + DX[d]!, nz = z + DZ[d]!;
+        if (nx < 0 || nz < 0 || nx >= CH || nz >= CH || seen[idx(nx, nz)]) continue;
+        let on = 0;
+        for (let e = 0; e < 4; e++) {
+          const mx = nx + DX[e]!, mz = nz + DZ[e]!;
+          if (mx >= 0 && mz >= 0 && mx < CH && mz < CH && !seen[idx(mx, mz)] && idx(mx, mz) !== i) on++;
+        }
+        opts.push({ d, j: idx(nx, nz), on });
+      }
+      if (!opts.length) break;
+      // don't run straight for long: it's a maze, not a corridor
+      let pool = run >= 2 ? opts.filter((o) => o.d !== lastD) : opts;
+      if (!pool.length) pool = opts;
+      let pick: (typeof opts)[number];
+      if (rng.next() < greed) {
+        // Warnsdorff: the tightest spot first, so the walk doesn't box itself in
+        const m = Math.min(...pool.map((o) => o.on));
+        pick = rng.pick(pool.filter((o) => o.on === m));
+      } else pick = rng.pick(pool);
+      run = pick.d === lastD ? run + 1 : 0;
+      lastD = pick.d;
+      path.push(pick.j);
+      seen[pick.j] = 1;
+    }
+    let k = path.length - 1;
+    if (exitOK) while (k > 0 && !exitOK(path[k]!)) k--;
+    if (k > best.length - 1) best = path.slice(0, k + 1);
+  }
+  return best;
+}
+
+// The route to the parking, from the foot of the stairs to the way out, as local cell indices.
+export function snakePath(st: Structure): number[] {
+  const hit = snakeCache.get(st);
+  if (hit) return hit;
+  const s = st.stair!;
+  const exitOK = (i: number) => {
+    const x = i % CH, z = (i / CH) | 0;
+    return (x === 0 && parkingAt(st.cx - 1, st.cz, CH - 1, z)) || (x === CH - 1 && parkingAt(st.cx + 1, st.cz, 0, z)) ||
+      (z === 0 && parkingAt(st.cx, st.cz - 1, x, CH - 1)) || (z === CH - 1 && parkingAt(st.cx, st.cz + 1, x, 0));
+  };
+  const best = mazeWalk(s.c, [s.a, s.b], hash(86, st.cx, st.cz), exitOK);
+  snakeCache.set(st, best);
+  return best;
+}
+
+// De gang naar nergens: rarely, a whole block on an office floor is the same maze,
+// entered from one corridor, and it just ends. Blocks without stairs, lifts, light
+// well or atrium; never two side by side.
+export function isNergens(f: number, st: Structure) {
+  if (f < 0 || f >= FLOOR_MAX || st.special || st.mid || st.cz <= MID_CZ || st.stair || st.elevs.length || st.court || st.atrium) return false;
+  return ((st.cx + st.cz + f) & 1) === 0 && hash(87, f, st.cx, st.cz) % 1000 < 35;
+}
+
+// where the corridors of the blocks around arrive on this block's edge
+function portals(st: Structure) {
+  const out: number[] = [];
+  for (let i = 0; i < CH * CH; i++) {
+    const x = i % CH, z = (i / CH) | 0;
+    if (st.corr[i] && (x === 0 || z === 0 || x === CH - 1 || z === CH - 1)) out.push(i);
+  }
+  return out;
+}
+
+const nergensCache = new Map<string, number[]>();
+export function nergensPath(f: number, st: Structure): number[] {
+  const key = `${f}:${st.cx},${st.cz}`;
+  const hit = nergensCache.get(key);
+  if (hit) return hit;
+  const ps = portals(st);
+  const start = ps[hash(88, f, st.cx, st.cz) % ps.length]!;
+  // the other corridors arriving here run into a wall
+  const path = mazeWalk(start, ps.filter((i) => i !== start), hash(89, f, st.cx, st.cz));
+  if (nergensCache.size > 200) nergensCache.clear();
+  nergensCache.set(key, path);
+  return path;
+}
+
+// The maze on this floor of this block, if there is one (mirrored on the RTBF side).
+export function mazeAt(f: number, st: Structure): { path: number[]; parking: boolean } | null {
+  if (st.cz < MID_CZ) {
+    const m = mazeAt(f, getStructure(st.cx, 2 * MID_CZ - st.cz));
+    return m && { path: m.path.map(mi), parking: m.parking };
+  }
+  if (f === FLOOR_MIN) return isSnake(st) ? { path: snakePath(st), parking: true } : null;
+  return isNergens(f, st) ? { path: nergensPath(f, st), parking: false } : null;
+}
+
+function planMaze(p: Plan, path: number[], parking: boolean) {
+  const { kind } = p;
+  const at = new Map<number, number>();
+  path.forEach((i, n) => at.set(i, n));
+  for (let i = 0; i < CH * CH; i++) if (kind[i] !== K.STAIR) kind[i] = K.SOLID;
+  for (const i of path) kind[i] = K.CORR;
+  // the last step opens onto the parking next door
+  if (parking) kind[path[path.length - 1]!] = K.GARAGE;
+  // one way: wherever the route passes itself, there's a wall in between
+  for (const [i, n] of at)
+    for (let d = 0; d < 4; d++) {
+      const x = (i % CH) + DX[d]!, z = ((i / CH) | 0) + DZ[d]!;
+      if (x < 0 || z < 0 || x >= CH || z >= CH) continue;
+      const j = idx(x, z), m = at.get(j);
+      if (m === undefined) continue;
+      p.sides.set(i * 4 + d, Math.abs(m - n) === 1 ? OPEN_SIDE : WALL_SIDE);
+    }
 }
 
 function planRoof(p: Plan): Plan {
@@ -792,6 +941,7 @@ export function cellLabel(f: number, gx: number, gz: number): string {
     return ta.kind === "marconi" ? "STUDIO MARCONI" : fr ? "LA TOUR" : "DE TOREN";
   }
   if (p.cz < MID_CZ) {
+    if (k === K.CORR && mazeAt(p.f, p.st)) return mazeAt(p.f, p.st)!.parking ? "COULOIR VERS LE PARKING" : "COULOIR VERS NULLE PART";
     switch (k) {
       case K.CORR:
         if (p.zone[i] === 1 || p.zone[i] === 2) return p.st.atrium?.kind === "garden" ? "JARDIN INTÉRIEUR" : "ATRIUM";
@@ -804,6 +954,7 @@ export function cellLabel(f: number, gx: number, gz: number): string {
     }
     return "";
   }
+  if (k === K.CORR && mazeAt(p.f, p.st)) return mazeAt(p.f, p.st)!.parking ? "GANG NAAR DE PARKING" : "GANG NAAR NERGENS";
   switch (k) {
     case K.CORR:
       if (p.zone[i] === 1 || p.zone[i] === 2) return p.st.atrium?.kind === "garden" ? "PLANTENTUIN" : "ATRIUM";
@@ -942,7 +1093,7 @@ function mirrorPlan(src: Plan, cz: number): Plan {
 // ---------------------------------------------------------------------------
 // Architectural anomalies. Rare, deterministic, and more common the further you
 // wander from the start.
-export type Anomaly = "" | "low" | "chairs" | "stairs" | "flooded" | "upside";
+export type Anomaly = "" | "low" | "chairs" | "stairs" | "flooded" | "upside" | "poppen";
 
 export function roomAnomaly(p: Plan, r: Room): Anomaly {
   if (p.f <= FLOOR_MIN || p.f >= FLOOR_MAX) return "";
@@ -953,6 +1104,8 @@ export function roomAnomaly(p: Plan, r: Room): Anomaly {
     if ((w === 1 || d === 1) && Math.max(w, d) >= 3 && h < 500) return "low";
     if (h < 260 * k) return (["chairs", "stairs", "flooded"] as const)[h % 3]!;
   }
+  // a room full of poppen: rare
+  if ((r.type === RT.EMPTY || r.type === RT.MEETING) && w * d >= 4 && hash(502, p.f, p.cx, p.cz, r.id) % 1000 < 5) return "poppen";
   if (r.type === RT.STORAGE && h < 130 * k) return "flooded";
   if (r.type === RT.OFFICE && h < 45 * k) return "upside";
   return "";

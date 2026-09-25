@@ -233,3 +233,33 @@ body.touch .wm-help.desk { display: none; } body.touch .wm-help.mob { display: i
   #waypoint { bottom: 20px; font-size: 11px; }
 }
 body.touch #waypoint { bottom: 12px; }
+
+/* postkaarten on the start screen */
+#postcards { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.pc-col { position: absolute; top: 50%; transform: translateY(-50%); width: min(215px, calc((100vw - 700px) / 2 - 30px)); display: flex; flex-direction: column; gap: 0; }
+.pc-col.left { left: max(18px, calc((100vw - 640px) / 4 - 125px)); }
+.pc-col.right { right: max(18px, calc((100vw - 640px) / 4 - 125px)); }
+.pc-head { font: 700 10px var(--osd); letter-spacing: 0.18em; color: var(--pink); margin: 0 0 10px 6px; }
+.pc { position: relative; margin: 4px 0 0; padding: 6px 6px 22px; background: #f3efe6; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55); transform: rotate(var(--r)); }
+.pc:first-of-type { margin-top: 0; }
+.pc img { display: block; width: 100%; aspect-ratio: 3 / 2; object-fit: cover; filter: saturate(0.85) contrast(1.05); }
+.pc figcaption { position: absolute; left: 8px; right: 6px; bottom: 4px; font: 12px "Marker Felt", "Comic Sans MS", cursive; color: #2a2a4a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc .stamp { position: absolute; right: 10px; top: 10px; width: 22px; height: 27px; background: var(--pink); border: 3px dotted #f3efe6; outline: 1px solid rgba(0,0,0,0.15); opacity: 0.9; }
+.pc .stamp::after { content: "vrt"; position: absolute; inset: 0; display: grid; place-items: center; font: 700 9px "Helvetica Neue", Arial, sans-serif; color: #fff; }
+@media (max-width: 1180px), (max-height: 760px) { #postcards { display: none; } }
+#overlay.paused #postcards { opacity: 0.35; }
+
+/* plekken on the pause screen */
+#places { display: none; margin: 0 auto 22px; max-width: 620px; text-align: left; font: 11px var(--osd); letter-spacing: 0.04em; cursor: default; }
+#overlay.paused #places { display: block; }
+#places .pl-head { text-align: center; font-size: 12px; letter-spacing: 0.18em; margin-bottom: 8px; opacity: 0.8; }
+#places .pl-head b { color: var(--pink); }
+#places ul { list-style: none; margin: 0; padding: 0; columns: 3; column-gap: 18px; }
+#places li { opacity: 0.3; line-height: 1.55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#places li.on { opacity: 0.9; color: #fff; }
+#places li.on::before { content: "✓ "; color: var(--pink); }
+@media (max-height: 520px) { #places ul { columns: 4; font-size: 9px; } #places { margin-bottom: 10px; } }
+#plekken { font-size: 12px; opacity: 0.55; margin-top: 2px; }
+#plekken.new { animation: plek 2.4s ease-out; }
+@keyframes plek { 0%, 30% { opacity: 1; color: var(--pink); } 100% { opacity: 0.55; color: inherit; } }
+@media (max-width: 900px), (max-height: 520px) { #plekken { font-size: 10px; } }
