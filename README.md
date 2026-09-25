@@ -12,6 +12,8 @@ URL options: `?seed=1234` (same building every time), `?floor=7` (start floor; t
 
 On phones and tablets: left thumb walks (push far to run), right thumb looks, plus buttons for E, QUEST, LAMP, FOTO, KAART (the plattegrond) and pause. Play in landscape.
 
+The HUD also has a pedometer: the steps you've taken and how far you've walked this visit.
+
 Controls: WASD / ZQSD to walk, Shift to run, mouse to look, E to use things (lifts, quest items), Tab to switch quests, M for the map (plattegrond), K for the minimap, F for the camera lamp, P for a photo, scroll to zoom, N to mute, H to hide the HUD.
 
 ## De plattegrond

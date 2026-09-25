@@ -185,7 +185,11 @@ quests.onFinish = (secs) => {
 };
 $("endcard").addEventListener("click", () => $("endcard").classList.remove("show"));
 
+// the pedometer: every footstep you hear, and how far you've walked
+let steps = 0, pedMeters = 0;
+let stepsShown = "";
 player.onStep = (run) => {
+  steps++;
   const gx = Math.floor(player.pos.x / CELL), gz = Math.floor(player.pos.z / CELL);
   sound.footstep(surfaceAt(player.floor, gx, gz).s, run);
 };
@@ -479,6 +483,7 @@ function frame() {
   if (ready) {
     const active = (locked || playing || api.auto) && !worldmap.open;
     player.update(dt, world, active && !lifts.ride?.phase.startsWith("clos") && !lifts.panelOpen);
+    if (active) pedMeters += Math.min(player.speed * dt, 1);
     const used = quests.update(dt, interact && active);
     lifts.update(t, dt, interact && !used);
   }
@@ -554,6 +559,8 @@ function frame() {
     if (disp !== null) $("liftnum").textContent = disp === String(FLOOR_MAX) ? "D" : disp;
     $("lamp").classList.toggle("on", lampTarget > 0);
     $("zoom").textContent = zoom > 0.02 ? `${(1 + zoom * 3).toFixed(1)}×` : "";
+    const ped = `${steps.toLocaleString("nl-BE")} STAPPEN · ${(pedMeters / 1000).toFixed(2).replace(".", ",")} KM`;
+    if (ped !== stepsShown) $("stappen").textContent = stepsShown = ped;
   }
   if (debug) {
     fpsAcc += dt;

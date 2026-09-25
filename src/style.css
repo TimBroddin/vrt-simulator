@@ -259,7 +259,7 @@ body.touch #waypoint { bottom: 12px; }
 #places li.on { opacity: 0.9; color: #fff; }
 #places li.on::before { content: "✓ "; color: var(--pink); }
 @media (max-height: 520px) { #places ul { columns: 4; font-size: 9px; } #places { margin-bottom: 10px; } }
-#plekken { font-size: 12px; opacity: 0.55; margin-top: 2px; }
+#plekken, #stappen { font-size: 12px; opacity: 0.55; margin-top: 2px; }
 #plekken.new { animation: plek 2.4s ease-out; }
 @keyframes plek { 0%, 30% { opacity: 1; color: var(--pink); } 100% { opacity: 0.55; color: inherit; } }
-@media (max-width: 900px), (max-height: 520px) { #plekken { font-size: 10px; } }
+@media (max-width: 900px), (max-height: 520px) { #plekken, #stappen { font-size: 10px; margin-top: 0; } }
