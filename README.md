@@ -10,9 +10,13 @@ bun run build   # static site in dist/
 
 URL options: `?seed=1234` (same building every time), `?floor=7` (start floor), `?debug` (fps / chunk stats).
 
-On phones and tablets: left thumb walks (push far to run), right thumb looks, plus buttons for E, QUEST, LAMP, FOTO, KAART and pause. Play in landscape.
+On phones and tablets: left thumb walks (push far to run), right thumb looks, plus buttons for E, QUEST, LAMP, FOTO, KAART (the plattegrond) and pause. Play in landscape.
 
-Controls: WASD / ZQSD to walk, Shift to run, mouse to look, E to use things (lifts, quest items), Tab to switch quests, M for the minimap, F for the camera lamp, P for a photo, scroll to zoom, N to mute, H to hide the HUD.
+Controls: WASD / ZQSD to walk, Shift to run, mouse to look, E to use things (lifts, quest items), Tab to switch quests, M for the map (plattegrond), K for the minimap, F for the camera lamp, P for a photo, scroll to zoom, N to mute, H to hide the HUD.
+
+## De plattegrond
+
+M (or KAART) opens a misty map of what's around you, drawn from the floor plans: about 100 m, and one floor up or down (`SIGHT` in `src/worldmap.ts`). Beyond that it's fog. Drag to pan, scroll or pinch to zoom, pick a floor on the right. Click a spot to set a waypoint, or pick a place from the list (Sporthal, De Mess, Studio Brussel, Kabinet CEO, ...) and it finds the nearest one in sight. Places out of sight aren't on the list at all. The waypoint shows up on the minimap and as a line at the bottom of the screen: the direction and distance, or on another floor, how many floors up or down and the nearest stairs or lift. See `src/worldmap.ts`.
 
 ## Quests
 
@@ -47,6 +51,10 @@ The brand rooms are chosen by hash (`brandRoom` in `src/layout.ts`), so existing
 The rekwisieten fill a warehouse two storeys high: rows of tall pallet racks full of props (stacked chairs, lamps, statues, rolled carpets, a throne, a giant die), a lending counter by the doors, and a gallery upstairs looking down over it all. The first one is next to the start, the rest are scattered like the sporthallen.
 
 Among the rooms: the kostuumdienst (rails of costumes, mannequins, hats, a lending counter), kleedkamers with mirrors framed in bulbs and a star on the door, a VIP bar (backlit bottles, a velvet rope), a VIP restaurant (round tables, chandeliers, a wine wall), the CEO's office on the top floors, and loading docks on the ground floor with roller doors, one of them half open onto daylight that isn't there. These rooms are converted by hash in `serviceRoom` (`src/layout.ts`), so existing floor plans stay the same.
+
+## De bewaking
+
+Some control rooms and server rooms are the bewaking: a wall of monitors, a desk with a joystick and a logbook, a key cabinet. Security cameras hang at the ends of corridors and in the corners of studios, canteens, De Mess, the docks, the sporthal, the rekwisieten and the parking. When you're near a bewaking, six cameras around it (on its floor and the ones above and below) are rendered live into the monitors, one feed per frame, with timestamps and the camera's location. The bewaking's own camera shows the bewaking. You're on the feeds too: someone with a camera on their shoulder. See `src/cctv.ts`.
 
 ## De middengang and the RTBF
 

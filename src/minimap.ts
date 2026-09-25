@@ -5,7 +5,7 @@ import { K, SK, getPlan, sideAt } from "./layout";
 
 const PX = 9; // pixels per cell in the offscreen map
 
-const FILL: Record<number, string> = {
+export const FILL: Record<number, string> = {
   [K.CORR]: "#c9c9c1",
   [K.ROOM]: "#6d7078",
   [K.STAIR]: "#e0b84a",
@@ -15,6 +15,40 @@ const FILL: Record<number, string> = {
   [K.GARAGE]: "#8a8a85",
   [K.ROOF]: "#77787a",
 };
+
+// Paint an n x n block of cells (floor f, starting at grid gx0, gz0) at px pixels per cell.
+export function paintCells(g: CanvasRenderingContext2D, f: number, gx0: number, gz0: number, n: number, px: number) {
+  const lw = Math.max(1, px / 6);
+  for (let dz = 0; dz < n; dz++)
+    for (let dx = 0; dx < n; dx++) {
+      const gx = gx0 + dx, gz = gz0 + dz;
+      const cx = Math.floor(gx / CH), cz = Math.floor(gz / CH);
+      const p = getPlan(f, cx, cz);
+      const k = p.kind[(gz - cz * CH) * CH + (gx - cx * CH)]!;
+      const col = FILL[k];
+      if (!col) continue;
+      g.fillStyle = col;
+      g.fillRect(dx * px, dz * px, px, px);
+      // walls, doors, glass
+      for (let d = 0; d < 4; d++) {
+        const s = sideAt(f, gx, gz, d);
+        if (s.sk === SK.OPEN || s.sk === SK.NONE || s.sk === SK.DOOR) continue;
+        g.fillStyle = s.sk === SK.GLASS || s.sk === SK.WINDOW ? "#8fd3ff" : s.sk === SK.RAIL ? "#d8d8d8" : "#111";
+        const x = dx * px, y = dz * px;
+        if (DX[d] === 1) g.fillRect(x + px - lw, y, lw, px);
+        else if (DX[d] === -1) g.fillRect(x, y, lw, px);
+        else if (DZ[d] === 1) g.fillRect(x, y + px - lw, px, lw);
+        else g.fillRect(x, y, px, lw);
+      }
+    }
+}
+
+export interface MapTarget {
+  x: number;
+  z: number;
+  f: number;
+  col: string;
+}
 
 export class Minimap {
   el: HTMLCanvasElement;
@@ -42,32 +76,10 @@ export class Minimap {
     g.clearRect(0, 0, this.off.width, this.off.height);
     this.ox = (pcx - 1) * CHUNK;
     this.oz = (pcz - 1) * CHUNK;
-    const gx0 = (pcx - 1) * CH, gz0 = (pcz - 1) * CH;
-    for (let dz = 0; dz < CH * 3; dz++)
-      for (let dx = 0; dx < CH * 3; dx++) {
-        const gx = gx0 + dx, gz = gz0 + dz;
-        const cx = Math.floor(gx / CH), cz = Math.floor(gz / CH);
-        const p = getPlan(f, cx, cz);
-        const k = p.kind[(gz - cz * CH) * CH + (gx - cx * CH)]!;
-        const col = FILL[k];
-        if (!col) continue;
-        g.fillStyle = col;
-        g.fillRect(dx * PX, dz * PX, PX, PX);
-        // walls, doors, glass
-        for (let d = 0; d < 4; d++) {
-          const s = sideAt(f, gx, gz, d);
-          if (s.sk === SK.OPEN || s.sk === SK.NONE || s.sk === SK.DOOR) continue;
-          g.fillStyle = s.sk === SK.GLASS || s.sk === SK.WINDOW ? "#8fd3ff" : s.sk === SK.RAIL ? "#d8d8d8" : "#111";
-          const x = dx * PX, y = dz * PX;
-          if (DX[d] === 1) g.fillRect(x + PX - 1.5, y, 1.5, PX);
-          else if (DX[d] === -1) g.fillRect(x, y, 1.5, PX);
-          else if (DZ[d] === 1) g.fillRect(x, y + PX - 1.5, PX, 1.5);
-          else g.fillRect(x, y, PX, 1.5);
-        }
-      }
+    paintCells(g, f, (pcx - 1) * CH, (pcz - 1) * CH, CH * 3, PX);
   }
 
-  draw(f: number, x: number, z: number, yaw: number, target: { x: number; z: number; f: number } | null) {
+  draw(f: number, x: number, z: number, yaw: number, targets: MapTarget[]) {
     if (!this.visible) return;
     const pcx = Math.floor(x / CHUNK), pcz = Math.floor(z / CHUNK);
     const key = `${f}:${pcx},${pcz}`;
@@ -104,8 +116,8 @@ export class Minimap {
     g.lineTo(R - 9, R + 9);
     g.closePath();
     g.fill();
-    // active quest
-    if (target) {
+    // the active quest, the waypoint
+    for (const target of targets) {
       const dx = (target.x - x) * s, dz = (target.z - z) * s;
       const c = Math.cos(yaw), sn = Math.sin(yaw);
       let mx = dx * c - dz * sn, my = dx * sn + dz * c;
@@ -114,7 +126,7 @@ export class Minimap {
         mx *= lim / len;
         my *= lim / len;
       }
-      g.fillStyle = "#ff2e7e";
+      g.fillStyle = target.col;
       g.beginPath();
       g.arc(R + mx, R + my, 8, 0, Math.PI * 2);
       g.fill();

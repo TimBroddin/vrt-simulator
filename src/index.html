@@ -29,6 +29,7 @@
       <div id="liftdisp" style="display:none"><div class="lbl">LIFT</div><div id="liftnum"></div></div>
       <div id="cross"></div>
       <div id="quest" style="display:none"></div>
+      <div id="waypoint"><span class="arr">▲</span><span class="txt"></span></div>
       <div id="toasts"></div>
     </div>
 
@@ -42,6 +43,22 @@
         <div id="t-quest" class="tbtn">QUEST</div>
         <div id="t-use" class="tbtn big">E</div>
       </div>
+    </div>
+
+    <div id="worldmap">
+      <canvas id="wm-canvas"></canvas>
+      <div class="wm-top"><b>PLATTEGROND</b> <span id="wm-floor"></span><span class="wm-help desk">zicht ± 100 m, één verdieping op of neer · klik: bestemming · scroll: zoomen · <kbd>M</kbd> sluiten</span><span class="wm-help mob">zicht ± 100 m · tik: bestemming</span></div>
+      <div class="wm-side">
+        <div class="wm-list" id="wm-list"></div>
+        <div class="wm-actions">
+          <button id="wm-here">WAAR BEN IK</button>
+          <button id="wm-clear">WIS BESTEMMING</button>
+          <button id="wm-mini">MINIKAART AAN/UIT</button>
+          <button id="wm-close" class="close">TERUG</button>
+        </div>
+      </div>
+      <div class="wm-floors" id="wm-floors"></div>
+      <div id="wm-note"></div>
     </div>
 
     <div id="overlay">
@@ -65,7 +82,7 @@
           <span>rechterduim kijken</span>
           <span><kbd>E</kbd> gebruiken</span>
           <span><kbd>QUEST</kbd> wisselen</span>
-          <span><kbd>KAART</kbd> plattegrond</span>
+          <span><kbd>KAART</kbd> plattegrond &amp; bestemming</span>
           <span class="rot">liggend spelen werkt het best</span>
         </div>
         <div class="keys desk">
@@ -75,7 +92,8 @@
           <span><kbd>TAB</kbd> quest</span>
           <span><kbd>F</kbd> lamp</span>
           <span><kbd>SCROLL</kbd> zoom</span>
-          <span><kbd>M</kbd> kaart</span>
+          <span><kbd>M</kbd> plattegrond</span>
+          <span><kbd>K</kbd> minikaart</span>
           <span><kbd>N</kbd> geluid</span>
           <span><kbd>H</kbd> beeld</span>
           <span><kbd>P</kbd> foto</span>

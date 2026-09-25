@@ -76,10 +76,11 @@ export const L = {
   PLAQUES: 71, // 2 x 4: VIP neon, counters, the CEO's nameplate, dock numbers, a star
   ROLLER: 72, // a loading-dock roller door
   HAZARD: 73, // yellow and black stripes
+  CCTV: 74, // the security camera feeds, 3 x 2, sampled from a render target
 } as const;
 
 // artworks and their museum labels (8 labels per layer) follow the painted layers
-export const ART0 = 74;
+export const ART0 = 75;
 export const LABEL0 = ART0 + ART.length;
 export const LAYER_COUNT = LABEL0 + Math.ceil(ART.length / 8);
 

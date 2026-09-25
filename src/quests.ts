@@ -105,7 +105,7 @@ function roomCenter(p: Plan, r: Room) {
 }
 
 // A person made of boxes, standing at the frame origin, facing +z.
-function person(b: Builder, fr: Frame, suit: RGB, hair: RGB, tie: RGB, glasses: boolean) {
+export function person(b: Builder, fr: Frame, suit: RGB, hair: RGB, tie: RGB, glasses: boolean) {
   const S = sp(L.CARPET_GREY, suit);
   const shoe = sp(L.WHITE, [0.05, 0.05, 0.05]);
   for (const x of [-0.1, 0.1]) {

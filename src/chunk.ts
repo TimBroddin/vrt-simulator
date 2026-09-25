@@ -77,6 +77,7 @@ function surf(p: Plan, i: number): Surf {
         case RT.VIPBAR: return { floor: sp(L.CARPET_FLECK, [0.55, 0.3, 0.38]), ceil: sp(L.BLACK, [0.7, 0.6, 0.75]), wall: sp(L.WOODSLAT, [0.45, 0.32, 0.4]), h: CEIL, base: false };
         case RT.VIPRESTO: return { floor: sp(L.CARPET_BLUE, [0.8, 0.5, 0.45]), ceil: sp(L.CEILTILE, [1.0, 0.95, 0.88]), wall: sp(L.WALLPAPER, [0.9, 0.82, 0.62]), h: CEIL, base: true };
         case RT.CEO: return { floor: sp(L.WOOD_FLOOR, [0.7, 0.5, 0.36]), ceil: sp(L.CEILTILE), wall: sp(L.WOODSLAT, [0.8, 0.62, 0.48]), h: CEIL, base: true };
+        case RT.SECURITY: return { floor: sp(L.CARPET_GREY, [0.45, 0.46, 0.5]), ceil: sp(L.CEILTILE, [0.7, 0.72, 0.75]), wall: sp(L.PLASTER, [0.72, 0.74, 0.76]), h: CEIL, base: true };
         case RT.DOCK: return { floor: sp(L.CONCRETE, [0.62, 0.62, 0.6]), ceil: sp(L.CONCRETE, [0.72, 0.72, 0.7]), wall: sp(L.BRICK, [0.6, 0.62, 0.64]), h: CEIL, base: false };
         case RT.RADIO: return { floor: sp(L.CARPET_GREY, [0.55, 0.55, 0.6]), ceil: sp(L.CEILTILE, [0.45, 0.45, 0.48]), wall: sp(L.FABRIC, [0.3, 0.3, 0.33]), h: CEIL, base: false };
         case RT.CANTEEN: return { floor: sp(L.TILEDARK, [1.1, 1.05, 1.0]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.95, 0.9, 0.82]), h: CEIL, base: true };

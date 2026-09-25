@@ -165,6 +165,8 @@ function furnish(p: Plan): Furnished {
       if ((row === 1 || row === 2) && !nearCore && rng.chance(0.42))
         prop("car", c.x + rng.range(-0.2, 0.2), y0, c.z + (row === 1 ? 0.2 : -0.2), row === 1 ? 0 : Math.PI, c.gx, c.gz, rng.int(0, 7));
       if (row === 0 && c.gx % 5 === 0 && rng.chance(0.5)) prop("pipe", c.x, y0 + 2.35, c.z, 0, c.gx, c.gz);
+      if (((c.gx % 6) + 6) % 6 === 3 && ((c.gz % 4) + 4) % 4 === 3 && hash(81, c.gx, c.gz) % 100 < 45)
+        prop("cctv", c.x, y0 + 2.45, c.z, (hash(82, c.gx, c.gz) % 628) / 100, c.gx, c.gz, 30, 0);
       for (let d = 0; d < 4; d++) {
         const s = sideAt(f, c.gx, c.gz, d);
         if (s.sk === SK.DOOR && s.door?.kind === "fire") {
@@ -303,6 +305,13 @@ function furnish(p: Plan): Furnished {
       } else if (r < 0.46) prop("bin", wp.wx, y0, wp.wz, rot, c.gx, c.gz);
       else if (r < 0.475) prop("vending", wp.wx, y0, wp.wz, rot, c.gx, c.gz, rng.int(0, 1));
     }
+    // security cameras where a corridor run ends, looking down it
+    for (let d = 0; d < 4; d++) {
+      if (sd[d]!.sk !== SK.WALL || sd[(d + 2) % 4]!.sk !== SK.OPEN || p.zone[i] === 1) continue;
+      if (hash(79, f, c.gx, c.gz, d) % 100 >= 30) continue;
+      const wp = wallPoint(i, d, 0.1, 1.05);
+      prop("cctv", wp.wx, y0 + CEIL - 0.12, wp.wz, faceRot(d), c.gx, c.gz, 22, 0);
+    }
     // the footbridges to the parkeertoren: diagonal steel braces in every bay
     if (p.st.special === "park")
       for (let d = 0; d < 4; d++)
@@ -353,6 +362,7 @@ function furnish(p: Plan): Furnished {
     prop("bench", X0 + 0.1, y0, mz - 6, Math.PI / 2, wgx, wgz);
     prop("bench", X0 + 0.1, y0, mz + 6, Math.PI / 2, wgx, wgz);
     prop("mats", X1 - 1.2, y0, Z0 + 3.5, 0.3, ...cellOf(X1 - 1.2, Z0 + 3.5));
+    prop("cctv", X0 + T + 0.3, y0 + 2.45, Z0 + T + 0.3, Math.atan2(mx - X0, mz - Z0), ...cellOf(X0 + 1, Z0 + 1), 16, 0);
     // banners hung from the vault along the long sides, Hec Leemans' mural high on
     // one gable end (above the goal), a big Sporza banner on the other
     const bt = y0 + 5.2;
@@ -386,6 +396,8 @@ function furnish(p: Plan): Furnished {
         prop("palletrack", x, y0, z, 0, ...cellOf(x, z), rng.int(0, 999));
       }
     const spots = [[X0 + 1.0, Z0 + 6.2], [X1 - 1.0, Z0 + 11.7], [X0 + 1.0, Z0 + 17.2], [X1 - 1.0, Z0 + 1.2], [X0 + 1.0, Z0 + 1.2], [X1 - 1.0, Z0 + 22.4]];
+    // a camera hanging from the deck over the corner of the racks
+    prop("cctv", X0 + 0.4, y0 + H + CEIL - 0.25, Z0 + 0.4, Math.atan2(1, 2.2), ...cellOf(X0 + 1, Z0 + 1), 42, 0);
     spots.forEach(([x, z], k) => prop("bigprop", x!, y0, z!, rng.range(0, 6.28), ...cellOf(x!, z!), (k + rng.int(0, 5)) % 6));
     // the counter, just inside the doors on one side
     const ci = idx(atr!.x1 - 1, atr!.z0 - 1);
@@ -521,6 +533,7 @@ function signFor(t: number) {
     case RT.VIPRESTO: return 12;
     case RT.CEO: return 13;
     case RT.DOCK: return 14;
+    case RT.SECURITY: return 15;
   }
   return -1;
 }
@@ -588,6 +601,7 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
   const perimeter: [number, number][] = [];
   for (const i of cells) for (const dd of wallDirs(i)) perimeter.push([i, dd]);
 
+  roomCamera(p, room, c, perimeter, roomCenter);
   if (furnishService(p, room, rng, c, perimeter, roomCenter)) return;
   const brand = room.type === RT.KETNET || room.type === RT.SPORZA || room.type === RT.SET;
   if (brand && !isRtbf(p.cz)) return furnishBrandStudio(p, room, rng, c, perimeter, roomCenter);
@@ -960,10 +974,32 @@ function furnishBrandStudio(p: Plan, room: Room, rng: Rng, c: Ctx, perimeter: Pe
   }
 }
 
+// Security cameras in the rooms worth watching (the one in the bewaking watches the bewaking).
+const CAM_CHANCE: Partial<Record<number, number>> = {
+  [RT.SECURITY]: 100, [RT.MESS]: 100, [RT.DOCK]: 80, [RT.SET]: 60, [RT.VIPBAR]: 60, [RT.STUDIO]: 45, [RT.KETNET]: 50, [RT.SPORZA]: 50,
+  [RT.CANTEEN]: 50, [RT.COSTUME]: 50, [RT.VIPRESTO]: 50, [RT.SERVER]: 50, [RT.CEO]: 40, [RT.LOUNGE]: 40, [RT.ARCHIVE]: 35, [RT.RADIO]: 35,
+};
+function roomCamera(p: Plan, room: Room, c: Ctx, perimeter: Perimeter, rc: { x: number; z: number }) {
+  const chance = CAM_CHANCE[room.type];
+  if (!chance || !perimeter.length) return;
+  const h = hash(80, p.f, p.cx, p.cz, room.id);
+  if (h % 100 >= chance) return;
+  // high in a corner, looking into the room
+  const corners = perimeter.filter(([i]) => c.wallDirs(i).length >= 2);
+  const [i, dd] = (corners.length ? corners : perimeter)[(h >>> 8) % (corners.length || perimeter.length)]!;
+  const pd = (dd + 1) % 4;
+  const q = c.center(i);
+  const side = c.wallDirs(i).includes(pd) ? 1 : -1;
+  const wp = c.wallPoint(i, dd, 0.12, side * 1.15);
+  const dist = Math.hypot(rc.x - wp.wx, rc.z - wp.wz);
+  const tall = room.type === RT.STUDIO || room.type === RT.KETNET || room.type === RT.SPORZA || room.type === RT.SET;
+  c.prop("cctv", wp.wx, c.y0 + (tall ? 3.1 : CEIL - 0.12), wp.wz, Math.atan2(rc.x - wp.wx, rc.z - wp.wz), q.gx, q.gz, Math.round(Math.atan2(tall ? 1.9 : 1.5, Math.max(1.5, dist)) * 100), room.type === RT.SECURITY ? 1 : 0);
+}
+
 // The building's services. Returns false for the types it doesn't handle.
 function furnishService(p: Plan, room: Room, rng: Rng, c: Ctx, perimeter: Perimeter, rc: { x: number; z: number }): boolean {
   const t = room.type;
-  if (t !== RT.COSTUME && t !== RT.DRESSING && t !== RT.VIPBAR && t !== RT.VIPRESTO && t !== RT.CEO && t !== RT.DOCK) return false;
+  if (t !== RT.COSTUME && t !== RT.DRESSING && t !== RT.VIPBAR && t !== RT.VIPRESTO && t !== RT.CEO && t !== RT.DOCK && t !== RT.SECURITY) return false;
   const { light, prop, center, wallPoint, hasDoor, y0 } = c;
   const w = room.x1 - room.x0 + 1, d = room.z1 - room.z0 + 1;
   const rot = w >= d ? 0 : Math.PI / 2;
@@ -1094,6 +1130,25 @@ function furnishService(p: Plan, room: Room, rng: Rng, c: Ctx, perimeter: Perime
         const wp = wallPoint(i, dd);
         if (uses[k] === "art") c.hangArt(wp.wx, wp.wz, dd, wp.gx, wp.gz, true);
         else prop(uses[k]!, wp.wx, y0, wp.wz, faceRot(dd), wp.gx, wp.gz, rng.int(0, 999));
+      });
+      break;
+    }
+    case RT.SECURITY: {
+      // de bewaking: a wall of camera feeds, the desk in front of it, keys and lockers
+      lights(COOL, 0.5);
+      pieces.forEach(([i], k) => {
+        const wp = wallPoint(i, bd);
+        prop("cctvwall", wp.wx, y0, wp.wz, faceRot(bd), wp.gx, wp.gz, k === mid ? 0 : 1 + k, room.id);
+        light(wp.wx - DX[bd]! * 1.0, y0 + 1.5, wp.wz - DZ[bd]! * 1.0, [0.7, 0.9, 0.8], 0.75, 5, wp.gx, wp.gz, null);
+      });
+      const [mi] = pieces[mid]!;
+      const dp = wallPoint(mi, bd, 1.3);
+      prop("secdesk", dp.wx, y0, dp.wz, faceRot(bd), dp.gx, dp.gz, rng.int(0, 99));
+      const uses = ["keybox", "lockers", "notice", "clock", "lockers"];
+      others.slice(0, uses.length).forEach(([i, dd], k) => {
+        const u = uses[k]!;
+        const wp = wallPoint(i, dd);
+        prop(u, wp.wx, y0 + (u === "notice" ? 1.45 : u === "clock" ? 2.2 : 0), wp.wz, faceRot(dd), wp.gx, wp.gz, rng.int(0, 99));
       });
       break;
     }

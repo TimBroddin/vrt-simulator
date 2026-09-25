@@ -16,9 +16,11 @@ import { STATIONS } from "./stations";
 import { isTouch, setupTouch } from "./touch";
 import { takePhoto } from "./photo";
 import { Minimap } from "./minimap";
+import { WorldMap, nearestWay } from "./worldmap";
 import { ClockFace } from "./clockface";
 import { GhostRadio } from "./radio";
 import { LiveTV } from "./live";
+import { CCTV } from "./cctv";
 import { track, trackOnce } from "./analytics";
 import { Quests } from "./quests";
 
@@ -142,7 +144,9 @@ radio.onStation = (k) => {
 };
 // on phones and tablets the map starts closed (KAART opens it)
 const minimap = new Minimap(!touch);
+const worldmap = new WorldMap();
 const live = new LiveTV(mat.uniforms);
+const cctv = new CCTV(renderer, scene, mat, world, player, touch);
 // the radio studio you're standing near (checked a few times a second)
 let nearStudio = -1, nearT = 0;
 function studioNear(): number {
@@ -183,6 +187,10 @@ let hudOn = true;
 let zoom = 0;
 const canvas = renderer.domElement;
 document.addEventListener("keydown", (e) => {
+  if (worldmap.open) {
+    if (e.code === "KeyM" || e.code === "Escape") closeMap();
+    return;
+  }
   player.keys.add(e.code);
   if (!locked) return;
   if (lifts.panelOpen) {
@@ -212,7 +220,8 @@ document.addEventListener("keydown", (e) => {
   }
   if (e.code === "KeyF") lampTarget = lampTarget ? 0 : 1;
   if (e.code === "KeyN") sound.setMuted(!sound.muted);
-  if (e.code === "KeyM") {
+  if (e.code === "KeyM") openMap();
+  if (e.code === "KeyK") {
     minimap.toggle();
     if (minimap.visible) track("minimap_opened", { device: "desktop" });
   }
@@ -236,12 +245,81 @@ document.addEventListener("wheel", (e) => {
 });
 document.addEventListener("pointerlockchange", () => {
   locked = document.pointerLockElement === canvas;
-  $("overlay").classList.toggle("hidden", locked);
-  if (!locked && started) {
+  $("overlay").classList.toggle("hidden", locked || worldmap.open);
+  if (!locked && started && !worldmap.open) {
     $("overlay").classList.add("paused");
     player.keys.clear();
   }
 });
+// the lock can be refused right after leaving it (Esc): fall back to the pause card
+document.addEventListener("pointerlockerror", () => {
+  if (!started || worldmap.open) return;
+  $("overlay").classList.remove("hidden");
+  $("overlay").classList.add("paused");
+});
+
+// --- de plattegrond
+function openMap() {
+  if (worldmap.open || !started) return;
+  player.keys.clear();
+  touchUi?.reset();
+  worldmap.show(player.pos.x, player.pos.z, player.floor, player.yaw, quests.activeTarget());
+  track("worldmap_opened", { device: touch ? "touch" : "desktop" });
+  if (!touch) document.exitPointerLock?.();
+}
+function closeMap() {
+  if (!worldmap.open) return;
+  worldmap.hide();
+  if (!touch) {
+    const r = canvas.requestPointerLock?.() as unknown as Promise<void> | undefined;
+    r?.catch?.(() => {
+      $("overlay").classList.remove("hidden");
+      $("overlay").classList.add("paused");
+    });
+  }
+}
+worldmap.onClose = closeMap;
+worldmap.onMinimap = () => minimap.toggle();
+worldmap.onChange = (w, how) => {
+  if (w) track("waypoint_set", { how, label: w.label, floor: w.f });
+};
+
+// the waypoint line: direction, distance, and the way up or down
+let guideT = 0;
+let way: ReturnType<typeof nearestWay> = null;
+function guide(dt: number) {
+  const w = worldmap.waypoint, el = $("waypoint");
+  if (!w || !started) return el.classList.remove("show");
+  const P = player.pos, df = w.f - player.floor;
+  if ((guideT -= dt) <= 0) {
+    guideT = 0.5;
+    way = df ? nearestWay(player.floor, P.x, P.z) : null;
+  }
+  let tx = w.x, tz = w.z, txt: string;
+  const d = Math.hypot(w.x - P.x, w.z - P.z);
+  if (!df) {
+    if (d < 2.5) {
+      quests.toast("BESTEMMING BEREIKT", w.label, "ok");
+      sound.chime();
+      worldmap.setWaypoint(null, "arrived");
+      return el.classList.remove("show");
+    }
+    txt = `${w.label} · ${Math.round(d)} m`;
+  } else {
+    const fl = `${df > 0 ? "↑" : "↓"} ${Math.abs(df)} ${Math.abs(df) === 1 ? "verdieping" : "verdiepingen"}`;
+    const dw = way ? Math.hypot(way.x - P.x, way.z - P.z) : 0;
+    if (way && dw > 2) {
+      tx = way.x;
+      tz = way.z;
+      txt = `${w.label} · ${fl} · ${way.kind} ${Math.round(dw)} m`;
+    } else txt = `${w.label} · ${fl}`;
+  }
+  const a = Math.atan2(-(tx - P.x), -(tz - P.z)) - player.yaw;
+  (el.firstElementChild as HTMLElement).style.transform = `rotate(${-a}rad)`;
+  (el.lastElementChild as HTMLElement).textContent = txt;
+  el.classList.add("show");
+}
+
 let playing = false; // touch devices: no pointer lock, the overlay decides
 const touchUi = touch
   ? setupTouch(player, {
@@ -249,10 +327,7 @@ const touchUi = touch
       quest: () => quests.cycle(),
       lamp: () => (lampTarget = lampTarget ? 0 : 1),
       photo: () => (photoRequested = true),
-      map: () => {
-        minimap.toggle();
-        if (minimap.visible) track("minimap_opened", { device: "touch" });
-      },
+      map: () => (worldmap.open ? closeMap() : openMap()),
       pause: () => {
         playing = false;
         touchUi?.reset();
@@ -329,7 +404,7 @@ function updateEnv(dt: number) {
     trackOnce(`floor${f}`, "floor_visited", { floor: f });
     const area = onRoof ? "roof" : f === FLOOR_MIN ? "parking" : /PLANTENTUIN|JARDIN/.test(label) ? "plantentuin" : label === "MIDDENGANG" ? "middengang"
       : label === "ATRIUM" ? "atrium" : STATIONS.some((st) => st.label === label) ? "radio" : /^STUDIO/.test(label) ? "studio" : /REGIE|RÉGIE/.test(label) ? "regie" : /ARCHIEF|ARCHIVES/.test(label) ? "archive"
-      : /KANTINE|CANTINE/.test(label) ? "canteen" : /^KETNET/.test(label) ? "ketnet" : /^SPORZA/.test(label) ? "sporza" : /^DECOR/.test(label) ? "tvset" : "";
+      : /KANTINE|CANTINE/.test(label) ? "canteen" : /^KETNET/.test(label) ? "ketnet" : /^SPORZA/.test(label) ? "sporza" : /^DECOR/.test(label) ? "tvset" : /BEWAKING|SÉCURITÉ/.test(label) ? "security" : "";
     if (area) trackOnce(`area:${area}`, "area_discovered", { area });
     if (fr) trackOnce("area:rtbf", "area_discovered", { area: "rtbf" });
   }
@@ -379,7 +454,7 @@ function frame() {
   }
 
   if (ready) {
-    const active = locked || playing || api.auto;
+    const active = (locked || playing || api.auto) && !worldmap.open;
     player.update(dt, world, active && !lifts.ride?.phase.startsWith("clos") && !lifts.panelOpen);
     const used = quests.update(dt, interact && active);
     lifts.update(t, dt, interact && !used);
@@ -399,6 +474,7 @@ function frame() {
   }
   live.update(dt, started ? (radio.station >= 0 ? radio.station : nearStudio) : -1);
   if (ready) updateEnv(dt);
+  if (ready && started) cctv.update(dt);
 
   if (flickNear > 0 && t - lastFlickBuzz > 0.12 && Math.random() < flickNear * 0.25) {
     lastFlickBuzz = t;
@@ -422,7 +498,12 @@ function frame() {
   sky.position.copy(camera.position);
   tower.position.set(camera.position.x + 430, -30, camera.position.z - 330);
 
-  if (ready) minimap.draw(player.floor, player.pos.x, player.pos.z, player.yaw, quests.activeTarget());
+  if (ready) {
+    const qt = quests.activeTarget(), wp = worldmap.waypoint;
+    minimap.draw(player.floor, player.pos.x, player.pos.z, player.yaw, [...(qt ? [{ ...qt, col: "#ff2e7e" }] : []), ...(wp ? [{ ...wp, col: "#35d6ff" }] : [])]);
+    guide(dt);
+    worldmap.draw();
+  }
   post.cam.uniforms.time!.value = t;
   post.cam.uniforms.glitch!.value = lifts.ride?.phase === "moving" ? 0.15 + Math.random() * 0.1 : Math.random() < 0.002 ? 0.6 : 0;
   post.composer.render(dt);
@@ -463,7 +544,7 @@ function frame() {
 }
 
 // expose for automation / debugging
-const api = { player, world, camera, lifts, sound, quests, minimap, radio, live, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished };
+const api = { player, world, camera, lifts, sound, quests, minimap, worldmap, openMap, closeMap, radio, live, cctv, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished };
 (window as any).__vrt = api;
 if (debug) $("debug").style.display = "block";
 frame();

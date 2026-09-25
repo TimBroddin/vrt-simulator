@@ -41,6 +41,7 @@ export const RT = {
   VIPRESTO: 20,
   CEO: 21,
   DOCK: 22, // laadperrons, on the ground floor
+  SECURITY: 23, // de bewaking: the camera feeds
 } as const;
 
 export const ROOM_LABEL = [
@@ -67,6 +68,7 @@ export const ROOM_LABEL = [
   "VIP-RESTAURANT",
   "KABINET CEO",
   "LAADPERRON",
+  "BEWAKING",
 ];
 
 // Side kinds
@@ -605,6 +607,7 @@ function serviceRoom(t: number, area: number, mn: number, f: number, h: number):
   if (t === RT.LOUNGE) return h < 45 ? RT.VIPBAR : t;
   if (t === RT.EMPTY && big) return f === 0 && h < 45 ? RT.DOCK : h < 12 ? RT.VIPBAR : t;
   if (t === RT.ARCHIVE && big && f === 0) return h < 40 ? RT.DOCK : t;
+  if ((t === RT.REGIE || t === RT.SERVER) && area >= 4) return h >= 90 ? RT.SECURITY : t;
   return t;
 }
 
@@ -745,7 +748,7 @@ export function lightPass(f: number, gx: number, gz: number, d: number): boolean
 }
 
 // Human readable label for a cell (HUD).
-const ROOM_LABEL_FR = ["BUREAU", "SALLE DE RÉUNION", "SANITAIRES", "RÉSERVE", "SALLE DES SERVEURS", "STUDIO", "CANTINE", "ARCHIVES", "RÉGIE", "LOCAL VIDE", "MONTAGE", "LE MESS", "SALLE DE DÉTENTE", "STUDIO RADIO", "STUDIO", "STUDIO", "STUDIO", "COSTUMES", "LOGE", "BAR VIP", "RESTAURANT VIP", "BUREAU DU CEO", "QUAI DE CHARGEMENT"];
+const ROOM_LABEL_FR = ["BUREAU", "SALLE DE RÉUNION", "SANITAIRES", "RÉSERVE", "SALLE DES SERVEURS", "STUDIO", "CANTINE", "ARCHIVES", "RÉGIE", "LOCAL VIDE", "MONTAGE", "LE MESS", "SALLE DE DÉTENTE", "STUDIO RADIO", "STUDIO", "STUDIO", "STUDIO", "COSTUMES", "LOGE", "BAR VIP", "RESTAURANT VIP", "BUREAU DU CEO", "QUAI DE CHARGEMENT", "SÉCURITÉ"];
 
 export function cellLabel(f: number, gx: number, gz: number): string {
   const { p, i } = planAt(f, gx, gz);

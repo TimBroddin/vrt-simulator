@@ -1267,6 +1267,80 @@ export function buildProp(b: Builder, pr: Prop) {
       }
       break;
     }
+    case "cctv": {
+      // a camera on a bracket, tilted down (pr.a: pitch in 1/100 rad), a red light that's always on
+      const pitch = pr.a / 100;
+      fbox(b, fr, 0, -0.02, -0.06, 0.06, 0.1, 0.1, GREY);
+      fbox(b, fr, 0, -0.08, 0.0, 0.03, 0.03, 0.16, GREY);
+      const body = fr.p(0, -0.14, 0.12);
+      const up: V3 = [0, Math.cos(pitch), 0];
+      const fwd: V3 = [fr.s * Math.cos(pitch), -Math.sin(pitch), fr.c * Math.cos(pitch)];
+      up[0] = fr.s * Math.sin(pitch); up[2] = fr.c * Math.sin(pitch);
+      b.obox(body, fr.ax, up, fwd, [0.065, 0.06, 0.16], { all: sp(L.WHITE, [0.82, 0.83, 0.82]), pz: DARK });
+      b.obox([body[0] + fwd[0] * 0.15 + up[0] * 0.07, body[1] + fwd[1] * 0.15 + up[1] * 0.07, body[2] + fwd[2] * 0.15 + up[2] * 0.07], fr.ax, up, fwd, [0.08, 0.008, 0.06], sp(L.WHITE, [0.82, 0.83, 0.82]));
+      b.obox([body[0] + fwd[0] * 0.1 + up[0] * 0.065 + fr.ax[0] * 0.04, body[1] + fwd[1] * 0.1 + up[1] * 0.065, body[2] + fwd[2] * 0.1 + up[2] * 0.065 + fr.ax[2] * 0.04], fr.ax, up, fwd, [0.008, 0.008, 0.008], { layer: L.WHITE, emit: [2.0, 0.1, 0.05] });
+      break;
+    }
+    case "cctvwall": {
+      // pr.a 0: the main bank, 3 x 2 feeds; otherwise two bigger screens
+      fbox(b, fr, 0, 0.75, 0.06, 2.9, 1.85, 0.12, DARK);
+      fbox(b, fr, 0, 0, 0.3, 2.9, 0.75, 0.6, sp(L.WHITE, [0.2, 0.21, 0.23]), true);
+      const feed = (k: number, e: number): Spec => ({ layer: L.CCTV, emit: [e, e, e], uv: cellUV(k, 3, 2) });
+      if (pr.a === 0) {
+        for (let r = 0; r < 2; r++)
+          for (let c = 0; c < 3; c++) {
+            fbox(b, fr, (c - 1) * 0.94, 0.85 + (1 - r) * 0.86, 0.13, 0.88, 0.66, 0.05, { all: DARK, pz: feed(r * 3 + c, rng.range(0.85, 1.0)) });
+          }
+      } else {
+        for (const [x, k] of [[-0.72, (pr.a * 2) % 6], [0.72, (pr.a * 2 + 1) % 6]] as const) fbox(b, fr, x, 1.0, 0.13, 1.36, 1.02, 0.05, { all: DARK, pz: feed(k, 0.9) });
+      }
+      fbox(b, fr, 0, 0.75, 0.61, 2.9, 0.03, 0.02, { layer: L.WHITE, emit: [0.2, 0.9, 0.35] });
+      break;
+    }
+    case "secdesk": {
+      // the operator sits on the room side (+z), facing the monitor wall
+      const top = sp(L.WHITE, [0.3, 0.3, 0.32]);
+      fbox(b, fr, 0, 0.72, 0, 2.3, 0.04, 0.8, top, true);
+      for (const x of [-1.1, 1.1]) fbox(b, fr, x, 0, 0, 0.06, 0.72, 0.75, DARK);
+      fbox(b, fr, 0, 0.3, -0.36, 2.2, 0.42, 0.03, DARK);
+      // keyboard, joystick, the radio, the logbook, a mug, a phone
+      fbox(b, fr, -0.1, 0.76, 0.15, 0.45, 0.02, 0.15, DARK);
+      fbox(b, fr, 0.45, 0.76, 0.1, 0.3, 0.05, 0.22, { all: DARK, py: { layer: L.DESK_BUTTONS, emit: [0.7, 0.7, 0.7], uv: [0, 0, 0.6, 0.4] } });
+      cyl(b, fr, 0.45, 0.81, 0.05, 0.015, 0.14, DARK);
+      b.geom(BLOB, ...fr.p(0.45, 0.96, 0.05), 0, 0.03, 0.03, 0.03, RED);
+      fbox(b, fr, -0.75, 0.76, 0.0, 0.07, 0.2, 0.04, DARK);
+      fbox(b, fr, -0.75, 0.96, 0.0, 0.012, 0.08, 0.012, DARK);
+      fbox(b, fr, -0.75, 0.93, 0.021, 0.04, 0.03, 0.002, { layer: L.WHITE, emit: [0.2, 1.2, 0.3] });
+      fbox(b, fr, -0.35, 0.76, -0.12, 0.3, 0.03, 0.22, sp(L.WHITE, [0.1, 0.15, 0.35]));
+      fbox(b, fr, -0.35, 0.79, -0.12, 0.28, 0.004, 0.2, OFFWHITE);
+      cyl(b, fr, 0.9, 0.76, 0.1, 0.04, 0.1, rng.pick([WHITE, RED, sp(L.WHITE, [0.95, 0.8, 0.1])]));
+      fbox(b, fr, 0.85, 0.76, -0.2, 0.2, 0.06, 0.15, sp(L.WHITE, [0.85, 0.85, 0.8]));
+      const back = new Frame(pr.x, pr.y, pr.z, pr.rot + Math.PI);
+      monitor(b, back, 0.3, 0.76, 0.2, true, L.TV_BARS);
+      chair(b, fr, 0, 0.9, Math.PI + rng.range(-0.4, 0.4));
+      break;
+    }
+    case "keybox": {
+      fbox(b, fr, 0, 1.2, 0.05, 0.8, 0.7, 0.1, { all: sp(L.WHITE, [0.5, 0.52, 0.55]), pz: sp(L.WHITE, [0.85, 0.85, 0.82]) });
+      for (let r = 0; r < 4; r++)
+        for (let k = 0; k < 6; k++) {
+          if (rng.chance(0.2)) continue;
+          fbox(b, fr, -0.3 + k * 0.12, 1.78 - r * 0.15, 0.11, 0.012, 0.012, 0.03, STEEL);
+          fbox(b, fr, -0.3 + k * 0.12, 1.68 - r * 0.15, 0.115, 0.04, 0.07, 0.006, sp(L.WHITE, rng.pick([[0.9, 0.2, 0.2], [0.2, 0.4, 0.9], [0.95, 0.8, 0.1], [0.3, 0.75, 0.35], [0.95, 0.95, 0.95]] as RGB[])));
+        }
+      break;
+    }
+    case "lockers": {
+      const col = sp(L.WHITE, rng.pick([[0.35, 0.45, 0.55], [0.55, 0.57, 0.6], [0.3, 0.4, 0.3]] as RGB[]));
+      fbox(b, fr, 0, 0, 0.25, 1.8, 1.9, 0.5, col, true);
+      for (let k = 0; k < 4; k++) {
+        const x = -0.675 + k * 0.45;
+        fbox(b, fr, x, 0.05, 0.505, 0.42, 1.8, 0.01, col);
+        for (let y = 0; y < 3; y++) fbox(b, fr, x, 1.55 + y * 0.04, 0.512, 0.2, 0.012, 0.004, DARK);
+        fbox(b, fr, x + 0.15, 0.95, 0.515, 0.03, 0.08, 0.01, STEEL);
+      }
+      break;
+    }
     case "puddle": {
       const s = pr.a;
       b.quad(fr.p(-s, 0.006, -s * 0.7), [fr.c * 2 * s, 0, -fr.s * 2 * s], [fr.s * 1.4 * s, 0, fr.c * 1.4 * s], [0, 1, 0], { layer: L.PUDDLE, uv: [0, 0, 1, 1] }, 0);

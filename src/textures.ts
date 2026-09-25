@@ -437,8 +437,8 @@ const painters: Record<number, (c: Ctx) => void> = {
       text(c, t, x + 135, y + 64, t.length > 9 ? 25 : 34, "#f5f5f5", "700");
     });
   },
-  [L.SIGNS2]: (c) => serviceSigns(c, ["KOSTUUMS", "REKWISIETEN", "KLEEDKAMER", "VIP-BAR", "VIP-RESTO", "DIRECTIE", "LAADPERRON", "UITLEEN"], "#ff2e7e"),
-  [L.SIGNS2_FR]: (c) => serviceSigns(c, ["COSTUMES", "ACCESSOIRES", "LOGE", "BAR VIP", "RESTO VIP", "DIRECTION", "QUAI", "PRÊT"], "#1a64c8"),
+  [L.SIGNS2]: (c) => serviceSigns(c, ["KOSTUUMS", "REKWISIETEN", "KLEEDKAMER", "VIP-BAR", "VIP-RESTO", "DIRECTIE", "LAADPERRON", "BEWAKING"], "#ff2e7e"),
+  [L.SIGNS2_FR]: (c) => serviceSigns(c, ["COSTUMES", "ACCESSOIRES", "LOGE", "BAR VIP", "RESTO VIP", "DIRECTION", "QUAI", "SÉCURITÉ"], "#1a64c8"),
   [L.PLAQUES]: (c) => {
     const cell = (k: number, fn: (w: number, h: number) => void) => aspect(c, 2, fn, (k % 2) * 256, Math.floor(k / 2) * 128, 256, 128);
     const board = (bg: string, line: string, t1: string, t2: string, fg: string) => (w: number, h: number) => {

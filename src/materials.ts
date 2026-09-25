@@ -19,6 +19,9 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
       liveTex: { value: null as THREE.Texture | null },
       liveOn: { value: 0 },
       liveStation: { value: -1 },
+      cctvTex: { value: null as THREE.Texture | null },
+      cctvLabels: { value: null as THREE.Texture | null },
+      cctvLayer: { value: L.CCTV },
     },
     vertexShader: /* glsl */ `
       in float layer;
@@ -67,6 +70,9 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
       uniform sampler2DArray atlas;
       uniform sampler2D clockTex;
       uniform sampler2D liveTex;
+      uniform sampler2D cctvTex;
+      uniform sampler2D cctvLabels;
+      uniform float cctvLayer;
       uniform float clockLayer;
       uniform float time;
       flat in float vLive;
@@ -91,6 +97,17 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
           t.rgb *= 0.86 + 0.14 * sin(vUv.y * 540.0 + time * 3.0);
           t.rgb *= 0.94 + 0.06 * sin(vUv.y * 9.0 - time * 1.7);
           t.a = 1.0;
+        } else if (abs(li - cctvLayer) < 0.5) {
+          // a security camera: washed-out, green-grey, noisy, scanlines, the labels on top
+          vec3 c = 1.0 - exp(-texture(cctvTex, vUv).rgb * 2.6); // lift the dark, don't clip the bright
+          vec2 cell = fract(vUv * vec2(3.0, 2.0));
+          float g = dot(c, vec3(0.3, 0.59, 0.11));
+          c = mix(vec3(g), c, 0.2) * vec3(0.9, 1.0, 0.93);
+          c *= 0.86 + 0.14 * sin(cell.y * 520.0 + time * 7.0);
+          c += (fract(sin(dot(floor(cell * vec2(320.0, 240.0)) + floor(time * 12.0), vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.09;
+          c *= 0.5 + 0.5 * smoothstep(0.78, 0.25, length(cell - 0.5));
+          vec4 lab = texture(cctvLabels, vUv);
+          t = vec4(mix(c, lab.rgb, lab.a), 1.0);
         } else t = abs(li - clockLayer) < 0.5 ? texture(clockTex, vUv) : texture(atlas, vec3(vUv, li));
         if (t.a < 0.5) discard;
         vec3 col = t.rgb * vLight;
