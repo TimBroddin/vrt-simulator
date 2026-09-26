@@ -36,7 +36,7 @@ export const PLACES: { id: string; name: string }[] = [
   { id: "regie", name: "Een regie" },
   { id: "bewaking", name: "De bewaking" },
   { id: "archief", name: "Het archief" },
-  { id: "doorgang", name: "Een doorgang" },
+  { id: "doorgang", name: "De camping" },
   { id: "kantine", name: "Een kantine" },
   { id: "kostuums", name: "De kostuumdienst" },
   { id: "kleedkamer", name: "Een kleedkamer" },
