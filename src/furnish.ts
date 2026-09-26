@@ -1,6 +1,6 @@
 // Phase 2: lights and props. Only reads phase-1 plans (own + neighbours).
 import { CEIL, CELL, CH, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, MID_CZ, SNAKE_HALF, T, isRtbf } from "./config";
-import { K, RT, SK, TALL, gardenStair, getPlan, idx, mazeAt, radioStation, roomAnomaly, setIsThuis, sideAt, stairFrame, tallTop, towerSpec, type Plan, type Room } from "./layout";
+import { K, PASS_DROP, RT, SK, TALL, gardenStair, getPlan, idx, mazeAt, radioStation, roomAnomaly, setIsThuis, sideAt, stairFrame, tallTop, towerSpec, bosSpec, BAREEL, bareelLamps, bareelCanopyLamps, type Plan, type Room } from "./layout";
 import { Rng, hash } from "./rng";
 import { ART, pickArt } from "./art";
 import { Builder, LightCtx } from "./builder";
@@ -848,6 +848,33 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
       panelLights(WARM, 0.7, 2, "panel");
       break;
     }
+    case RT.PASSAGE: {
+      // a doorgang: down four steps, through, and up again; sometimes someone put desks here
+      const lo = y0 - PASS_DROP;
+      const [da, db] = room.pass!;
+      const edge = (lx: number, lz: number, dd: number) => (dd === 0 ? lx === room.x1 : dd === 2 ? lx === room.x0 : dd === 1 ? lz === room.z1 : lz === room.z0);
+      const desks = w * d >= 3 && rng.chance(0.55);
+      // the way through stays clear: nothing in line with a door
+      const lanes: [number, number][] = [];
+      for (const i of cells) for (const dd of [da, db]) if (p.sides.get(i * 4 + dd)?.door) lanes.push([i, dd]);
+      const inLane = (lx: number, lz: number) => lanes.some(([i, dd]) => (dd % 2 === 0 ? lz === ((i / CH) | 0) : lx === i % CH));
+      cells.forEach((i, n) => {
+        const q = center(i);
+        const lx = i % CH, lz = (i / CH) | 0;
+        if (n % 2 === 0) light(q.x, y0 + CEIL - 0.03, q.z, FLUO, 1.0, 7, q.gx, q.gz, "panel", { rot, dead: dead(), flick: flick() });
+        if (edge(lx, lz, da) || edge(lx, lz, db)) return;
+        if (desks && !inLane(lx, lz) && rng.chance(0.8)) prop("desks", q.x, lo, q.z, rot, q.gx, q.gz, rng.int(0, 99));
+        for (const dd of wallDirs(i)) {
+          if (dd === da || dd === db) continue;
+          const wp = wallPoint(i, dd);
+          const r = rng.next();
+          if (r < 0.2) prop("cabinet", wp.wx, lo, wp.wz, faceRot(dd), q.gx, q.gz);
+          else if (r < 0.3) prop("plant", wp.wx, lo, wp.wz, faceRot(dd), q.gx, q.gz);
+          else if (r < 0.42) c.hangArt(wp.wx, wp.wz, dd, q.gx, q.gz, false);
+        }
+      });
+      break;
+    }
     case RT.EMPTY: {
       panelLights(FLUO, 1.0, 2);
       if (rng.chance(0.5)) prop("chair", roomCenter.x, y0, roomCenter.z, rng.range(0, 6.28), g0.gx, g0.gz);
@@ -1376,6 +1403,9 @@ function furnishTall(p: Plan, rng: Rng, c: Ctx) {
     return;
   }
 
+  if (a.kind === "bos") return furnishBos(p, rng, c);
+  if (a.kind === "bareel") return furnishBareel(p, rng, c);
+
   // De Toren: the model in the middle, a park round it, a sun on the wall, film lights
   const t = towerSpec(p.st, H, CEIL)!;
   for (const [ang, r, hgt, int] of [[0.4, 7, 20, 1.7], [2.2, 7.5, 21, 1.6], [3.9, 7, 19, 1.6], [5.3, 7.5, 22, 1.7], [1.3, 8, 12, 1.2], [4.6, 8, 12, 1.2], [0.2, 6, 7, 1.0], [3.1, 6, 7, 1.0], [0, 1.2, 4, 0.7], [2, 1.2, 9, 0.7], [4, 1.2, 14, 0.7]] as const) {
@@ -1412,6 +1442,134 @@ function furnishTall(p: Plan, rng: Rng, c: Ctx) {
   }
   const wf = ring(3.5, 10);
   prop("windfan", wf.x, y0, wf.z, Math.atan2(t.x - wf.x, t.z - wf.z), wf.gx, wf.gz);
+}
+
+// Het VRT-bos: trees everywhere but on the path and the court, benches and
+// lampposts along the path, floodlights on the court, a sun on the wall.
+function furnishBos(p: Plan, rng: Rng, c: Ctx) {
+  const { light, prop, y0 } = c;
+  const s = bosSpec(p.st, H, CEIL)!, ct = s.court;
+  const g = (x: number, z: number) => ({ x, z, gx: Math.floor(x / CELL), gz: Math.floor(z / CELL) });
+  // daylight: high soft lights over the whole wood, and the sun
+  for (let k = 0; k < 4; k++)
+    for (let m = 0; m < 4; m++) {
+      const q = g(s.X0 + (s.X1 - s.X0) * (k + 0.5) / 4, s.Z0 + (s.Z1 - s.Z0) * (m + 0.5) / 4);
+      light(q.x, y0 + s.top - 2.5, q.z, [1.0, 0.98, 0.92], 2.1, 15, q.gx, q.gz, null);
+    }
+  const sun = g(s.X0 + 6, s.Z0 + 7);
+  light(sun.x, y0 + s.top - 1.2, sun.z, [1.0, 0.9, 0.7], 2.2, 16, sun.gx, sun.gz, null);
+  // the trees
+  const trees: [number, number][] = [];
+  const clear = (x: number, z: number) =>
+    Math.abs(x - s.pathX(z)) > 1.7 &&
+    !(x > ct.x0 - 1.2 && z > ct.z0 - 1.2 && z < ct.z1 + 1.2) &&
+    !(x > s.pathX(ct.cz) && Math.abs(z - ct.cz) < 1.8) &&
+    trees.every(([tx, tz]) => Math.hypot(tx - x, tz - z) > 2.4);
+  for (let k = 0; k < 400 && trees.length < 46; k++) {
+    const x = rng.range(s.X0 + 0.9, s.X1 - 0.9), z = rng.range(s.Z0 + 0.9, s.Z1 - 0.9);
+    if (!clear(x, z)) continue;
+    trees.push([x, z]);
+    const q = g(x, z);
+    prop("bostree", x, y0, z, 0, q.gx, q.gz, rng.int(0, 999), rng.chance(0.18) ? 1 : rng.chance(0.15) ? 2 : 0);
+  }
+  // along the path: benches facing it, lampposts
+  for (const t of [0.18, 0.42, 0.66, 0.86]) {
+    const z = s.Z0 + (s.Z1 - s.Z0) * t, x = s.pathX(z) - 1.35;
+    if (trees.some(([tx, tz]) => Math.hypot(tx - x, tz - z) < 1.4)) continue;
+    const q = g(x, z);
+    prop("parkbench", x, y0, z, Math.PI / 2, q.gx, q.gz);
+  }
+  for (const t of [0.08, 0.3, 0.54, 0.76, 0.95]) {
+    const z = s.Z0 + (s.Z1 - s.Z0) * t, x = s.pathX(z) + 1.2;
+    const q = g(x, z);
+    prop("lamppost", x, y0, z, 0, q.gx, q.gz);
+    light(x, y0 + 3.3, z, [1.0, 0.85, 0.6], 0.6, 5, q.gx, q.gz, null);
+  }
+  // the court: four floodlight masts, the umpire, a bench for the players, some balls
+  for (const [x, z] of [[ct.x0 + 0.25, ct.z0 + 0.25], [ct.x1 - 0.25, ct.z0 + 0.25], [ct.x0 + 0.25, ct.z1 - 0.25], [ct.x1 - 0.25, ct.z1 - 0.25]] as const) {
+    const q = g(x, z);
+    const rot = Math.atan2(ct.cx - x, ct.cz - z);
+    prop("floodmast", x, y0, z, rot, q.gx, q.gz);
+    light(x + Math.sin(rot) * 2, y0 + 6.8, z + Math.cos(rot) * 2, [1.0, 0.98, 0.9], 2.0, 13, q.gx, q.gz, null);
+  }
+  const um = g(ct.cx - 10.97 / 2 - 1.45, ct.cz + 1.0);
+  prop("umpire", um.x, y0, um.z, Math.PI / 2, um.gx, um.gz);
+  const pb = g(ct.x1 - 0.45, ct.cz + 2.6);
+  prop("parkbench", pb.x, y0, pb.z, -Math.PI / 2, pb.gx, pb.gz);
+  for (let k = 0; k < 7; k++) {
+    const q = g(rng.range(ct.x0 + 0.5, ct.x1 - 0.5), rng.chance(0.5) ? rng.range(ct.z0 + 0.3, ct.z0 + 2) : rng.range(ct.z1 - 2, ct.z1 - 0.3));
+    prop("tball", q.x, y0, q.z, 0, q.gx, q.gz);
+  }
+}
+
+// De bareel: daylight, lamps under the canopy, the guard's monitors and desk in
+// the booth (with nobody at it), cameras on the columns, trees, lampposts.
+function furnishBareel(p: Plan, rng: Rng, c: Ctx) {
+  const { light, prop, y0 } = c;
+  const a = p.st.atrium!, B = BAREEL, top = tallTop(a, H, CEIL);
+  const ox = p.cx * CH * CELL, oz = p.cz * CH * CELL;
+  const g = (lx: number, lz: number) => {
+    const x = ox + lx, z = oz + lz;
+    return { x, z, gx: Math.floor(x / CELL), gz: Math.floor(z / CELL) };
+  };
+  // daylight: the high-bay lamps under the sky, and a lower ring to fill in the ground
+  for (const [lx, lz] of bareelLamps()) {
+    const q = g(lx, lz);
+    light(q.x, y0 + top - 2.3, q.z, [1.0, 0.98, 0.94], 2.2, 15, q.gx, q.gz, null);
+  }
+  for (const [lx, lz] of [[5, 6], [16, 6], [28, 6], [28, 18], [28, 30], [16, 30], [5, 30]] as const) {
+    const q = g(lx, lz);
+    light(q.x, y0 + 7, q.z, [1.0, 0.97, 0.9], 1.5, 11, q.gx, q.gz, null);
+  }
+  // under the canopy: a row of lamps in the space frame
+  for (const [lx, lz] of bareelCanopyLamps()) {
+    const q = g(lx, lz);
+    light(q.x, y0 + B.canopy.y - 1.0, q.z, [1.0, 0.92, 0.78], 1.4, 8, q.gx, q.gz, null);
+  }
+  // in the booth: the monitor wall on the east wall, the desk in front of it, a tube light
+  const bo = B.booth, bm = (bo.z0 + bo.z1) / 2;
+  const w = g(bo.x1 - 0.2, bm);
+  prop("cctvwall", w.x, y0, w.z, -Math.PI / 2, w.gx, w.gz, 0, 0);
+  const dk = g(bo.x1 - 0.2 - 1.3, bm);
+  prop("secdesk", dk.x, y0, dk.z, -Math.PI / 2, dk.gx, dk.gz, rng.int(0, 99));
+  const bl = g((bo.x0 + bo.x1) / 2, bm);
+  light(bl.x, y0 + bo.h - 0.1, bl.z, [0.9, 0.97, 1.0], 1.3, 5, bl.gx, bl.gz, "tube", { rot: 0, dead: false, flick: rng.chance(0.3) });
+  const bin = g(bo.door[1] + 0.5, bo.z0 - 0.5);
+  prop("bin", bin.x, y0, bin.z, 0, bin.gx, bin.gz);
+  // cameras on two columns: one on the booms, one on the booth
+  const cam = (lx: number, lz: number, tx: number, tz: number, own: number) => {
+    const q = g(lx, lz);
+    prop("cctv", q.x, y0 + 3.6, q.z, Math.atan2(tx - lx, tz - lz), q.gx, q.gz, 22, own);
+  };
+  cam(B.columns[2][0] - 0.2, B.columns[2][1], 9, B.mid, 1);
+  cam(B.columns[1][0] + 0.2, B.columns[1][1], bo.x0, bo.z1, 0);
+  // lampposts along the pavement, cones by the island
+  for (const lz of [7, 29]) {
+    const q = g(B.walk[1] + 0.6, lz);
+    prop("lamppost", q.x, y0, q.z, 0, q.gx, q.gz);
+    light(q.x, y0 + 3.3, q.z, [1.0, 0.85, 0.6], 0.7, 5, q.gx, q.gz, null);
+  }
+  for (let k = 0; k < 3; k++) {
+    const q = g(B.island[0] - 0.4 - k * 0.5, 12.6 - k * 0.3);
+    prop("cone", q.x, y0, q.z, 0, q.gx, q.gz);
+  }
+  // trees on the grass, east of the booth and along the west wall
+  const trees: [number, number][] = [];
+  const free = (x: number, z: number) =>
+    !(z > 13.6 && z < 16.4) && Math.abs(z - B.mid) > 1.3 &&
+    B.columns.every(([cx_, cz_]) => Math.hypot(cx_ - x, cz_ - z) > 1.2) &&
+    trees.every(([tx, tz]) => Math.hypot(tx - x, tz - z) > 2.8);
+  for (let k = 0; k < 300 && trees.length < 8; k++) {
+    const x = rng.range(B.booth.x1 + 3.5, 32.2), z = rng.range(4, 32);
+    if (!free(x, z)) continue;
+    trees.push([x, z]);
+    const q = g(x, z);
+    prop("bostree", q.x, y0, q.z, 0, q.gx, q.gz, rng.int(0, 999), 10);
+  }
+  for (const lz of [5, 30]) {
+    const q = g(4.0, lz + rng.range(-0.6, 0.6));
+    prop("bostree", q.x, y0, q.z, 0, q.gx, q.gz, rng.int(0, 999), 10);
+  }
 }
 
 // Studio Toots: a small Marconi, one storey

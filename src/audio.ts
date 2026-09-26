@@ -275,6 +275,14 @@ export class Sound {
     this.tone(90, 0.4, 0.05, 0.6);
   }
 
+  // a barrier arm going up or down: a motor whine, a thunk at the end
+  boom(vol = 1) {
+    if (!this.ctx || this.muted) return;
+    this.burst(2.0, "bandpass", 210, 3, 0.05 * vol, 0, 0, 0.4);
+    this.tone(95, 1.9, 0.025 * vol, 0, "sawtooth", 0, 0.3);
+    this.burst(0.08, "lowpass", 400, 1, 0.12 * vol, 2.0, 0, 0.5);
+  }
+
   motor(on: boolean) {
     if (!this.ctx) return;
     this.motorGain.gain.setTargetAtTime(on ? 0.12 : 0, this.ctx.currentTime, on ? 0.6 : 0.3);

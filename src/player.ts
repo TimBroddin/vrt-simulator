@@ -22,7 +22,8 @@ export class Player {
   private buf: number[] = [];
 
   get floor() {
-    return Math.floor((this.pos.y + 0.3) / H);
+    // (+0.7: the doorgangen are 60 cm below their floor)
+    return Math.floor((this.pos.y + 0.7) / H);
   }
 
   look(dx: number, dy: number) {

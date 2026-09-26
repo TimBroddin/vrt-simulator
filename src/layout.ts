@@ -1,7 +1,7 @@
 // Floor-plan generation. Phase 1 ("plan") decides what every cell is: corridor,
 // room, stairwell, elevator, atrium void, courtyard... It never looks at other
 // chunks, so neighbours can be queried freely without recursion.
-import { CELL, CH, DX, DZ, FLOOR_MAX, FLOOR_MIN, MID_CZ, MID_FLOOR } from "./config";
+import { CELL, CH, DX, DZ, FLOOR_MAX, FLOOR_MIN, MID_CZ, MID_FLOOR, T } from "./config";
 import { Rng, floorDiv, hash, mod } from "./rng";
 import { STATIONS } from "./stations";
 
@@ -43,6 +43,7 @@ export const RT = {
   DOCK: 22, // laadperrons, on the ground floor
   SECURITY: 23, // de bewaking: the camera feeds
   TOOTS: 24, // Studio Toots: a small Marconi
+  PASSAGE: 25, // een doorgang: steps down from one corridor, steps up to another
 } as const;
 
 export const ROOM_LABEL = [
@@ -71,6 +72,7 @@ export const ROOM_LABEL = [
   "LAADPERRON",
   "BEWAKING",
   "STUDIO TOOTS",
+  "DOORGANG",
 ];
 
 // Side kinds
@@ -108,6 +110,7 @@ export interface Room {
   dark: boolean;
   glass: boolean;
   num: number;
+  pass?: [number, number]; // a doorgang: the two walls with a door, a few steps up to each
 }
 
 export interface Structure {
@@ -124,24 +127,24 @@ export interface Structure {
   deck?: { x0: number; z0: number; x1: number; z1: number }; // parkeertoren deck
 }
 
-export type Special = "sport" | "mess" | "park" | "props" | "decor" | "marconi" | "tower";
-export type AtriumKind = "lobby" | "garden" | "hall" | "props" | "decor" | "marconi" | "tower";
+export type Special = "sport" | "mess" | "park" | "props" | "decor" | "marconi" | "tower" | "bos" | "bareel";
+export type AtriumKind = "lobby" | "garden" | "hall" | "props" | "decor" | "marconi" | "tower" | "bos" | "bareel";
 // the tall spaces: one volume from the floor of f0 to the ceiling of f1
-export const TALL = new Set<AtriumKind>(["hall", "decor", "marconi", "tower"]);
+export const TALL = new Set<AtriumKind>(["hall", "decor", "marconi", "tower", "bos", "bareel"]);
 // height of a tall space, from its floor to its ceiling
 export const tallTop = (a: { f0: number; f1: number }, H: number, CEIL: number) => (a.f1 - a.f0) * H + CEIL;
 // Studio Marconi: the gallery runs along its west side, from this row on
 export const marconiGallery = (a: { x0: number; z0: number }, x: number, z: number) => x === a.x0 - 1 && z >= a.z0 + 4;
 
 // Where the big places are: one of each near the start, then scattered around.
-const FIXED: Record<string, Special> = { "-2,1": "sport", "2,0": "mess", "0,2": "park", "2,2": "props", "-2,3": "decor", "3,1": "marconi", "0,4": "tower" };
+const FIXED: Record<string, Special> = { "-2,1": "sport", "2,0": "mess", "0,2": "park", "2,2": "props", "-2,3": "decor", "3,1": "marconi", "0,4": "tower", "3,3": "bos", "1,1": "bareel" };
 function rawSpecial(cx: number, cz: number): Special | null {
   if (cz <= MID_CZ) return null;
   const f = FIXED[`${cx},${cz}`];
   if (f) return f;
   if (Math.max(Math.abs(cx), Math.abs(cz)) <= 1) return null;
   const h = hash(71, cx, cz) % 1000;
-  return h < 55 ? "sport" : h < 110 ? "mess" : h < 135 ? "park" : h < 165 ? "props" : h < 185 ? "decor" : h < 205 ? "marconi" : h < 215 ? "tower" : null;
+  return h < 55 ? "sport" : h < 110 ? "mess" : h < 135 ? "park" : h < 165 ? "props" : h < 185 ? "decor" : h < 205 ? "marconi" : h < 215 ? "tower" : h < 227 ? "bos" : h < 236 ? "bareel" : null;
 }
 function specialFor(cx: number, cz: number): Special | null {
   const s = rawSpecial(cx, cz);
@@ -612,7 +615,83 @@ function makePlan(f: number, cx: number, cz: number): Plan {
         kind[i] = K.SOLID;
         p.room[i] = -1;
       }
+  makePassages(p);
   return p;
+}
+
+// Doorgangen: now and then a room between two corridors is a few steps lower,
+// with a door on each side. Only plain rooms that already have one door onto a
+// corridor and could have one on the opposite wall. By hash: the plan stays the same.
+export const PASS_DROP = 0.6; // four steps of 15 cm
+export const PASS_RUN = 0.28; // each tread
+function makePassages(p: Plan) {
+  for (const room of p.rooms) {
+    const t = room.type;
+    if ((t !== RT.OFFICE && t !== RT.EMPTY && t !== RT.MEETING) || room.glass || p.kind[room.cells[0]!] !== K.ROOM) continue;
+    if (hash(90, p.f, p.cx, p.cz, room.id) % 100 >= 50) continue;
+    // its doors so far (all onto corridors), and the walls a door could go in
+    const doors: [number, number][] = [];
+    const cands: [number, number][] = [];
+    let ok = true;
+    for (const i of room.cells) {
+      const x = i % CH, z = (i / CH) | 0;
+      for (let d = 0; d < 4; d++) {
+        const nx = x + DX[d]!, nz = z + DZ[d]!;
+        if (!inside(nx, nz)) continue;
+        const s = p.sides.get(i * 4 + d);
+        const corr = p.kind[idx(nx, nz)] === K.CORR && !p.zone[idx(nx, nz)];
+        if (s?.door) {
+          if (!corr || s.sk !== SK.DOOR) ok = false;
+          doors.push([i, d]);
+        } else if (corr && s?.sk !== SK.GLASS) cands.push([i, d]);
+      }
+    }
+    if (!ok || !doors.length) continue;
+    const dirs = [...new Set(doors.map(([, d]) => d))];
+    if (dirs.length > 2) continue;
+    const [di, dd] = doors[0]!;
+    // the other way out: the wall across if it can be, else another one on a corridor
+    let od = dirs.find((d) => d !== dd);
+    if (od === undefined) {
+      const ways = [(dd + 2) % 4, (dd + 1) % 4, (dd + 3) % 4].filter((d) => cands.some(([, c]) => c === d));
+      if (!ways.length) continue;
+      od = ways[0]!;
+      // the new door as close to opposite the first one as it gets
+      const other = cands.filter(([, d]) => d === od);
+      const ax = od % 2 === 0;
+      const key = (i: number) => (ax ? Math.abs(((i / CH) | 0) - ((di / CH) | 0)) : Math.abs((i % CH) - (di % CH)));
+      other.sort((a, b) => key(a[0]) - key(b[0]));
+      const [oi] = other[0]!;
+      setDoor(p, oi, od, { kind: "door", open: true, owner: oi, w: 1.0 });
+    }
+    for (const [i, d] of doors) p.sides.get(i * 4 + d)!.door!.open = true;
+    room.type = RT.PASSAGE;
+    room.dark = false;
+    room.pass = [dd, od];
+  }
+}
+
+// How far below the floor you are standing at (x, z) in a doorgang, or 0.
+export function passageOffset(f: number, x: number, z: number): number {
+  const gx = Math.floor(x / CELL), gz = Math.floor(z / CELL);
+  const cx = floorDiv(gx, CH), cz = floorDiv(gz, CH);
+  const p = getPlan(f, cx, cz);
+  const i = idx(gx - cx * CH, gz - cz * CH);
+  const ri = p.room[i]!;
+  if (ri < 0) return 0;
+  const r = p.rooms[ri]!;
+  if (!r.pass) return 0;
+  let h = -PASS_DROP;
+  for (const d of r.pass) {
+    // the steps only come down in front of a door
+    if (!p.sides.get(i * 4 + d)?.door) continue;
+    // distance from the wall with the door, into the room
+    const wall = d === 0 ? (cx * CH + r.x1 + 1) * CELL - T : d === 2 ? (cx * CH + r.x0) * CELL + T : d === 1 ? (cz * CH + r.z1 + 1) * CELL - T : (cz * CH + r.z0) * CELL + T;
+    const u = d % 2 === 0 ? Math.abs(wall - x) : Math.abs(wall - z);
+    const k = Math.floor(u / PASS_RUN);
+    if (k < 4) h = Math.max(h, -(k + 1) * 0.15);
+  }
+  return h;
 }
 
 // Some studios became the studio of a VRT brand, some edit suites a radio
@@ -652,6 +731,7 @@ export function roomLabel(p: Plan, r: Room): string {
   if (p.cz < MID_CZ) {
     if (r.type === RT.STUDIO || r.type === RT.KETNET || r.type === RT.SPORZA || r.type === RT.SET) return "STUDIO " + r.num;
     if (r.type === RT.TOOTS) return "STUDIO TOOTS";
+    if (r.type === RT.PASSAGE) return "PASSAGE";
     if (r.type === RT.RADIO) return "STUDIO RADIO";
     if (r.type === RT.DRESSING) return "LOGE " + r.num;
     return ROOM_LABEL_FR[r.type]!;
@@ -922,7 +1002,7 @@ export function lightPass(f: number, gx: number, gz: number, d: number): boolean
 }
 
 // Human readable label for a cell (HUD).
-const ROOM_LABEL_FR = ["BUREAU", "SALLE DE RÉUNION", "SANITAIRES", "RÉSERVE", "SALLE DES SERVEURS", "STUDIO", "CANTINE", "ARCHIVES", "RÉGIE", "LOCAL VIDE", "MONTAGE", "LE MESS", "SALLE DE DÉTENTE", "STUDIO RADIO", "STUDIO", "STUDIO", "STUDIO", "COSTUMES", "LOGE", "BAR VIP", "RESTAURANT VIP", "BUREAU DU CEO", "QUAI DE CHARGEMENT", "SÉCURITÉ", "STUDIO TOOTS"];
+const ROOM_LABEL_FR = ["BUREAU", "SALLE DE RÉUNION", "SANITAIRES", "RÉSERVE", "SALLE DES SERVEURS", "STUDIO", "CANTINE", "ARCHIVES", "RÉGIE", "LOCAL VIDE", "MONTAGE", "LE MESS", "SALLE DE DÉTENTE", "STUDIO RADIO", "STUDIO", "STUDIO", "STUDIO", "COSTUMES", "LOGE", "BAR VIP", "RESTAURANT VIP", "BUREAU DU CEO", "QUAI DE CHARGEMENT", "SÉCURITÉ", "STUDIO TOOTS", "PASSAGE"];
 
 export function cellLabel(f: number, gx: number, gz: number): string {
   const { p, i } = planAt(f, gx, gz);
@@ -938,6 +1018,8 @@ export function cellLabel(f: number, gx: number, gz: number): string {
       const x = i % CH;
       return x <= 4 ? "STUDIO 5" : x >= 7 ? "STUDIO 3" : fr ? "RUE DES DÉCORS" : "DECORSTRAAT";
     }
+    if (ta.kind === "bos") return fr ? "LE BOIS" : "VRT-BOS";
+    if (ta.kind === "bareel") return fr ? "LA BARRIÈRE" : "DE BAREEL";
     return ta.kind === "marconi" ? "STUDIO MARCONI" : fr ? "LA TOUR" : "DE TOREN";
   }
   if (p.cz < MID_CZ) {
@@ -1066,7 +1148,7 @@ function mirrorPlan(src: Plan, cz: number): Plan {
     kind: new Uint8Array(CH * CH),
     room: new Int16Array(CH * CH).fill(-1),
     zone: new Uint8Array(CH * CH),
-    rooms: src.rooms.map((r) => ({ ...r, z0: CH - 1 - r.z1, z1: CH - 1 - r.z0, cells: r.cells.map(mi) })),
+    rooms: src.rooms.map((r) => ({ ...r, z0: CH - 1 - r.z1, z1: CH - 1 - r.z0, cells: r.cells.map(mi), pass: r.pass && (r.pass.map(md) as [number, number]) })),
     sides: new Map(),
     style: src.style,
     dark: src.dark,
@@ -1149,6 +1231,16 @@ function makeSpecialStructure(cx: number, cz: number, kind: Special): Structure 
     const f0 = fixed ? 0 : [0, 2][hash(76, cx, cz) % 2]!;
     base.atrium = { x0: 3, z0: 2, x1: 8, z1: 9, f0, f1: f0 + 6, kind: "tower" };
   }
+  if (kind === "bos") {
+    // het VRT-bos: trees and a tennis court, indoors, under a painted sky, four storeys high
+    const f0 = fixed ? 0 : [0, 1, 3][hash(77, cx, cz) % 3]!;
+    base.atrium = { x0: 2, z0: 2, x1: 9, z1: 9, f0, f1: f0 + 3, kind: "bos" };
+  }
+  if (kind === "bareel") {
+    // de bareel: the gate at the entrance, indoors, four storeys high
+    const f0 = fixed ? 0 : [0, 0, 3][hash(78, cx, cz) % 3]!;
+    base.atrium = { x0: 2, z0: 2, x1: 9, z1: 9, f0, f1: f0 + 3, kind: "bareel" };
+  }
   if (kind === "props") {
     // two storeys: racks on the floor, a gallery all around upstairs
     const f0 = FIXED[`${cx},${cz}`] ? 2 : [1, 3, 5, 7][hash(74, cx, cz) % 4]!;
@@ -1160,6 +1252,68 @@ function makeSpecialStructure(cx: number, cz: number, kind: Special): Structure 
   }
   return base;
 }
+
+// Het VRT-bos: world-space layout of the forest and its tennis court. The path
+// runs from the north doors to the south doors, bending west round the court.
+export interface BosSpec {
+  X0: number; Z0: number; X1: number; Z1: number; // inside the walls
+  y0: number; top: number;
+  court: { x0: number; z0: number; x1: number; z1: number; cx: number; cz: number }; // the fence
+  door: number; // x of the doors
+  pathX: (z: number) => number;
+}
+export function bosSpec(st: Structure, H: number, CEIL: number): BosSpec | null {
+  const a = st.atrium;
+  if (!a || a.kind !== "bos") return null;
+  const ox = st.cx * CH * CELL, oz = st.cz * CH * CELL;
+  const X0 = ox + (a.x0 - 1) * CELL + T, X1 = ox + (a.x1 + 2) * CELL - T;
+  const Z0 = oz + (a.z0 - 1) * CELL + T, Z1 = oz + (a.z1 + 2) * CELL - T;
+  const door = ox + (Math.floor((a.x0 + a.x1) / 2) + 0.5) * CELL;
+  const court = { x0: ox + 17.8, z0: Z0 + 0.9, x1: X1 - 0.4, z1: Z1 - 0.9, cx: 0, cz: 0 };
+  court.cx = (court.x0 + court.x1) / 2;
+  court.cz = (court.z0 + court.z1) / 2;
+  const pathX = (z: number) => {
+    const t = Math.min(1, Math.max(0, (z - Z0) / (Z1 - Z0)));
+    return door - 2.6 * Math.sin(Math.PI * t) ** 2 + 0.9 * Math.sin(3 * Math.PI * t) * Math.sin(Math.PI * t);
+  };
+  return { X0, Z0, X1, Z1, y0: a.f0 * H, top: tallTop(a, H, CEIL), court, door, pathX };
+}
+
+// De bareel: in metres from the corner of its chunk. The road runs north-south
+// through two barriers; across the middle a hedge, and the only way through on
+// foot is the guard's booth. The north half is outside, the south half inside.
+export const BAREEL = {
+  mid: 18, // the hedge, the booms
+  laneA: [5.0, 8.6] as const, // inbound
+  island: [8.6, 10.0] as const,
+  laneB: [10.0, 13.6] as const, // outbound
+  walk: [15.4, 19.2] as const, // the pavement from door to door
+  booth: { x0: 17.6, x1: 22.6, z0: 16.4, z1: 19.6, door: [17.9, 19.0] as const, h: 2.7 },
+  canopy: { x0: 3.6, x1: 24.2, z0: 13.2, z1: 22.8, y: 5.0 },
+  columns: [[4.4, 14.0], [4.4, 22.0], [23.4, 14.0], [23.4, 22.0]] as const,
+  bike: [14.6, 15.8] as const, // the red bike lane, across the front of the booth
+};
+
+// The two booms: hinge (world), which way the arm points (-x), its length, and
+// the traffic light that goes with it (facing -z for the way in, +z for the way out).
+export function bareelBooms(ox: number, oz: number, y0: number) {
+  const B = BAREEL, mid = oz + B.mid;
+  return [
+    { hx: ox + B.island[0] + 0.3, hy: y0 + 0.95, hz: mid, len: B.island[0] + 0.3 - B.laneA[0] - 0.05, tx: ox + B.laneA[0] - 0.35, tz: mid - 0.9, face: -1 },
+    { hx: ox + B.laneB[1] - 0.3, hy: y0 + 0.95, hz: mid, len: B.laneB[1] - 0.3 - B.laneB[0] - 0.05, tx: ox + B.laneB[1] + 0.35, tz: mid + 0.9, face: 1 },
+  ];
+}
+// high-bay lamps under the sky, 5 x 5; and the lamps in the canopy
+export const bareelLamps = () => {
+  const out: [number, number][] = [];
+  for (let k = 0; k < 5; k++) for (let m = 0; m < 5; m++) out.push([3.1 + 29.8 * (k + 0.5) / 5, 3.1 + 29.8 * (m + 0.5) / 5]);
+  return out;
+};
+export const bareelCanopyLamps = () => {
+  const out: [number, number][] = [];
+  for (let lx = 5.5; lx < BAREEL.canopy.x1; lx += 4) for (const lz of [15.2, 20.8]) out.push([lx, lz]);
+  return out;
+};
 
 // ---------------------------------------------------------------------------
 // De Toren: the Reyers tower indoors. The shaft is hollow: a door at its foot,

@@ -3,7 +3,7 @@
 import { CEIL, CELL, CH, CHUNK, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, MID_FLOOR, SNAKE_HALF, ST_HALF, ST_U1, ST_U2, ST_VM, T, isRtbf } from "./config";
 import { Builder, Frame, LightCtx, UP, fbox, type Built, type RGB, type Spec, type V3 } from "./builder";
 import { getFurnished } from "./furnish";
-import { K, RT, SK, TALL, gardenStair, getStructure, kindAt, mazeAt, marconiGallery, roomAnomaly, sideAt, stairFrame, tallTop, towerSpec, type GardenStair, type Plan } from "./layout";
+import { K, PASS_DROP, PASS_RUN, RT, SK, TALL, gardenStair, getStructure, kindAt, mazeAt, marconiGallery, roomAnomaly, sideAt, stairFrame, tallTop, towerSpec, bosSpec, BAREEL, bareelBooms, bareelLamps, bareelCanopyLamps, type GardenStair, type Plan } from "./layout";
 import { hash } from "./rng";
 import { L } from "./layers";
 import { buildFixture, buildProp } from "./props";
@@ -60,6 +60,8 @@ function surf(p: Plan, i: number): Surf {
             return { floor: sp(L.WOOD_FLOOR, [0.95, 0.9, 0.8]), ceil: null, wall: panels, h: marconiGallery(a, x, z) ? H : top, base: false };
           }
           // the painted sky is lit by itself, like a cyclorama
+          if (a.kind === "bareel") return { floor: sp(L.GRASS, [1.0, 1.2, 0.8]), ceil: null, wall: { layer: L.CYC, emit: [1.35, 1.38, 1.36] }, h: top, base: false };
+          if (a.kind === "bos") return { floor: sp(L.GRASS, [0.9, 1.1, 0.72]), ceil: null, wall: { layer: L.CYC, emit: [1.0, 1.04, 1.02] }, h: top, base: false };
           return { floor: sp(L.GRASS, [1.1, 1.25, 0.95]), ceil: null, wall: { layer: L.CYC, emit: [0.82, 0.84, 0.86] }, h: top, base: false };
         }
       }
@@ -106,6 +108,7 @@ function surf(p: Plan, i: number): Surf {
         case RT.REGIE: return { floor: sp(L.CARPET_GREY, [0.6, 0.6, 0.65]), ceil: sp(L.BLACK), wall: sp(L.BLACK, [1.4, 1.4, 1.45]), h: CEIL, base: false };
         case RT.MESS: return { floor: sp(L.TILEDARK, [0.8, 0.8, 0.8]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.95, 0.95, 0.93]), h: CEIL, base: false };
         case RT.LOUNGE: return { floor: sp(L.WOOD_FLOOR, [0.85, 0.8, 0.72]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.97, 0.94, 0.88]), h: CEIL, base: true };
+        case RT.PASSAGE: return { floor: sp(L.TILEDARK, [1.05, 1.0, 0.95]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.9, 0.9, 0.86]), h: CEIL, base: false };
         case RT.EMPTY: return { floor: sp(L.CARPET_FLECK), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.88, 0.88, 0.84]), h: CEIL, base: true };
         default: return { floor: sp(L.CARPET_BLUE, [0.9, 0.85, 0.85]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.93, 0.88, 0.82]), h: CEIL, base: true };
       }
@@ -184,7 +187,12 @@ function emitCell(b: Builder, p: Plan, i: number, gx: number, gz: number, y0: nu
       const X0 = (p.cx * CH + hall.x0 - 1) * CELL, Z0 = (p.cz * CH + hall.z0 - 1) * CELL;
       const W = (hall.x1 - hall.x0 + 3) * CELL, D = (hall.z1 - hall.z0 + 3) * CELL;
       b.hrect(x0, z0, x1, z1, y0, true, { layer: L.SPORTFLOOR, uv: [(x0 - X0) / W, (z0 - Z0) / D, (x1 - X0) / W, (z1 - Z0) / D] });
-    } else b.hrect(x0, z0, x1, z1, y0, true, s.floor);
+    } else {
+      // a doorgang: the floor a few steps down
+      const pr = k === K.ROOM ? p.rooms[p.room[i]!]! : null;
+      b.hrect(x0, z0, x1, z1, y0 - (pr?.pass ? PASS_DROP : 0), true, s.floor);
+      if (pr?.pass) buildPassageCell(b, p, pr, i, gx, gz, y0, s);
+    }
     if (s.ceil && !(k === K.CORR && p.zone[i] === 2)) b.hrect(x0, z0, x1, z1, y0 + s.h, false, s.ceil);
   }
   if (k === K.GARAGE) {
@@ -794,6 +802,7 @@ function buildHall(b: Builder, p: Plan) {
 
 const CYL32 = new CylinderGeometry(1, 1, 1, 32, 1, true);
 const CYLS = new CylinderGeometry(1, 1, 1, 16, 1);
+const CONE_SHADE = new CylinderGeometry(0.25, 1, 1, 16, 1, true);
 
 function buildTall(b: Builder, p: Plan) {
   const a = p.st.atrium!;
@@ -840,6 +849,8 @@ function buildTall(b: Builder, p: Plan) {
     }
     return;
   }
+  if (a.kind === "bos") return buildBos(b, p, at, ceiling);
+  if (a.kind === "bareel") return buildBareel(b, p, at, ceiling);
   // De Toren: a painted sky overhead, a grid of lights, the tower, its stair, its deck
   ceiling({ layer: L.WHITE, emit: [0.3, 0.46, 0.72] }, 0);
   const t = towerSpec(p.st, H, CEIL)!;
@@ -952,6 +963,259 @@ function buildTall(b: Builder, p: Plan) {
   }
 }
 
+// a flat rectangle facing up, cut along the cell grid so each piece gets its own light
+function flat(b: Builder, at: (x: number, z: number) => void, x0: number, z0: number, x1: number, z1: number, y: number, spec: Spec) {
+  for (let z = z0; z < z1 - 1e-3; z = Math.min(z1, (Math.floor(z / CELL) + 1) * CELL))
+    for (let x = x0; x < x1 - 1e-3; x = Math.min(x1, (Math.floor(x / CELL) + 1) * CELL)) {
+      const xe = Math.min(x1, (Math.floor(x / CELL) + 1) * CELL), ze = Math.min(z1, (Math.floor(z / CELL) + 1) * CELL);
+      at((x + xe) / 2, (z + ze) / 2);
+      b.hrect(x, z, xe, ze, y, true, spec, 0);
+    }
+}
+
+// De bareel: the road through two barriers under a steel canopy, a hedge across,
+// and the guard's booth you have to walk through. Signs, lights, markings.
+function buildBareel(b: Builder, p: Plan, at: (x: number, z: number) => void, ceiling: (spec: Spec, sub?: number) => void) {
+  const a = p.st.atrium!, B = BAREEL;
+  const ox = p.cx * CH * CELL, oz = p.cz * CH * CELL, y0 = a.f0 * H;
+  const X0 = ox + (a.x0 - 1) * CELL + T, X1 = ox + (a.x1 + 2) * CELL - T;
+  const Z0 = oz + (a.z0 - 1) * CELL + T, Z1 = oz + (a.z1 + 2) * CELL - T;
+  const X = (v: number) => ox + v, Z = (v: number) => oz + v;
+  const mid = Z(B.mid);
+  const tile = (x0: number, z0: number, x1: number, z1: number, y: number, spec: Spec) => flat(b, at, x0, z0, x1, z1, y, spec);
+  const box = (x0: number, y0_: number, z0: number, x1: number, y1: number, z1: number, s: Parameters<Builder["aabox"]>[6], solid = false) => {
+    at((x0 + x1) / 2, (z0 + z1) / 2);
+    b.aabox(x0, y0_, z0, x1, y1, z1, s, 0);
+    if (solid) b.solid(x0, z0, x1, z1);
+  };
+  ceiling({ layer: L.WHITE, emit: [1.15, 1.3, 1.5] }, 0);
+
+  // the road, the island, the pavement, the bike lane
+  const asphalt = sp(L.CONCRETE, [0.3, 0.3, 0.32]);
+  tile(X(B.laneA[0]), Z0, X(B.laneB[1]), Z1, y0 + 0.005, asphalt);
+  const paving = sp(L.CONCRETE, [0.78, 0.76, 0.72]);
+  tile(X(B.walk[0]), Z0, X(B.walk[1]), Z(B.booth.z0), y0 + 0.006, paving);
+  tile(X(B.walk[0]), Z(B.booth.z1), X(B.walk[1]), Z1, y0 + 0.006, paving);
+  tile(X(B.laneB[1]), Z(B.bike[0]), X1, Z(B.bike[1]), y0 + 0.008, sp(L.CONCRETE, [0.78, 0.2, 0.18]));
+  const white = sp(L.WHITE, [0.92, 0.92, 0.9]);
+  const paint = (x0: number, z0: number, x1: number, z1: number) => tile(X(x0), Z(z0), X(x1), Z(z1), y0 + 0.011, white);
+  // edge lines, dashed; stop lines before the booms; arrows; a zebra crossing inside
+  for (let z = 3.4; z < 32.6; z += 2) {
+    paint(B.laneA[0] + 0.15, z, B.laneA[0] + 0.27, z + 1);
+    paint(B.laneB[1] - 0.27, z, B.laneB[1] - 0.15, z + 1);
+  }
+  paint(B.laneA[0] + 0.3, B.mid - 1.3, B.island[0] - 0.1, B.mid - 1.0);
+  paint(B.island[1] + 0.1, B.mid + 1.0, B.laneB[1] - 0.3, B.mid + 1.3);
+  for (let k = 0; k < 5; k++) {
+    paint(B.laneA[0] + 0.3 + k * 0.72, B.mid - 2.0, B.laneA[0] + 0.62 + k * 0.72, B.mid - 1.7);
+    paint(B.laneB[0] + 0.3 + k * 0.72, B.mid + 1.7, B.laneB[0] + 0.62 + k * 0.72, B.mid + 2.0);
+  }
+  const arrow = (xc: number, zc: number, dir: number) => {
+    paint(xc - 0.09, zc - 1.2, xc + 0.09, zc + 1.2);
+    for (let k = 0; k < 5; k++) {
+      const zz = zc + dir * (1.2 + k * 0.14), w = 0.55 - k * 0.11;
+      paint(xc - w, Math.min(zz, zz + dir * 0.14), xc + w, Math.max(zz, zz + dir * 0.14));
+    }
+  };
+  arrow((B.laneA[0] + B.island[0]) / 2, 8, 1);
+  arrow((B.laneA[0] + B.island[0]) / 2, 27, 1);
+  arrow((B.laneB[0] + B.laneB[1]) / 2, 9, -1);
+  arrow((B.laneB[0] + B.laneB[1]) / 2, 28, -1);
+  for (let x = B.laneA[0] + 0.3; x < B.laneB[1] - 0.3; x += 1.0) if (x + 0.5 < B.island[0] || x > B.island[1]) paint(x, 24.5, x + 0.5, 27.0);
+
+  // the island: a kerb with a hedge on it
+  const kerb = sp(L.CONCRETE, [0.72, 0.72, 0.7]);
+  const hedge = { all: sp(L.FOLIAGE, [0.42, 0.62, 0.34]), ny: null };
+  box(X(B.island[0]), y0, Z(13.6), X(B.island[1]), y0 + 0.15, Z(22.4), { all: kerb, ny: null }, true);
+  box(X(B.island[0]) + 0.12, y0 + 0.15, Z(14.8), X(B.island[1]) - 0.12, y0 + 0.95, Z(B.mid - 0.35), hedge);
+  box(X(B.island[0]) + 0.12, y0 + 0.15, Z(B.mid + 0.35), X(B.island[1]) - 0.12, y0 + 0.95, Z(21.2), hedge);
+  // the hedge across: from the wall to the road, from the road to the booth, from the booth to the wall
+  for (const [x0, x1] of [[X0, X(B.laneA[0])], [X(B.laneB[1]), X(B.booth.x0)], [X(B.booth.x1), X1]] as const)
+    box(x0, y0, mid - 0.45, x1, y0 + 1.25, mid + 0.45, hedge, true);
+
+  // the booms: an orange housing on the island side, a traffic light facing the cars that come
+  // up to it. The arms and the lamps move, so they're built on the main thread (bareel.ts).
+  const housing = { all: sp(L.WHITE, [0.95, 0.5, 0.08]), py: sp(L.WHITE, [0.9, 0.9, 0.88]) };
+  for (const bm of bareelBooms(ox, oz, y0)) {
+    box(bm.hx - 0.18, y0, bm.hz - 0.18, bm.hx + 0.18, y0 + 1.05, bm.hz + 0.18, housing, true);
+    const { tx, tz } = bm;
+    box(tx - 0.05, y0, tz - 0.05, tx + 0.05, y0 + 2.3, tz + 0.05, sp(L.WHITE, [0.1, 0.1, 0.1]), true);
+    box(tx - 0.13, y0 + 2.0, tz - 0.1, tx + 0.13, y0 + 2.75, tz + 0.1, sp(L.WHITE, [0.06, 0.06, 0.06]));
+  }
+  // high-bay lamps hanging from the sky, and lamps in the canopy
+  for (const [lx, lz] of bareelLamps()) {
+    const x = X(lx), z = Z(lz), ly = y0 + tallTop(a, H, CEIL) - 1.6;
+    at(x, z);
+    b.aabox(x - 0.015, ly, z - 0.015, x + 0.015, y0 + tallTop(a, H, CEIL), z + 0.015, sp(L.WHITE, [0.1, 0.1, 0.1]), 0);
+    b.geom(CONE_SHADE, x, ly - 0.2, z, 0, 0.55, 0.4, 0.55, sp(L.STEEL, [0.55, 0.57, 0.6]));
+    b.geom(CYLS, x, ly - 0.41, z, 0, 0.42, 0.02, 0.42, { layer: L.WHITE, emit: [2.4, 2.3, 2.0] });
+  }
+  for (const [lx, lz] of bareelCanopyLamps()) {
+    const x = X(lx), z = Z(lz), ly = y0 + B.canopy.y - 0.8;
+    at(x, z);
+    b.aabox(x - 0.35, ly - 0.06, z - 0.35, x + 0.35, ly, z + 0.35, { all: sp(L.WHITE, [0.2, 0.2, 0.2]), ny: { layer: L.WHITE, emit: [2.2, 2.0, 1.7] } }, 0);
+  }
+
+  // the booth: brick, a band of windows all round, a flat roof; a door in front and one at the back
+  const bo = B.booth;
+  const brick = sp(L.BRICK, [0.62, 0.44, 0.38]);
+  const bx0 = X(bo.x0), bx1 = X(bo.x1), bz0 = Z(bo.z0), bz1 = Z(bo.z1), th = 0.2;
+  const sill = 1.0, head = 2.25;
+  const wallX = (x0: number, x1: number, z0: number, z1: number, door: boolean) => {
+    // a length of wall running along x, with its window band
+    box(x0, y0, z0, x1, y0 + (door ? 0 : sill), z1, brick);
+    if (!door) {
+      box(x0, y0 + head, z0, x1, y0 + bo.h, z1, brick);
+      const n = Math.max(1, Math.round((x1 - x0) / 1.2));
+      for (let k = 0; k <= n; k++) {
+        const x = x0 + ((x1 - x0) * k) / n;
+        box(x - 0.03, y0 + sill, z0 + 0.05, x + 0.03, y0 + head, z1 - 0.05, sp(L.WHITE, [0.25, 0.2, 0.18]));
+      }
+      at((x0 + x1) / 2, (z0 + z1) / 2);
+      b.glass([x0, y0 + sill, (z0 + z1) / 2], [x1 - x0, 0, 0], [0, head - sill, 0], [0.55, 0.62, 0.66, 0.22]);
+    } else box(x0, y0 + 2.15, z0, x1, y0 + bo.h, z1, brick);
+    if (!door) b.solid(x0, z0, x1, z1);
+  };
+  for (const [z0, z1] of [[bz0, bz0 + th], [bz1 - th, bz1]] as const) {
+    wallX(bx0, X(bo.door[0]), z0, z1, false);
+    wallX(X(bo.door[0]), X(bo.door[1]), z0, z1, true);
+    wallX(X(bo.door[1]), bx1, z0, z1, false);
+  }
+  for (const [x0, x1] of [[bx0, bx0 + th], [bx1 - th, bx1]] as const) {
+    box(x0, y0, bz0 + th, x1, y0 + sill, bz1 - th, brick);
+    box(x0, y0 + head, bz0 + th, x1, y0 + bo.h, bz1 - th, brick);
+    for (const z of [bz0 + th + 0.03, (bz0 + bz1) / 2, bz1 - th - 0.03]) box(x0 + 0.05, y0 + sill, z - 0.03, x1 - 0.05, y0 + head, z + 0.03, sp(L.WHITE, [0.25, 0.2, 0.18]));
+    at((x0 + x1) / 2, (bz0 + bz1) / 2);
+    b.glass([(x0 + x1) / 2, y0 + sill, bz0 + th], [0, 0, bz1 - bz0 - 2 * th], [0, head - sill, 0], [0.55, 0.62, 0.66, 0.22]);
+    b.solid(x0, bz0, x1, bz1);
+  }
+  // the roof, its beige fascia, the floor and ceiling inside
+  box(bx0 - 0.25, y0 + bo.h, bz0 - 0.25, bx1 + 0.25, y0 + bo.h + 0.12, bz1 + 0.25, sp(L.CONCRETE, [0.6, 0.6, 0.6]));
+  box(bx0 - 0.3, y0 + bo.h + 0.12, bz0 - 0.3, bx1 + 0.3, y0 + bo.h + 0.55, bz1 + 0.3, { all: sp(L.PLASTER, [0.78, 0.66, 0.52]), ny: sp(L.WHITE, [0.7, 0.7, 0.68]) });
+  tile(bx0 + th, bz0 + th, bx1 - th, bz1 - th, y0 + 0.012, sp(L.LINO, [0.7, 0.66, 0.6]));
+
+  // the canopy: a dark roof on a steel space frame, four slender columns
+  const cn = B.canopy;
+  const frame = sp(L.WHITE, [0.2, 0.15, 0.12]);
+  const cy = y0 + cn.y;
+  for (let z = Z(cn.z0); z < Z(cn.z1) - 0.01; z += CELL)
+    for (let x = X(cn.x0); x < X(cn.x1) - 0.01; x += CELL) {
+      const xe = Math.min(X(cn.x1), x + CELL), ze = Math.min(Z(cn.z1), z + CELL);
+      at((x + xe) / 2, (z + ze) / 2);
+      b.aabox(x, cy, z, xe, cy + 0.3, ze, { all: sp(L.WHITE, [0.26, 0.24, 0.22]), ny: sp(L.WHITE, [0.32, 0.3, 0.28]) }, 0);
+    }
+  const step = 2.4, nx = Math.round((cn.x1 - cn.x0) / step), nz = Math.round((cn.z1 - cn.z0) / step);
+  const sx = (cn.x1 - cn.x0) / nx, sz = (cn.z1 - cn.z0) / nz, drop = 0.75;
+  const top = (i: number, j: number): V3 => [X(cn.x0 + i * sx), cy - 0.02, Z(cn.z0 + j * sz)];
+  const bot = (i: number, j: number): V3 => [X(cn.x0 + (i + 0.5) * sx), cy - drop, Z(cn.z0 + (j + 0.5) * sz)];
+  for (let i = 0; i < nx; i++)
+    for (let j = 0; j < nz; j++) {
+      const q = bot(i, j);
+      at(q[0], q[2]);
+      for (const [di, dj] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) rod(b, q, top(i + di, j + dj), 0.05, frame);
+      if (i + 1 < nx) rod(b, q, bot(i + 1, j), 0.05, frame);
+      if (j + 1 < nz) rod(b, q, bot(i, j + 1), 0.05, frame);
+    }
+  for (let i = 0; i <= nx; i++) { at(X(cn.x0 + i * sx), Z(cn.z0) + 1); rod(b, top(i, 0), top(i, nz), 0.06, frame); }
+  for (let j = 0; j <= nz; j++) { at(X(cn.x0) + 1, Z(cn.z0 + j * sz)); rod(b, top(0, j), top(nx, j), 0.06, frame); }
+  for (const [x, z] of B.columns) {
+    at(X(x), Z(z));
+    b.geom(CYLS, X(x), y0 + cn.y / 2, Z(z), 0, 0.13, cn.y, 0.13, sp(L.WHITE, [0.62, 0.62, 0.64]));
+    b.solid(X(x) - 0.15, Z(z) - 0.15, X(x) + 0.15, Z(z) + 0.15);
+  }
+
+  // signs: no entry on the island, the blue board inside, the booth sign, the one for people on foot
+  {
+    const nx_ = X((B.island[0] + B.island[1]) / 2), nz_ = Z(13.9);
+    box(nx_ - 0.04, y0 + 0.15, nz_ - 0.04, nx_ + 0.04, y0 + 2.2, nz_ + 0.04, sp(L.WHITE, [0.55, 0.56, 0.58]));
+    at(nx_, nz_);
+    b.geom(CYLS, nx_, y0 + 1.9, nz_ - 0.07, 0, 0.36, 0.03, 0.36, sp(L.WHITE, [0.82, 0.08, 0.06]), Math.PI / 2);
+    box(nx_ - 0.26, y0 + 1.84, nz_ - 0.1, nx_ + 0.26, y0 + 1.96, nz_ - 0.085, white);
+  }
+  const board = X(B.laneA[0] - 0.9), bzz = Z(24.0);
+  for (const dx of [-0.4, 0.4]) box(board + dx - 0.04, y0, bzz - 0.04, board + dx + 0.04, y0 + 0.9, bzz + 0.04, sp(L.WHITE, [0.55, 0.56, 0.58]), true);
+  box(board - 0.5, y0 + 0.9, bzz - 0.05, board + 0.5, y0 + 2.9, bzz + 0.03, { all: sp(L.WHITE, [0.12, 0.3, 0.6]), nz: { layer: L.BAREEL, uv: [0, 0, 0.5, 1] } });
+  const sx_ = X((bo.door[0] + bo.door[1]) / 2 + 0.9);
+  box(sx_ - 0.6, y0 + 2.15, bz0 - 0.34, sx_ + 0.6, y0 + 2.75, bz0 - 0.3, { all: sp(L.WHITE, [0.9, 0.9, 0.88]), nz: { layer: L.BAREEL, uv: [0.5, 0.5, 1, 1] } });
+  const px_ = X(B.walk[0] - 0.4), pz_ = Z(11.5);
+  box(px_ - 0.04, y0, pz_ - 0.04, px_ + 0.04, y0 + 1.5, pz_ + 0.04, sp(L.WHITE, [0.55, 0.56, 0.58]), true);
+  box(px_ - 0.35, y0 + 1.5, pz_ - 0.07, px_ + 0.35, y0 + 2.2, pz_ - 0.04, { all: sp(L.WHITE, [0.12, 0.3, 0.6]), nz: { layer: L.BAREEL, uv: [0.5, 0, 1, 0.5] } });
+}
+
+// Het VRT-bos: a painted sky, a gravel path through the trees, a clay tennis
+// court behind a fence. The trees themselves are props (see furnish).
+function buildBos(b: Builder, p: Plan, at: (x: number, z: number) => void, ceiling: (spec: Spec, sub?: number) => void) {
+  const s = bosSpec(p.st, H, CEIL)!;
+  const y0 = s.y0, c = s.court;
+  ceiling({ layer: L.WHITE, emit: [0.8, 0.95, 1.15] }, 0);
+  // the sun, painted on the sky
+  at(s.X0 + 6, s.Z0 + 7);
+  b.geom(CYLS, s.X0 + 6, y0 + s.top - 0.04, s.Z0 + 7, 0, 1.4, 0.04, 1.4, { layer: L.WHITE, emit: [2.4, 2.2, 1.7] });
+  const tile = (x0: number, z0: number, x1: number, z1: number, y: number, spec: Spec) => flat(b, at, x0, z0, x1, z1, y, spec);
+  // the path, in short lengths following its bends, and a spur to the gate of the court
+  const gravel = sp(L.GRAVEL, [0.72, 0.62, 0.48]);
+  for (let z = s.Z0; z < s.Z1 - 1e-3; z += 0.5) {
+    const x = s.pathX(z + 0.25);
+    tile(x - 0.85, z, x + 0.85, Math.min(s.Z1, z + 0.5), y0 + 0.006, gravel);
+  }
+  tile(s.pathX(c.cz) + 0.85, c.cz - 0.8, c.x0, c.cz + 0.8, y0 + 0.006, gravel);
+  // the court: red clay, white lines (23.77 x 10.97, singles 8.23, service lines 6.40 from the net)
+  tile(c.x0, c.z0, c.x1, c.z1, y0 + 0.008, sp(L.CONCRETE, [1.05, 0.52, 0.32]));
+  const line = sp(L.WHITE, [0.95, 0.95, 0.92]);
+  const lw = 0.05, hl = 23.77 / 2, hd = 10.97 / 2, hs = 8.23 / 2, sv = 6.4;
+  const ln = (x0: number, z0: number, x1: number, z1: number) => tile(c.cx + x0, c.cz + z0, c.cx + x1, c.cz + z1, y0 + 0.011, line);
+  for (const sx of [-1, 1]) {
+    ln(sx * hd - lw, -hl, sx * hd + lw, hl);
+    ln(sx * hs - lw, -hl, sx * hs + lw, hl);
+    ln(-hd, sx * hl - lw, hd, sx * hl + lw);
+    ln(-hs, sx * sv - lw, hs, sx * sv + lw);
+  }
+  ln(-lw, -sv, lw, sv);
+  for (const sz of [-1, 1]) ln(-lw, sz * hl - (sz > 0 ? 0.2 : 0), lw, sz * hl + (sz < 0 ? 0.2 : 0));
+  // the net: posts, a sagging mesh, the white band on top
+  const post = sp(L.WHITE, [0.12, 0.28, 0.16]);
+  const px = hd + 0.914;
+  for (const sx of [-1, 1]) {
+    at(c.cx + sx * px, c.cz);
+    b.aabox(c.cx + sx * px - 0.05, y0, c.cz - 0.05, c.cx + sx * px + 0.05, y0 + 1.07, c.cz + 0.05, post, 0);
+  }
+  for (const [a0, a1] of [[-px, 0], [0, px]] as const) {
+    at(c.cx + (a0 + a1) / 2, c.cz);
+    b.glass([c.cx + a0, y0 + 0.02, c.cz], [a1 - a0, 0, 0], [0, 0.95, 0], [0.04, 0.05, 0.05, 0.55]);
+    const top0 = a0 === 0 ? 0.914 : 1.07, top1 = a0 === 0 ? 1.07 : 0.914;
+    rod(b, [c.cx + a0, y0 + top0 - 0.03, c.cz], [c.cx + a1, y0 + top1 - 0.03, c.cz], 0.06, line);
+  }
+  // the fence round the court: green posts, a top rail, chain-link; a gate on the west side
+  const fh = 3.2, gate = 0.8;
+  const mesh: [number, number, number, number] = [0.08, 0.16, 0.1, 0.32];
+  const sides: [number, number, number, number][] = [
+    [c.x0, c.z0, c.x1, c.z0], [c.x1, c.z0, c.x1, c.z1], [c.x0, c.z1, c.x1, c.z1],
+    [c.x0, c.z0, c.x0, c.cz - gate], [c.x0, c.cz + gate, c.x0, c.z1],
+  ];
+  for (const [xa, za, xb, zb] of sides) {
+    const len = Math.hypot(xb - xa, zb - za), n = Math.max(1, Math.round(len / 2.5));
+    for (let k = 0; k <= n; k++) {
+      const x = xa + ((xb - xa) * k) / n, z = za + ((zb - za) * k) / n;
+      at(x, z);
+      b.aabox(x - 0.04, y0, z - 0.04, x + 0.04, y0 + fh, z + 0.04, post, 0);
+      if (k < n) {
+        const x2 = xa + ((xb - xa) * (k + 1)) / n, z2 = za + ((zb - za) * (k + 1)) / n;
+        rod(b, [x, y0 + fh - 0.03, z], [x2, y0 + fh - 0.03, z2], 0.05, post);
+        rod(b, [x, y0 + 0.08, z], [x2, y0 + 0.08, z2], 0.04, post);
+        b.glass([x, y0 + 0.05, z], [x2 - x, 0, z2 - z], [0, fh - 0.1, 0], mesh);
+      }
+    }
+    b.solid(Math.min(xa, xb) - 0.06, Math.min(za, zb) - 0.06, Math.max(xa, xb) + 0.06, Math.max(za, zb) + 0.06);
+  }
+  // a windscreen along both ends, dark green, with the name on it
+  for (const z of [c.z0 + 0.05, c.z1 - 0.05]) {
+    at(c.cx, z);
+    const n = z < c.cz ? 1 : -1;
+    b.vrect(false, z, c.x0 + 0.1, c.x1 - 0.1, y0 + 0.1, y0 + 1.9, n, sp(L.FABRIC, [0.1, 0.24, 0.14]), 0, y0);
+    b.vrect(false, z - n * 0.01, c.x0 + 0.1, c.x1 - 0.1, y0 + 0.1, y0 + 1.9, -n, sp(L.FABRIC, [0.1, 0.24, 0.14]), 0, y0);
+  }
+}
+
 const TWO_PI = Math.PI * 2;
 // a length of cylinder wall (height 1, scale y to taste), seen from outside or from inside
 const shells = new Map<string, BufferGeometry>();
@@ -1013,5 +1277,38 @@ function buildSnake(b: Builder, p: Plan) {
     if (!open[2]) box(-e, -w, -w, w);
     if (!open[1]) box(-w, w, w, e);
     if (!open[3]) box(-w, -e, w, -w);
+  }
+}
+
+// A cell of a doorgang: the walls reach down to its lower floor, and in front
+// of each of its two doors four steps come down, as wide as the cell.
+function buildPassageCell(b: Builder, p: Plan, r: NonNullable<Plan["rooms"][number]>, i: number, gx: number, gz: number, y0: number, s: Surf) {
+  const cx = (gx + 0.5) * CELL, cz = (gz + 0.5) * CELL, half = CELL / 2;
+  const lo = y0 - PASS_DROP;
+  for (let d = 0; d < 4; d++) {
+    const sk = sideAt(p.f, gx, gz, d).sk;
+    if (sk === SK.OPEN) continue;
+    const axisX = d % 2 === 0, Dn = axisX ? DX[d]! : DZ[d]!;
+    const plane = (axisX ? cx : cz) + Dn * (half - T);
+    const a = axisX ? cz : cx;
+    b.vrect(axisX, plane, a - half, a + half, lo, y0, -Dn, s.wall, 1.0, lo);
+  }
+  // the steps: in front of the doors
+  const tread = sp(L.TILEDARK, [0.9, 0.9, 0.92]), nose = sp(L.STEEL, [0.8, 0.8, 0.82]);
+  for (const d of r.pass!) {
+    if (!p.sides.get(i * 4 + d)?.door) continue;
+    const axisX = d % 2 === 0, Dn = axisX ? DX[d]! : DZ[d]!;
+    const wall = (axisX ? cx : cz) + Dn * (half - T);
+    const a = axisX ? cz : cx;
+    for (let k = 0; k < 4; k++) {
+      const u0 = wall - Dn * k * PASS_RUN, u1 = wall - Dn * (k + 1) * PASS_RUN, top = y0 - (k + 1) * 0.15;
+      const [ua, ub] = u0 < u1 ? [u0, u1] : [u1, u0];
+      if (axisX) b.aabox(ua, lo, a - half, ub, top, a + half, { all: tread, ny: null }, 1);
+      else b.aabox(a - half, lo, ua, a + half, top, ub, { all: tread, ny: null }, 1);
+      // a steel nosing on the edge of each step
+      const n = wall - Dn * (k + 1) * PASS_RUN;
+      if (axisX) b.aabox(Math.min(n, n + Dn * 0.03), top - 0.02, a - half, Math.max(n, n + Dn * 0.03), top + 0.004, a + half, { all: nose, ny: null }, 0);
+      else b.aabox(a - half, top - 0.02, Math.min(n, n + Dn * 0.03), a + half, top + 0.004, Math.max(n, n + Dn * 0.03), { all: nose, ny: null }, 0);
+    }
   }
 }

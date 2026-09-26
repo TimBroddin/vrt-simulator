@@ -55,6 +55,8 @@ function atriumName(a: NonNullable<Structure["atrium"]>, fr: boolean) {
   if (a.kind === "decor") return fr ? "RUE DES DÉCORS" : "DECORSTRAAT";
   if (a.kind === "marconi") return "STUDIO MARCONI";
   if (a.kind === "tower") return fr ? "LA TOUR" : "DE TOREN";
+  if (a.kind === "bos") return fr ? "LE BOIS" : "VRT-BOS";
+  if (a.kind === "bareel") return fr ? "LA BARRIÈRE" : "DE BAREEL";
   return a.kind === "hall" ? (fr ? "SALLE DE SPORT" : "SPORTHAL") : a.kind === "props" ? (fr ? "ACCESSOIRES" : "REKWISIETEN") : a.kind === "garden" ? (fr ? "JARDIN INTÉRIEUR" : "PLANTENTUIN") : "ATRIUM";
 }
 
@@ -157,6 +159,8 @@ const DESTS: { group: string; items: { name: string; find: Finder }[] }[] = [
       { name: "Sporthal", find: atriumOf("hall") },
       { name: "Rekwisieten", find: atriumOf("props") },
       { name: "De Toren", find: atriumOf("tower") },
+      { name: "Het VRT-bos", find: atriumOf("bos") },
+      { name: "De bareel", find: atriumOf("bareel") },
       { name: "Decorstraat", find: atriumOf("decor") },
       { name: "Studio Marconi", find: atriumOf("marconi") },
       { name: "De Mess", find: structFinder((st, pf) => {

@@ -83,10 +83,11 @@ export const L = {
   FLATS: 78, // 2 x 2 painted decor flats
   BLOCKWALL: 79, // de gang naar de parking: painted concrete blocks, a dark band at the bottom
   STENCIL: 80, // 2 x 4 stencilled wall markings, on transparent
+  BAREEL: 81, // de bareel: the blue welcome board (left half), the booth sign, the pedestrian sign
 } as const;
 
 // artworks and their museum labels (8 labels per layer) follow the painted layers
-export const ART0 = 81;
+export const ART0 = 82;
 export const LABEL0 = ART0 + ART.length;
 export const LAYER_COUNT = LABEL0 + Math.ceil(ART.length / 8);
 

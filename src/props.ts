@@ -20,6 +20,7 @@ const POP_HEAD = (() => {
 })();
 const CYL6 = new CylinderGeometry(1, 1, 1, 6, 1);
 const BLOB = new IcosahedronGeometry(1, 1);
+const CONE = new CylinderGeometry(0, 1, 1, 8, 1);
 const DISH = new SphereGeometry(1, 14, 5, 0, Math.PI * 2, 0, Math.PI * 0.28);
 
 const sp = (layer: number, tint?: RGB, emit?: RGB): Spec => ({ layer, tint, emit });
@@ -648,6 +649,9 @@ export function buildProp(b: Builder, pr: Prop) {
       b.geom(BLOB, c[0], c[1], c[2], 0, 0.12, 0.12, 0.12, sp(L.WHITE, [0.9, 0.45, 0.1]));
       break;
     }
+    case "tball":
+      b.geom(BLOB, pr.x, pr.y + 0.034, pr.z, 0, 0.034, 0.034, 0.034, sp(L.WHITE, [0.8, 0.95, 0.18]));
+      break;
     case "cone":
       b.geom(CYL6, pr.x, pr.y + 0.14, pr.z, rng.range(0, 3), 0.1, 0.28, 0.1, sp(L.WHITE, [0.95, 0.5, 0.1]));
       break;
@@ -1526,6 +1530,55 @@ export function buildProp(b: Builder, pr: Prop) {
       b.geom(CYL, ...fr.p(0, 0, 0.06), fr.rot, 2.6, 0.12, 2.6, DARK, Math.PI / 2);
       b.geom(CYL, ...fr.p(0, 0, 0.2), fr.rot, 2.4, 0.16, 2.4, { layer: L.WHITE, emit: [2.2, 2.0, 1.6] }, Math.PI / 2);
       for (const a0 of [0, 1.57, 3.14, 4.71]) fbox(b, fr, Math.cos(a0) * 2.5, Math.sin(a0) * 2.5 - 0.1, 0.1, 0.1, 0.2, 0.2, STEEL);
+      break;
+    }
+    case "bostree": {
+      // a real tree, in the VRT-bos (pr.b: 0 beech/oak, 1 birch, 2 pine; +10 a smaller one)
+      const kind = pr.b % 10;
+      const h = pr.b >= 10 ? rng.range(4.2, 5.8) : rng.range(6, 9.5), r = rng.range(0.16, 0.3);
+      const bark = kind === 1 ? sp(L.WHITE, [0.82, 0.8, 0.74]) : sp(L.WOOD_FLOOR, [0.3, 0.24, 0.18]);
+      b.geom(CYL6, pr.x, pr.y + h / 2, pr.z, rng.range(0, 3), r, h, r, bark);
+      b.geom(CYL6, pr.x, pr.y + 0.25, pr.z, 0, r * 1.5, 0.5, r * 1.5, bark);
+      if (kind === 1) for (let k = 0; k < 7; k++) {
+        const yy = rng.range(0.6, h - 0.5);
+        b.geom(CYL6, pr.x, pr.y + yy, pr.z, rng.range(0, 3), r * 1.03, 0.06, r * 1.03, DARK);
+      }
+      if (kind === 2) {
+        const leaf = sp(L.FOLIAGE, [0.32, 0.46, 0.34]);
+        for (let k = 0; k < 4; k++) {
+          const rr = 2.4 - k * 0.5, yy = h * 0.4 + k * 1.3;
+          b.geom(CONE, pr.x, pr.y + yy + 1.2, pr.z, rng.range(0, 3), rr, 2.6, rr, leaf);
+        }
+      } else {
+        const tint: RGB = kind === 1 ? [0.72, 0.95, 0.52] : rng.pick([[0.62, 0.9, 0.5], [0.52, 0.8, 0.44], [0.72, 0.95, 0.52]] as RGB[]);
+        const spread = kind === 1 ? 1.4 : 2.4;
+        for (let k = 0; k < (kind === 1 ? 8 : 13); k++) {
+          const a = rng.range(0, 6.28), d = rng.range(0, spread);
+          const s = rng.range(0.9, 1.6) * (kind === 1 ? 0.8 : 1);
+          b.geom(BLOB, pr.x + Math.cos(a) * d, pr.y + h * rng.range(0.6, 1.05) + 0.6, pr.z + Math.sin(a) * d, a, s, s * 0.8, s, sp(L.FOLIAGE, tint));
+        }
+      }
+      b.solid(pr.x - r - 0.12, pr.z - r - 0.12, pr.x + r + 0.12, pr.z + r + 0.12);
+      break;
+    }
+    case "floodmast": {
+      // a floodlight mast by the tennis court
+      cyl(b, fr, 0, 0, 0, 0.09, 7.2, sp(L.WHITE, [0.12, 0.28, 0.16]));
+      fbox(b, fr, 0, 7.0, 0.1, 1.0, 0.12, 0.12, sp(L.WHITE, [0.12, 0.28, 0.16]));
+      const fwd: V3 = [fr.s * 0.88, -0.48, fr.c * 0.88], upv: V3 = [fr.s * 0.48, 0.88, fr.c * 0.48];
+      for (const x of [-0.35, 0.35]) b.obox(fr.p(x, 7.25, 0.25), fr.ax, upv, fwd, [0.2, 0.14, 0.1], { all: DARK, pz: { layer: L.WHITE, emit: [2.2, 2.1, 1.8] } });
+      b.solid(pr.x - 0.12, pr.z - 0.12, pr.x + 0.12, pr.z + 0.12);
+      break;
+    }
+    case "umpire": {
+      // the umpire's chair, by the net
+      const g = sp(L.WHITE, [0.12, 0.28, 0.16]);
+      for (const x of [-0.35, 0.35]) for (const z of [-0.35, 0.35]) fbox(b, fr, x, 0, z, 0.06, 1.9, 0.06, g);
+      for (let k = 1; k <= 4; k++) fbox(b, fr, 0, k * 0.38, 0.38, 0.7, 0.04, 0.1, g);
+      fbox(b, fr, 0, 1.9, 0, 0.8, 0.06, 0.8, g);
+      fbox(b, fr, 0, 1.96, -0.1, 0.5, 0.06, 0.5, sp(L.WHITE, [0.9, 0.9, 0.88]));
+      fbox(b, fr, 0, 1.96, -0.36, 0.5, 0.55, 0.05, sp(L.WHITE, [0.9, 0.9, 0.88]));
+      solidRect(b, fr, 0, 0, 0.8, 0.9);
       break;
     }
     case "cutout": {

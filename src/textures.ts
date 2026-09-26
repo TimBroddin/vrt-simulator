@@ -556,6 +556,40 @@ const painters: Record<number, (c: Ctx) => void> = {
     c.fillRect(S * 0.37, 0, 6, S);
     noise(c, 6);
   },
+  [L.BAREEL]: (c) => {
+    // left half: the tall blue board by the road
+    c.fillStyle = "#1c4f9c"; c.fillRect(0, 0, 256, 512);
+    c.strokeStyle = "#fff"; c.lineWidth = 6; c.strokeRect(8, 8, 240, 496);
+    text(c, "WELKOM BIJ", 128, 44, 30, "#fff", "800");
+    text(c, "DE VRT", 128, 80, 34, "#fff", "900");
+    const panel = (y: number, draw: () => void) => {
+      c.fillStyle = "#fff"; c.fillRect(34, y, 188, 92);
+      c.save(); c.translate(128, y + 46); draw(); c.restore();
+    };
+    const tri = () => {
+      c.beginPath(); c.moveTo(0, -36); c.lineTo(38, 30); c.lineTo(-38, 30); c.closePath();
+      c.fillStyle = "#fff"; c.fill(); c.strokeStyle = "#d61f1f"; c.lineWidth = 7; c.stroke();
+    };
+    panel(116, () => { c.beginPath(); c.arc(0, 0, 36, 0, 7); c.fillStyle = "#fff"; c.fill(); c.strokeStyle = "#d61f1f"; c.lineWidth = 8; c.stroke(); text(c, "20", 0, 2, 30, "#111", "900"); });
+    panel(216, () => { tri(); text(c, "!", 0, 6, 34, "#111", "900"); });
+    panel(316, () => { tri(); c.fillStyle = "#111"; c.fillRect(-14, 4, 28, 8); c.fillRect(-4, -12, 8, 24); });
+    c.fillStyle = "#fff"; c.fillRect(34, 420, 60, 60);
+    text(c, "P", 64, 452, 52, "#1c4f9c", "900");
+    text(c, "BEZOEKERS", 170, 440, 18, "#fff", "800");
+    text(c, "→ ONTHAAL", 170, 464, 18, "#fff", "800");
+    // right top: over the booth door
+    c.fillStyle = "#f2efe8"; c.fillRect(256, 0, 256, 256);
+    c.fillStyle = "#ff2e7e"; c.fillRect(256, 0, 256, 18);
+    text(c, "ONTHAAL", 384, 90, 44, "#1a1a1a", "900");
+    text(c, "BADGE TONEN", 384, 150, 26, "#1a1a1a", "800");
+    text(c, "PRÉSENTEZ VOTRE BADGE", 384, 196, 16, "#555", "700");
+    // right bottom: for people on foot
+    c.fillStyle = "#1c4f9c"; c.fillRect(256, 256, 256, 256);
+    c.strokeStyle = "#fff"; c.lineWidth = 6; c.strokeRect(266, 266, 236, 236);
+    text(c, "VOETGANGERS", 384, 330, 30, "#fff", "900");
+    text(c, "VIA HET ONTHAAL", 384, 372, 24, "#fff", "800");
+    text(c, "→", 384, 440, 80, "#fff", "900");
+  },
   [L.SHOWSIGN]: (c) => {
     const cell = (k: number, fn: (w: number, h: number) => void) => aspect(c, 2, fn, (k % 2) * 256, Math.floor(k / 2) * 128, 256, 128);
     for (const [k, n] of [[0, "5"], [1, "3"]] as const)

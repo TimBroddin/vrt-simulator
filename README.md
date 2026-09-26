@@ -63,6 +63,9 @@ Like the sporthal and the rekwisieten, these fill a whole block, and the first o
 - **De Decorstraat**: a street inside the building, 6 m wide and two storeys high, where a lorry fits. Decor flats lean against both walls, a lorry is parked in it, and it opens straight into **Studio 5** and **Studio 3**: audience studios with a tribune, an APPLAUS sign, a lighting grid, cameras, and a set (Van Gils & gasten, Blokken).
 - **Studio Marconi**: an event space two storeys high, with warm wooden acoustic panels, a gallery behind a glass balustrade reached by a steel stair, a stage, a truss with spots, a projector, bistro chairs. **Studio Toots** is a smaller Marconi, one storey, among the rooms.
 - **De Toren**: the Reyers tower indoors, in a hall seven storeys high. The floor is fake grass, the walls and ceiling are a painted sky with the city along the bottom, there's a studio sun on the wall, film lights, plywood trees, and cables holding the tower up. The shaft is hollow: go in through the door at its foot and climb the spiral stair inside, up through the saucer onto the deck on top. The corridors on the floors around it have windows onto it. See `towerSpec` in `src/layout.ts`.
+- **Het VRT-bos**: the wood behind the building, indoors, four storeys high under a painted sky: beeches, birches and a few pines, a gravel path from door to door with benches and lampposts, and a red clay tennis court behind a green fence, with a net, an umpire's chair and floodlights. See `bosSpec` in `src/layout.ts`.
+- **De bareel**: the gate at the entrance, indoors under a painted sky: a road with red and white barriers under the steel space-frame canopy (now and then one goes up for a while and its light turns green, see `src/bareel.ts`), high-bay lamps hanging from the sky, traffic lights, a no-entry sign, the blue WELKOM BIJ DE VRT board, a red bike lane. A hedge runs across; on foot the only way through is the brick guard's booth, past the desk and the monitor wall (live camera feeds). One is right next to the start. See `BAREEL` in `src/layout.ts`.
+- **Doorgangen**: now and then a room links two corridors. You go down four steps into it, through (sometimes past desks), and up four steps into the next corridor. See `makePassages` in `src/layout.ts`.
 
 ## De gang naar de parking, and de gang naar nergens
 
@@ -74,7 +77,7 @@ Flat figures cut out of MDF, standing in a block of pine, placed around the buil
 
 ## Plekken and postkaarten
 
-About 45 places are worth finding: the big places, every kind of room, each radio studio, the strange rooms, the top of De Toren. Walk into one and it's yours ("PLEK ONTDEKT"); the count is under the quests and the pause screen lists them all, the ones you haven't found blanked out. They're kept in the browser across worlds. See `src/places.ts`. The start screen has postcards from the building (`src/postcards/`).
+About 48 places are worth finding: the big places, every kind of room, each radio studio, the strange rooms, the top of De Toren. Walk into one and it's yours ("PLEK ONTDEKT"); the count is under the quests and the pause screen lists them all, the ones you haven't found blanked out. They're kept in the browser across worlds. See `src/places.ts`. The start screen has postcards from the building (`src/postcards/`).
 
 ## De bewaking
 

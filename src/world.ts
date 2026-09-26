@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { CEIL, CELL, CH, FLOOR_MAX, FLOOR_MIN, H, ST_HALF, ST_U1, ST_U2, ST_VM } from "./config";
 import type { Built } from "./builder";
 import type { ElevOut } from "./chunk";
-import { K, gardenRampY, gardenStair, getStructure, kindAt, stairFrame, towerGround, towerSpec } from "./layout";
+import { K, gardenRampY, gardenStair, getStructure, kindAt, passageOffset, stairFrame, towerGround, towerSpec } from "./layout";
 import { floorDiv } from "./rng";
 
 export interface ElevRT {
@@ -281,7 +281,7 @@ export class World {
   // Ground height under (x, z) for a body whose feet are at y, or null if
   // the spot is not walkable (unloaded, void, too big a step).
   groundAt(x: number, z: number, y: number): number | null {
-    const f = Math.floor((y + 0.3) / H);
+    const f = Math.floor((y + 0.7) / H);
     if (f < FLOOR_MIN || f > FLOOR_MAX) return null;
     const gx = Math.floor(x / CELL), gz = Math.floor(z / CELL);
     const cx = floorDiv(gx, CH), cz = floorDiv(gz, CH);
@@ -329,7 +329,7 @@ export class World {
       return best;
     }
     if (k === K.CORR || k === K.ROOM || k === K.ELEV || k === K.GARAGE || k === K.ROOF) {
-      const g = f * H;
+      const g = f * H + (k === K.ROOM ? passageOffset(f, x, z) : 0);
       return Math.abs(g - y) < 0.45 ? g : null;
     }
     return null;

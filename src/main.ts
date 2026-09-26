@@ -21,6 +21,7 @@ import { ClockFace } from "./clockface";
 import { GhostRadio } from "./radio";
 import { LiveTV } from "./live";
 import { CCTV } from "./cctv";
+import { Bareels } from "./bareel";
 import { Places, placeAt } from "./places";
 import { layPostcards } from "./postcards";
 import { track, trackOnce } from "./analytics";
@@ -163,6 +164,7 @@ const minimap = new Minimap(!touch);
 const worldmap = new WorldMap();
 const live = new LiveTV(mat.uniforms);
 const cctv = new CCTV(renderer, scene, mat, world, player, touch);
+const bareels = new Bareels(scene, mat, world, player, sound);
 // plekken: the places you've found, kept across visits
 const places = new Places();
 $("plekken").textContent = `PLEKKEN ${places.count}`;
@@ -445,7 +447,7 @@ function updateEnv(dt: number) {
     trackOnce(`floor${f}`, "floor_visited", { floor: f });
     const area = onRoof ? "roof" : f === FLOOR_MIN ? "parking" : /PLANTENTUIN|JARDIN/.test(label) ? "plantentuin" : label === "MIDDENGANG" ? "middengang"
       : label === "ATRIUM" ? "atrium" : STATIONS.some((st) => st.label === label) ? "radio" : /^STUDIO/.test(label) ? "studio" : /REGIE|RÉGIE/.test(label) ? "regie" : /ARCHIEF|ARCHIVES/.test(label) ? "archive"
-      : /KANTINE|CANTINE/.test(label) ? "canteen" : /^KETNET/.test(label) ? "ketnet" : /^SPORZA/.test(label) ? "sporza" : /^DECOR/.test(label) ? "tvset" : /BEWAKING|SÉCURITÉ/.test(label) ? "security" : /DECORSTRAAT|RUE DES/.test(label) ? "decorstraat" : /MARCONI/.test(label) ? "marconi" : /TOOTS/.test(label) ? "toots" : /TOREN|LA TOUR/.test(label) ? "tower" : "";
+      : /KANTINE|CANTINE/.test(label) ? "canteen" : /^KETNET/.test(label) ? "ketnet" : /^SPORZA/.test(label) ? "sporza" : /^DECOR/.test(label) ? "tvset" : /BEWAKING|SÉCURITÉ/.test(label) ? "security" : /DECORSTRAAT|RUE DES/.test(label) ? "decorstraat" : /MARCONI/.test(label) ? "marconi" : /TOOTS/.test(label) ? "toots" : /TOREN|LA TOUR/.test(label) ? "tower" : /VRT-BOS|LE BOIS/.test(label) ? "bos" : /BAREEL|BARRIÈRE/.test(label) ? "bareel" : "";
     if (area) trackOnce(`area:${area}`, "area_discovered", { area });
     if (fr) trackOnce("area:rtbf", "area_discovered", { area: "rtbf" });
   }
@@ -524,6 +526,7 @@ function frame() {
   live.update(dt, started ? (radio.station >= 0 ? radio.station : nearStudio) : -1);
   if (ready) updateEnv(dt);
   if (ready && started) cctv.update(dt);
+  if (ready) bareels.update(dt);
 
   if (flickNear > 0 && t - lastFlickBuzz > 0.12 && Math.random() < flickNear * 0.25) {
     lastFlickBuzz = t;
@@ -631,7 +634,7 @@ $("restart").addEventListener("click", (e) => {
 });
 
 // expose for automation / debugging
-const api = { player, world, camera, lifts, sound, quests, minimap, worldmap, openMap, closeMap, radio, live, cctv, places, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
+const api = { player, world, camera, lifts, bareels, sound, quests, minimap, worldmap, openMap, closeMap, radio, live, cctv, places, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
 (window as any).__vrt = api;
 if (debug) $("debug").style.display = "block";
 frame();

@@ -25,6 +25,8 @@ export const PLACES: { id: string; name: string }[] = [
   { id: "toots", name: "Studio Toots" },
   { id: "toren", name: "De Toren" },
   { id: "torentop", name: "Boven op De Toren" },
+  { id: "bos", name: "Het VRT-bos" },
+  { id: "bareel", name: "De bareel" },
   { id: "nieuwsstudio", name: "Een nieuwsstudio" },
   { id: "ketnet", name: "De Ketnet-studio" },
   { id: "sporza", name: "De Sporza-studio" },
@@ -34,6 +36,7 @@ export const PLACES: { id: string; name: string }[] = [
   { id: "regie", name: "Een regie" },
   { id: "bewaking", name: "De bewaking" },
   { id: "archief", name: "Het archief" },
+  { id: "doorgang", name: "Een doorgang" },
   { id: "kantine", name: "Een kantine" },
   { id: "kostuums", name: "De kostuumdienst" },
   { id: "kleedkamer", name: "Een kleedkamer" },
@@ -52,7 +55,7 @@ export const PLACES: { id: string; name: string }[] = [
 const ROOMS: Partial<Record<number, string>> = {
   [RT.MESS]: "mess", [RT.STUDIO]: "nieuwsstudio", [RT.KETNET]: "ketnet", [RT.SPORZA]: "sporza", [RT.TOOTS]: "toots",
   [RT.REGIE]: "regie", [RT.SECURITY]: "bewaking", [RT.ARCHIVE]: "archief", [RT.CANTEEN]: "kantine", [RT.COSTUME]: "kostuums",
-  [RT.DRESSING]: "kleedkamer", [RT.VIPBAR]: "vipbar", [RT.VIPRESTO]: "viprestaurant", [RT.CEO]: "ceo", [RT.DOCK]: "laadperron", [RT.LOUNGE]: "pool",
+  [RT.DRESSING]: "kleedkamer", [RT.VIPBAR]: "vipbar", [RT.VIPRESTO]: "viprestaurant", [RT.CEO]: "ceo", [RT.DOCK]: "laadperron", [RT.LOUNGE]: "pool", [RT.PASSAGE]: "doorgang",
 };
 const ODD: Record<string, string> = { poppen: "poppen", chairs: "stoelen", flooded: "onderwater", upside: "plafond", stairs: "trap" };
 
@@ -75,7 +78,7 @@ export function placeAt(f: number, x: number, z: number, y: number): string | nu
       const lx = i % CH;
       return lx <= 4 ? "studio5" : lx >= 7 ? "studio3" : "decorstraat";
     }
-    const m: Record<string, string> = { hall: "sporthal", props: "rekwisieten", marconi: "marconi", tower: "toren", garden: "plantentuin", lobby: "atrium" };
+    const m: Record<string, string> = { hall: "sporthal", props: "rekwisieten", marconi: "marconi", tower: "toren", bos: "bos", bareel: "bareel", garden: "plantentuin", lobby: "atrium" };
     return m[a.kind] ?? null;
   }
   if (k === K.ROOM) {
