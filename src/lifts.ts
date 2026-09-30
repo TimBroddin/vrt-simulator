@@ -140,10 +140,17 @@ export class Lifts {
     const n = this.near();
     this.prompt = "";
     if (!this.ride && n) {
+      // shut in a car whose doors aren't opening: the door-open button
+      const c = this.calls.get(n.e.id);
+      const shut = n.inCar && n.e.open <= 0.5 && !(c && t < c.closeAt);
       if (n.inCar && n.e.open > 0.8 && !this.panel) this.prompt = "E · KIES VERDIEPING";
+      else if (shut) this.prompt = "E · DEUREN OPENEN";
       else if (!n.inCar && n.e.open < 0.5 && !this.calls.has(n.e.id)) this.prompt = "E · LIFT ROEPEN";
       if (interact) {
-        if (n.inCar && n.e.open > 0.5) {
+        if (shut) {
+          this.sound.beep(0.4);
+          this.calls.set(n.e.id, { openAt: t + 0.3, closeAt: t + 8, dinged: false });
+        } else if (n.inCar && n.e.open > 0.5) {
           if (this.panel) this.panelInput("go");
           else {
             this.panel = { e: n.e, sel: n.e.f };

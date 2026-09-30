@@ -3,7 +3,7 @@ import { CylinderGeometry, ExtrudeGeometry, IcosahedronGeometry, Shape, SphereGe
 import { CEIL, CELL, DOOR_H } from "./config";
 import { Builder, Frame, UP, fbox, type RGB, type Spec, type V3 } from "./builder";
 import type { Light, Prop } from "./furnish";
-import { ART0, L, LABEL0 } from "./layers";
+import { ART0, KOFFIE_UV, L, LABEL0 } from "./layers";
 import { ART } from "./art";
 import { Rng } from "./rng";
 
@@ -1470,6 +1470,124 @@ export function buildProp(b: Builder, pr: Prop) {
       fbox(b, fr, 0, 0.6, d - 0.03, w, 0.01, 0.06, sp(L.WHITE, [0.85, 0.85, 0.8]));
       break;
     }
+    // --- de koffiekamer
+    case "kwall":
+      // a partition, pr.a cm long, floor to ceiling
+      fbox(b, fr, 0, 0, 0, pr.a / 100, CEIL, 0.12, sp(L.PLASTER, [0.97, 0.97, 0.95]), true);
+      break;
+    case "kfridge": {
+      // pr.a tall fridges side by side, glass fronts, a lit strip on top
+      const n = pr.a || 3;
+      for (let k = 0; k < n; k++) fbox(b, fr, (k - (n - 1) / 2) * 0.72, 0, 0.36, 0.7, 2.0, 0.7, { all: sp(L.WHITE, [0.2, 0.22, 0.24]), pz: { layer: L.KOFFIE, emit: [1.0, 1.02, 1.05], uv: KOFFIE_UV.fridge } }, true);
+      fbox(b, fr, 0, 2.0, 0.36, n * 0.72, 0.14, 0.7, { all: DARK, pz: { layer: L.WHITE, emit: [1.2, 1.25, 1.3] } });
+      break;
+    }
+    case "kcounter": {
+      // the broodjesbar: pr.a cm long, the fillings under glass facing +z, the till at one end
+      const len = pr.a / 100;
+      fbox(b, fr, 0, 0, 0, len, 0.92, 0.7, { all: STEEL, pz: sp(L.WHITE, [0.86, 0.86, 0.84]) }, true);
+      fbox(b, fr, 0, 0.12, 0.352, len, 0.14, 0.004, sp(L.WHITE, [0.42, 0.7, 0.08]));
+      fbox(b, fr, 0, 0.92, 0.02, len - 0.1, 0.4, 0.5, { all: STEEL, pz: { layer: L.KOFFIE, emit: [1.05, 1.05, 1.0], uv: KOFFIE_UV.display }, py: sp(L.WHITE, [0.8, 0.86, 0.88]) });
+      fbox(b, fr, 0, 0.92, 0.36, len, 0.03, 0.3, STEEL);
+      fbox(b, fr, len / 2 - 0.35, 1.32, -0.05, 0.4, 0.22, 0.32, { all: DARK, pz: { layer: L.WHITE, emit: [0.3, 0.9, 0.45] } });
+      break;
+    }
+    case "koven": {
+      // the back of the broodjesbar: a steel bench with panini grills and ovens, bread, the menu
+      const len = pr.a / 100;
+      fbox(b, fr, 0, 0, 0.3, len, 0.9, 0.6, STEEL, true);
+      const n = Math.max(1, Math.floor(len / 1.1));
+      for (let k = 0; k < n; k++) {
+        const x = (k - (n - 1) / 2) * 1.1;
+        if (k % 2 === 0) fbox(b, fr, x, 0.9, 0.3, 0.6, 0.42, 0.5, { all: STEEL, pz: { layer: L.WHITE, tint: [0.12, 0.08, 0.06], emit: [0.45, 0.2, 0.05] } });
+        else {
+          fbox(b, fr, x, 0.9, 0.3, 0.5, 0.12, 0.42, STEEL);
+          fbox(b, fr, x, 1.02, 0.3, 0.5, 0.05, 0.42, DARK);
+        }
+      }
+      fbox(b, fr, 0, 1.5, 0.15, len, 0.03, 0.3, STEEL);
+      for (let k = 0; k < 8; k++) fbox(b, fr, rng.range(-len / 2 + 0.3, len / 2 - 0.3), 1.53, 0.15 + rng.range(-0.06, 0.06), 0.45, 0.07, 0.08, sp(L.WHITE, [0.85, 0.62, 0.32]));
+      fbox(b, fr, 0, 1.7, 0.03, Math.min(len - 0.4, 2.6), 0.75, 0.04, { all: DARK, pz: { layer: L.KOFFIE, emit: [0.95, 0.95, 0.95], uv: KOFFIE_UV.menu } });
+      break;
+    }
+    case "poortje": {
+      // a turnstile: two waist-high posts with a tripod between them (you push through); pr.b: 0 IN, 1 UIT
+      for (const x of [-0.55, 0.55]) fbox(b, fr, x, 0, 0, 0.18, 1.0, 0.55, { all: STEEL, py: sp(L.WHITE, [0.2, 0.2, 0.22]) }, true);
+      const sign: Spec = { layer: L.KOFFIE, emit: [1.3, 1.3, 1.3], uv: pr.b ? KOFFIE_UV.out : KOFFIE_UV.in };
+      fbox(b, fr, -0.55, 1.0, 0, 0.14, 0.09, 0.3, { all: DARK, pz: sign, nz: sign });
+      cyl(b, fr, -0.44, 0.84, 0, 0.05, 0.16, STEEL);
+      const hub = fr.p(-0.44, 0.92, 0);
+      for (const [x, y, z] of [[0.4, 0.92, 0], [-0.2, 0.62, 0.32], [-0.2, 0.62, -0.32]] as const) bar(b, hub, fr.p(x, y, z), 0.035, STEEL);
+      break;
+    }
+    case "koffiebar": {
+      // three coffee machines on a counter, cups and sugar, an orange mat in front of each
+      fbox(b, fr, 0, 0, 0.3, 2.7, 0.88, 0.6, { all: sp(L.WHITE, [0.9, 0.9, 0.88]), pz: sp(L.WHITE, [0.42, 0.7, 0.08]) }, true);
+      fbox(b, fr, 0, 0.88, 0.3, 2.74, 0.03, 0.62, GREY);
+      for (const x of [-0.9, 0, 0.9]) {
+        fbox(b, fr, x, 0.91, 0.28, 0.6, 0.82, 0.5, { all: DARK, pz: { layer: L.KOFFIE, emit: [0.9, 0.9, 0.9], uv: KOFFIE_UV.machine } });
+        fbox(b, fr, x, 0, 1.05, 0.8, 0.012, 0.6, { all: sp(L.WHITE, [0.6, 0.3, 0.15]), py: { layer: L.KOFFIE, uv: KOFFIE_UV.mat } });
+      }
+      for (const x of [-0.45, 0.45]) cyl(b, fr, x, 0.91, 0.45, 0.04, 0.3, WHITE);
+      fbox(b, fr, 1.28, 0.91, 0.42, 0.12, 0.1, 0.12, sp(L.WHITE, [0.95, 0.8, 0.45]));
+      break;
+    }
+    case "cocktail": {
+      // a high square table, white, with high stools in green and yellow
+      fbox(b, fr, 0, 1.02, 0, 0.75, 0.04, 0.75, sp(L.WHITE, [0.95, 0.95, 0.93]));
+      for (const [x, z] of [[-0.33, -0.33], [0.33, -0.33], [-0.33, 0.33], [0.33, 0.33]]) fbox(b, fr, x!, 0, z!, 0.03, 1.02, 0.03, STEEL);
+      fbox(b, fr, 0, 0.25, 0, 0.7, 0.02, 0.02, STEEL);
+      solidRect(b, fr, 0, 0, 0.75, 0.75);
+      const seats = [sp(L.FABRIC, [0.55, 0.82, 0.16]), sp(L.FABRIC, [0.96, 0.82, 0.12])];
+      for (const [x, z, r] of [[0.62, 0, Math.PI / 2], [-0.62, 0, -Math.PI / 2], [0, 0.62, 0], [0, -0.62, Math.PI]] as const) {
+        if (!rng.chance(0.8)) continue;
+        const f = new Frame(...fr.p(x + rng.range(-0.08, 0.08), 0, z + rng.range(-0.08, 0.08)), fr.rot + r + rng.range(-0.3, 0.3));
+        fbox(b, f, 0, 0.74, 0, 0.4, 0.05, 0.38, rng.pick(seats));
+        fbox(b, f, 0, 0.8, 0.18, 0.38, 0.22, 0.02, STEEL);
+        for (const [lx, lz] of [[-0.16, -0.15], [0.16, -0.15], [-0.16, 0.15], [0.16, 0.15]]) fbox(b, f, lx!, 0, lz!, 0.02, 0.74, 0.02, STEEL);
+        fbox(b, f, 0, 0.28, -0.15, 0.34, 0.02, 0.02, STEEL);
+      }
+      if (rng.chance(0.3)) cyl(b, fr, rng.range(-0.2, 0.2), 1.06, rng.range(-0.2, 0.2), 0.04, 0.1, WHITE);
+      break;
+    }
+    case "lowround":
+    case "bigtafel": {
+      // a round table, low and small, or the big one; chairs around it
+      const big = pr.t === "bigtafel";
+      const r = big ? 1.0 : 0.42, n = big ? 7 : rng.int(2, 4);
+      cyl(b, fr, 0, 0.72, 0, r, 0.03, sp(L.WHITE, [0.95, 0.95, 0.93]));
+      cyl(b, fr, 0, 0.02, 0, 0.05, 0.7, STEEL);
+      cyl(b, fr, 0, 0, 0, big ? 0.45 : 0.28, 0.02, STEEL);
+      solidRect(b, fr, 0, 0, r * 1.8, r * 1.8);
+      const seat = sp(L.FABRIC, rng.pick([[0.55, 0.82, 0.16], [0.96, 0.82, 0.12], [0.3, 0.3, 0.32]] as RGB[]));
+      const a0 = rng.range(0, 6.28);
+      for (let k = 0; k < n; k++) {
+        const a = a0 + (k / n) * Math.PI * 2 + rng.range(-0.15, 0.15), d = r + 0.36 + rng.range(0, 0.12);
+        simpleChair(b, fr, Math.sin(a) * d, Math.cos(a) * d, a + rng.range(-0.3, 0.3), seat);
+      }
+      if (rng.chance(0.5)) cyl(b, fr, rng.range(-r / 2, r / 2), 0.75, rng.range(-r / 2, r / 2), 0.04, 0.1, WHITE);
+      break;
+    }
+    case "cokefridge":
+      fbox(b, fr, 0, 0, 0.42, 0.9, 2.0, 0.8, { all: RED, pz: { layer: L.KOFFIE, emit: [1.05, 1.05, 1.0], uv: KOFFIE_UV.coke } }, true);
+      break;
+    case "ksign":
+      fbox(b, fr, 0, 0, 0.01, 0.34, 0.17, 0.012, { all: GREY, pz: { layer: L.KOFFIE, uv: pr.b ? KOFFIE_UV.signFr : KOFFIE_UV.sign } });
+      break;
+    case "prijslijst":
+      // the price list in a plastic sleeve, and the sheet with the drinks under it
+      fbox(b, fr, 0, 0, 0.012, 0.3, 0.42, 0.01, { all: sp(L.WHITE, [0.95, 0.95, 0.92]), pz: { layer: L.KOFFIE, uv: KOFFIE_UV.prices } });
+      fbox(b, fr, 0.02, -0.3, 0.012, 0.28, 0.2, 0.01, sp(L.WHITE, [0.94, 0.94, 0.9]));
+      ([[0.85, 0.2, 0.15], [0.95, 0.65, 0.15], [0.2, 0.5, 0.9], [0.3, 0.7, 0.3]] as RGB[]).forEach((col, k) => fbox(b, fr, -0.07 + k * 0.05, -0.24, 0.018, 0.025, 0.07, 0.002, sp(L.WHITE, col)));
+      break;
+    case "kgreen":
+      // a lime green patch in the floor
+      fbox(b, fr, 0, 0.002, 0, pr.a / 100, 0.004, pr.b / 100, sp(L.WHITE, [0.42, 0.66, 0.14]));
+      break;
+    case "ledclock":
+      // the red LED clock on the wall
+      fbox(b, fr, 0, 0, 0.05, 0.5, 0.17, 0.1, { all: DARK, pz: LED });
+      break;
     case "hightable": {
       cyl(b, fr, 0, 0, 0, 0.3, 0.03, DARK);
       cyl(b, fr, 0, 0.03, 0, 0.04, 1.05, DARK);

@@ -95,6 +95,9 @@ kbd { font: 600 11px var(--osd); border: 1px solid rgba(255, 255, 255, 0.4); bor
 #endcard.show { display: grid; }
 #endcard h1 { font-size: clamp(40px, 8vw, 84px); }
 #endcard .dim { opacity: 0.5; margin-top: -20px; }
+#endcard .won { margin: 18px 0 0; font-size: clamp(20px, 3.4vw, 32px); font-weight: 800; }
+/* in the hall at the end: no quests, no maps */
+body.finale #minimap, body.finale #quest, body.finale #waypoint, body.finale #station, body.finale #liftdisp, body.finale #plekken, body.finale #t-quest, body.finale #t-map { display: none !important; }
 .go2 { font: 600 13px var(--osd); letter-spacing: 0.2em; text-transform: uppercase; opacity: 0.7; }
 
 /* touch */

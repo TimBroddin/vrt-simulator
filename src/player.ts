@@ -1,6 +1,11 @@
 import * as THREE from "three";
 import { EYE, H } from "./config";
-import type { World } from "./world";
+
+// what the player walks on: the building, or the hall at the end
+export interface Ground {
+  boxesNear(f: number, x: number, z: number, r: number, out: number[]): number[];
+  groundAt(x: number, z: number, y: number): number | null;
+}
 
 const R = 0.3;
 
@@ -31,7 +36,7 @@ export class Player {
     this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch - dy * 0.0022));
   }
 
-  private resolve(world: World, x: number, z: number): [number, number] {
+  private resolve(world: Ground, x: number, z: number): [number, number] {
     const b = world.boxesNear(this.floor, x, z, 1.2, this.buf);
     for (let it = 0; it < 3; it++) {
       let moved = false;
@@ -61,7 +66,7 @@ export class Player {
     return [x, z];
   }
 
-  private tryMove(world: World, nx: number, nz: number) {
+  private tryMove(world: Ground, nx: number, nz: number) {
     const [x, z] = this.resolve(world, nx, nz);
     const g = world.groundAt(x, z, this.pos.y);
     if (g === null) return false;
@@ -71,7 +76,7 @@ export class Player {
     return true;
   }
 
-  update(dt: number, world: World, active: boolean) {
+  update(dt: number, world: Ground, active: boolean) {
     let fx = 0, fz = 0;
     if (active) {
       const k = this.keys;

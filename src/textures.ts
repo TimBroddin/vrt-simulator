@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { FLOOR_MAX, FLOOR_MIN } from "./config";
 import { ART } from "./art";
-import { ART0, L, LABEL0, LAYER_COUNT } from "./layers";
+import { ART0, KOFFIE_PX, L, LABEL0, LAYER_COUNT } from "./layers";
 import type { LogoName } from "./logoImages";
 import { Rng } from "./rng";
 
@@ -1024,6 +1024,7 @@ const painters: Record<number, (c: Ctx) => void> = {
       }
     c.fillStyle = "#111"; c.fillRect(460, 120, 36, 140);
   },
+  [L.KOFFIE]: (c) => koffieSheet(c),
   [L.ONAIR]: (c) => {
     fill(c, "#2a0303");
     aspect(c, 0.6 / 0.18, (w, h) => text(c, "ON AIR", w / 2, h / 2 + 4, h * 0.62, "#ff2a1a", "900"));
@@ -1370,6 +1371,135 @@ function labels(c: Ctx, first: number) {
     text(c, title, x + 14, y + 68, 15, "#333", "italic 500", "left");
     text(c, "Collectie VRT", x + 14, y + 96, 12, "#777", "600", "left");
     text(c, "veiling Bernaerts", x + 14, y + 112, 12, "#777", "600", "left");
+  }
+}
+
+// De koffiekamer, on one sheet (see KOFFIE_PX): door signs, the price list by
+// the door, the broodjesbar's display and menu, the fridge, the Coca-Cola
+// fridge, a coffee machine, the orange mat with the cup, the poortjes' IN and UIT.
+function koffieSheet(c: Ctx) {
+  const K = KOFFIE_PX;
+  const box = (k: keyof typeof K) => { const [x0, y0, x1, y1] = K[k]; return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }; };
+  // door signs, like the other services', with a lime edge
+  for (const [k, t, edge] of [["sign", "KOFFIEKAMER", "#7ac70c"], ["signFr", "CAFÉTÉRIA", "#1a64c8"]] as const) {
+    const b = box(k);
+    fillRect(c, b.x, b.y, b.w, b.h, "#2b2d31");
+    fillRect(c, b.x, b.y, 14, b.h, edge);
+    text(c, t, b.x + 135, b.y + 64, 27, "#f5f5f5", "700");
+  }
+  // "Prijslijst koffiekamer": an A4 behind plastic, taped to the wall
+  {
+    const b = box("prices");
+    fillRect(c, b.x, b.y, b.w, b.h, "#f4f4ee");
+    text(c, "Prijslijst koffiekamer", b.x + b.w / 2, b.y + 14, 12, "#222", "700");
+    fillRect(c, b.x + 8, b.y + 24, b.w - 16, 12, "#6fb52c");
+    text(c, "WARME DRANKEN", b.x + b.w / 2, b.y + 30, 8, "#fff", "700");
+    const rows: [string, string][] = [
+      ["Koffie", "0,80"], ["Espresso", "0,80"], ["Cappuccino", "1,20"], ["Latte macchiato", "1,40"], ["Thee", "0,80"], ["Chocomelk", "1,20"], ["Soep van de dag", "1,50"],
+      ["", ""], ["Broodje kaas", "2,60"], ["Broodje hesp", "2,60"], ["Broodje kip curry", "3,10"], ["Broodje martino", "3,10"], ["Panini", "3,50"], ["Croque monsieur", "3,20"], ["Slaatje", "4,80"],
+    ];
+    rows.forEach(([n, pr], k) => {
+      const y = b.y + 46 + k * 10;
+      if (!n) { fillRect(c, b.x + 8, y - 4, b.w - 16, 9, "#6fb52c"); text(c, "BROODJESBAR", b.x + b.w / 2, y, 8, "#fff", "700"); return; }
+      text(c, n, b.x + 10, y, 8, "#333", "500", "left");
+      text(c, `€ ${pr}`, b.x + b.w - 10, y, 8, "#333", "600", "right");
+    });
+    // the drinks in the fridges, with pictures
+    const dy = b.y + 200;
+    ["#d8342c", "#e9a52a", "#c43", "#2b7de0", "#9ad"].forEach((col, k) => fillRect(c, b.x + 12 + k * 28, dy - 16, 10, 22, col));
+    text(c, "€ 1,40 · € 1,00", b.x + b.w / 2, dy + 14, 9, "#c21", "800");
+    noise(c, 6, true, b.x, b.y, b.w, b.h);
+  }
+  // the broodjesbar's display: trays of fillings under glass
+  {
+    const b = box("display");
+    fillRect(c, b.x, b.y, b.w, b.h, "#cfd6d9");
+    const fills = ["#f3d34a", "#f2a7a0", "#f6e7a6", "#e7a93b", "#d9c7a4", "#6aa84f", "#d6453b", "#f0e6d0", "#b4583a", "#8fc15a", "#f3d34a", "#e9b0a8"];
+    const n = 6;
+    for (let r = 0; r < 2; r++)
+      for (let k = 0; k < n; k++) {
+        const x = b.x + 8 + k * ((b.w - 16) / n), y = b.y + 12 + r * 48;
+        fillRect(c, x, y, (b.w - 16) / n - 8, 40, "#aab3b7");
+        c.fillStyle = fills[(r * n + k) % fills.length]!;
+        c.beginPath();
+        c.ellipse(x + ((b.w - 16) / n - 8) / 2, y + 22, 20, 13, 0, 0, 7);
+        c.fill();
+      }
+    noise(c, 10, false, b.x, b.y, b.w, b.h);
+  }
+  // the menu above the ovens
+  {
+    const b = box("menu");
+    fillRect(c, b.x, b.y, b.w, b.h, "#161a17");
+    fillRect(c, b.x, b.y, b.w, 26, "#6fb52c");
+    text(c, "BROODJES · PANINI · CROQUES", b.x + b.w / 2, b.y + 14, 16, "#fff", "800");
+    [["Broodje van de week", "3,40"], ["Croque monsieur", "3,20"], ["Panini mozzarella", "3,50"], ["Croque Hawaï", "3,40"], ["Kip curry", "3,10"], ["Martino", "3,10"]].forEach(([n, pr], k) => {
+      const x = b.x + 14 + (k % 2) * (b.w / 2), y = b.y + 42 + Math.floor(k / 2) * 24;
+      text(c, n!, x, y, 13, "#f2efe6", "500", "left", MARKER);
+      text(c, pr!, x + b.w / 2 - 34, y, 13, "#f6d24a", "700", "right", MARKER);
+    });
+  }
+  // a fridge: glass door, bottles and salad bowls
+  {
+    const b = box("fridge");
+    fillRect(c, b.x, b.y, b.w, b.h, "#1c2226");
+    fillRect(c, b.x + 5, b.y + 12, b.w - 10, b.h - 20, "#dfeaf0");
+    for (let r = 0; r < 5; r++) {
+      const y = b.y + 16 + r * 28;
+      fillRect(c, b.x + 5, y + 24, b.w - 10, 2, "#9aa4a8");
+      for (let k = 0; k < 4; k++) {
+        const col = r < 2 ? ["#d8342c", "#2b7de0", "#e9a52a", "#5bb04a"][(k + r) % 4]! : r < 4 ? ["#7fbf4d", "#f1e0b0", "#e05a3a"][(k + r) % 3]! : "#9fd3ef";
+        if (r < 2 || r === 4) fillRect(c, b.x + 8 + k * 13, y + 4, 8, 20, col);
+        else { c.fillStyle = col; c.beginPath(); c.ellipse(b.x + 13 + k * 13, y + 18, 6, 5, 0, 0, 7); c.fill(); }
+      }
+    }
+    text(c, "FRIS", b.x + b.w / 2, b.y + 6, 9, "#fff", "700");
+  }
+  // the Coca-Cola fridge
+  {
+    const b = box("coke");
+    fillRect(c, b.x, b.y, b.w, b.h, "#c8101e");
+    fillRect(c, b.x + 8, b.y + 30, b.w - 16, b.h - 44, "#e8eef0");
+    for (let r = 0; r < 4; r++)
+      for (let k = 0; k < 4; k++) fillRect(c, b.x + 12 + k * 15, b.y + 36 + r * 28, 9, 22, r === 3 ? "#e8e8e8" : "#b3121c");
+    c.save();
+    c.translate(b.x + b.w / 2, b.y + 17);
+    c.rotate(-0.08);
+    text(c, "Coca-Cola", 0, 0, 17, "#fff", "italic 700", "center", "Georgia, serif");
+    c.restore();
+  }
+  // a coffee machine: black, a little screen, a grid of buttons, the spout
+  {
+    const b = box("machine");
+    fillRect(c, b.x, b.y, b.w, b.h, "#141516");
+    fillRect(c, b.x + 10, b.y + 12, b.w - 20, 26, "#1f6fa8");
+    text(c, "Kies uw drank", b.x + b.w / 2, b.y + 25, 10, "#dff", "600");
+    for (let r = 0; r < 3; r++)
+      for (let k = 0; k < 3; k++) {
+        fillRect(c, b.x + 14 + k * 32, b.y + 48 + r * 20, 26, 14, "#3b3d40");
+        fillRect(c, b.x + 16 + k * 32, b.y + 50 + r * 20, 6, 10, ["#8b5a2b", "#c9a27a", "#e8dcc8"][(r + k) % 3]!);
+      }
+    fillRect(c, b.x + 30, b.y + 112, b.w - 60, 40, "#050505");
+    fillRect(c, b.x + b.w / 2 - 6, b.y + 112, 12, 8, "#777");
+  }
+  // the orange mat with the cup
+  {
+    const b = box("mat");
+    fillRect(c, b.x, b.y, b.w, b.h, "#d9622b");
+    c.strokeStyle = "#f08a52";
+    c.lineWidth = 7;
+    c.beginPath();
+    c.moveTo(b.x + 34, b.y + 44); c.lineTo(b.x + 42, b.y + 96); c.lineTo(b.x + 82, b.y + 96); c.lineTo(b.x + 90, b.y + 44); c.closePath();
+    c.stroke();
+    c.beginPath(); c.arc(b.x + 96, b.y + 66, 13, -1.3, 1.3); c.stroke();
+    c.beginPath(); c.moveTo(b.x + 26, b.y + 104); c.lineTo(b.x + 100, b.y + 104); c.stroke();
+    noise(c, 14, true, b.x, b.y, b.w, b.h);
+  }
+  // the poortjes
+  for (const [k, t] of [["in", "→ IN"], ["out", "UIT →"]] as const) {
+    const b = box(k);
+    fillRect(c, b.x, b.y, b.w, b.h, "#1b1d1f");
+    text(c, t, b.x + b.w / 2, b.y + b.h / 2, 30, k === "in" ? "#5fe07c" : "#ff5a4a", "800");
   }
 }
 

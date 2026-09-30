@@ -283,6 +283,28 @@ export class Sound {
     this.burst(0.08, "lowpass", 400, 1, 0.12 * vol, 2.0, 0, 0.5);
   }
 
+  // the floor giving way: a long low rumble, then the crack
+  rumble() {
+    if (!this.ctx || this.muted) return;
+    this.burst(2.4, "lowpass", 140, 0.8, 0.5, 0, 0, 0.6);
+    this.tone(42, 2.2, 0.12, 0, "sawtooth", 0, 0.4);
+    this.burst(0.5, "bandpass", 900, 1.5, 0.08, 0.7, -0.4, 0.8);
+    this.burst(0.5, "bandpass", 700, 1.5, 0.08, 1.2, 0.5, 0.8);
+  }
+
+  crack() {
+    if (!this.ctx || this.muted) return;
+    this.burst(0.35, "highpass", 1400, 0.7, 0.35, 0, 0, 1);
+    this.burst(1.6, "lowpass", 260, 0.8, 0.45, 0.02, 0, 1.2);
+  }
+
+  // landing on your feet after a long fall
+  land() {
+    if (!this.ctx || this.muted) return;
+    this.burst(0.5, "lowpass", 200, 1, 0.6, 0, 0, 1.5);
+    this.tone(55, 0.6, 0.18, 0, "sine", 0, 1);
+  }
+
   motor(on: boolean) {
     if (!this.ctx) return;
     this.motorGain.gain.setTargetAtTime(on ? 0.12 : 0, this.ctx.currentTime, on ? 0.6 : 0.3);

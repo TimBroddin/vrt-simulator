@@ -249,6 +249,13 @@ function furnish(p: Plan): Furnished {
               const sp = wallPoint(i, d, -0.01, off);
               prop("sign", sp.wx, y0 + 1.55, sp.wz, faceRot(d), c.gx, c.gz, sign, rtbf ? 1 : 0);
             }
+            // de koffiekamer: its sign on one side of the door, the price list on the other
+            if (r.type === RT.KOFFIE) {
+              const sp = wallPoint(i, d, -0.01, off);
+              prop("ksign", sp.wx, y0 + 1.6, sp.wz, faceRot(d), c.gx, c.gz, 0, rtbf ? 1 : 0);
+              const pp = wallPoint(i, d, -0.01, -off * 1.1);
+              prop("prijslijst", pp.wx, y0 + 1.2, pp.wz, faceRot(d), c.gx, c.gz);
+            }
             // a star for the guest, a nameplate for the CEO, a board for the restaurant
             const plaque = r.type === RT.DRESSING ? 7 : r.type === RT.CEO ? 3 : r.type === RT.VIPRESTO ? 4 : -1;
             if (plaque >= 0) {
@@ -558,7 +565,7 @@ const overlaps = (a: number[], b: number[]) => {
 };
 
 // props that reach far from where they stand
-const BIG = new Set(["tvset", "tribune", "talkset", "blokkenset", "lorry", "stage", "chairfield", "mtable", "vipbar", "radiodesk", "kdesk", "sdesk", "newsdesk", "ceodesk", "palletrack", "counter", "stairsup", "pooltable"]);
+const BIG = new Set(["tvset", "tribune", "talkset", "blokkenset", "lorry", "stage", "chairfield", "mtable", "vipbar", "radiodesk", "kdesk", "sdesk", "newsdesk", "ceodesk", "palletrack", "counter", "stairsup", "pooltable", "kwall", "kcounter", "koven", "koffiebar", "kfridge", "bigtafel"]);
 
 // Drop anything whose footprint lands in a doorway, so every room can be entered.
 function keepDoorsClear(p: Plan, props: Prop[]) {
@@ -694,6 +701,7 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
   for (const i of cells) for (const dd of wallDirs(i)) perimeter.push([i, dd]);
 
   roomCamera(p, room, c, perimeter, roomCenter);
+  if (room.type === RT.KOFFIE) return furnishKoffie(p, room, rng, c);
   if (room.type === RT.TOOTS && !isRtbf(p.cz)) return furnishToots(p, room, rng, c, perimeter, roomCenter);
   if (furnishService(p, room, rng, c, perimeter, roomCenter)) return;
   const brand = room.type === RT.KETNET || room.type === RT.SPORZA || room.type === RT.SET || room.type === RT.TOOTS;
@@ -1094,10 +1102,94 @@ function furnishBrandStudio(p: Plan, room: Room, rng: Rng, c: Ctx, perimeter: Pe
   }
 }
 
+// De koffiekamer. Along the wall with the doors: the broodjesbar, 6 by 6 m in
+// one corner, walled off (in through a poortje from its own door, past the
+// fridges to the counter, the ovens behind it; out through another poortje),
+// and the three coffee machines against its wall. Away from the doors: high
+// tables and low round ones, the big round table, the vending machines, TVs
+// and a red LED clock. s runs along the door wall away from the broodjesbar,
+// t into the room from it.
+function furnishKoffie(p: Plan, room: Room, rng: Rng, c: Ctx) {
+  const { light, prop, y0 } = c;
+  const X0 = (p.cx * CH + room.x0) * CELL, X1 = (p.cx * CH + room.x1 + 1) * CELL;
+  const Z0 = (p.cz * CH + room.z0) * CELL, Z1 = (p.cz * CH + room.z1 + 1) * CELL;
+  const k = room.koffie ?? { d: 3, shop: -1, end: 0 };
+  const d = k.d, alongX = d % 2 === 1;
+  const vx = -DX[d]!, vz = -DZ[d]!;
+  const ax = alongX ? (k.end ? -1 : 1) : 0, az = alongX ? 0 : k.end ? -1 : 1;
+  const ox = alongX ? (k.end ? X1 : X0) : d === 0 ? X1 : X0;
+  const oz = alongX ? (d === 1 ? Z1 : Z0) : k.end ? Z1 : Z0;
+  const L = alongX ? X1 - X0 : Z1 - Z0, D = alongX ? Z1 - Z0 : X1 - X0;
+  const at = (s: number, t: number) => {
+    const x = ox + ax * s + vx * t, z = oz + az * s + vz * t;
+    return { x, z, gx: Math.floor(x / CELL), gz: Math.floor(z / CELL) };
+  };
+  const put = (t: string, s: number, tt: number, rot: number, a = 0, b = 0, y = 0) => {
+    const q = at(s, tt);
+    prop(t, q.x, y0 + y, q.z, rot, q.gx, q.gz, a, b);
+  };
+  const lamp = (s: number, t: number, col: readonly number[], int: number, fix: string | null, y = CEIL - 0.02) => {
+    const q = at(s, t);
+    light(q.x, y0 + y, q.z, col, int, 7, q.gx, q.gz, fix, { rot: Math.atan2(vx, vz), dead: room.dark && rng.chance(0.5), flick: rng.chance(c.flickP) });
+  };
+  const IN = Math.atan2(vx, vz), OUT = Math.atan2(-vx, -vz), ALONG = Math.atan2(ax, az), BACK = Math.atan2(-ax, -az);
+  const S = 2 * CELL; // the broodjesbar is two cells square
+  const sOf = (i: number) => {
+    const q = c.center(i);
+    return (q.x - ox) * ax + (q.z - oz) * az;
+  };
+
+  // the broodjesbar: its walls (a gap for the way out), fridges, counter, ovens
+  put("kwall", S, (T + 2.0) / 2, ALONG, Math.round((2.0 - T) * 100));
+  put("kwall", S, (3.1 + S + 0.06) / 2, ALONG, Math.round((S + 0.06 - 3.1) * 100));
+  put("kwall", (T + S + 0.06) / 2, S, IN, Math.round((S + 0.06 - T) * 100));
+  put("kfridge", T, 2.8, ALONG, 3);
+  put("kcounter", (T + S - 0.06) / 2, 4.3, OUT, Math.round((S - 0.06 - T) * 100));
+  put("koven", (T + S - 0.06) / 2, S - 0.06, OUT, Math.round((S - 0.3 - T) * 100));
+  if (k.shop >= 0) put("poortje", sOf(k.shop), 1.9, IN, 0, 0);
+  put("poortje", S, 2.55, ALONG, 0, 1);
+  for (const [s, t] of [[1.5, 1.5], [4.5, 1.5], [1.5, 4.5], [4.5, 4.5]] as const) lamp(s, t, FLUO, 1.05, "strip");
+  lamp(3, 3.6, WARM, 0.5, null, 1.4);
+
+  // the coffee machines, against the outside of the broodjesbar
+  put("koffiebar", S + 0.06, 4.6, ALONG);
+  lamp(S + 1.2, 4.6, WARM, 0.45, null, 1.6);
+
+  // the way in: a green patch in the floor inside the other door
+  const doors = room.cells.filter((i) => p.sides.get(i * 4 + d)?.door && i !== k.shop).map(sOf);
+  const sA = doors.length ? doors[doors.length - 1]! : L - CELL / 2;
+  put("kgreen", sA, 1.4, IN, 260, 240);
+
+  // tables away from the doors, the big one in the middle at the back
+  const cells = room.cells.map((i) => ({ i, s: sOf(i), t: (() => { const q = c.center(i); return (q.x - ox) * vx + (q.z - oz) * vz; })() }));
+  const back = cells.filter((q) => q.t > D - CELL && q.s > S);
+  const big = back.length ? back.reduce((a, b) => (Math.abs(b.s - (S + L) / 2) < Math.abs(a.s - (S + L) / 2) ? b : a)) : null;
+  for (const q of cells) {
+    if (q.s < S && q.t < S) continue;
+    lamp(q.s, q.t, FLUO, 1.1, "strip");
+    if (q.t < CELL && Math.abs(q.s - sA) < 2.6) continue; // the way in
+    if (q.s > S && q.s < S + CELL && q.t > CELL && q.t < S + 1) continue; // the queue for the coffee
+    if (q.s > L - CELL && q.t > D - CELL) continue; // the vending machines
+    const js = rng.range(-0.3, 0.3), jt = rng.range(-0.3, 0.3);
+    if (q === big) put("bigtafel", q.s, q.t, rng.range(0, 6.28), rng.int(0, 999));
+    else if (q.t < CELL) { if (rng.chance(0.6)) put("cocktail", q.s + js, q.t + jt, rng.range(-0.2, 0.2) + IN, rng.int(0, 999)); }
+    else put(rng.chance(0.55) ? "cocktail" : "lowround", q.s + js, q.t + jt, rng.range(-0.2, 0.2) + IN, rng.int(0, 999));
+  }
+
+  // the vending machines in the far corner, TVs and the clock on the back wall
+  put("cokefridge", L - T, D - 0.6, BACK);
+  put("vending", L - T, D - 1.6, BACK, 0);
+  put("vending", L - T, D - 2.6, BACK, 1);
+  lamp(L - 1.0, D - 1.6, COOL, 0.55, null, 1.3);
+  put("tv", S + (L - S) * 0.28, D - T, OUT, 4 + rng.int(0, 3), 0, 2.0);
+  put("tv", S + (L - S) * 0.78, D - T, OUT, rng.pick([1, 4, 5]), 0, 2.0);
+  put("ledclock", S + (L - S) * 0.53, D - T, OUT, 0, 0, 2.2);
+}
+
 // Security cameras in the rooms worth watching (the one in the bewaking watches the bewaking).
 const CAM_CHANCE: Partial<Record<number, number>> = {
   [RT.SECURITY]: 100, [RT.MESS]: 100, [RT.DOCK]: 80, [RT.SET]: 60, [RT.VIPBAR]: 60, [RT.STUDIO]: 45, [RT.KETNET]: 50, [RT.SPORZA]: 50,
-  [RT.CANTEEN]: 50, [RT.TOOTS]: 60, [RT.COSTUME]: 50, [RT.VIPRESTO]: 50, [RT.SERVER]: 50, [RT.CEO]: 40, [RT.LOUNGE]: 40, [RT.ARCHIVE]: 35, [RT.RADIO]: 35,
+  [RT.CANTEEN]: 50, [RT.KOFFIE]: 50, [RT.TOOTS]: 60, [RT.COSTUME]: 50, [RT.VIPRESTO]: 50, [RT.SERVER]: 50, [RT.CEO]: 40, [RT.LOUNGE]: 40, [RT.ARCHIVE]: 35, [RT.RADIO]: 35,
 };
 function roomCamera(p: Plan, room: Room, c: Ctx, perimeter: Perimeter, rc: { x: number; z: number }) {
   const chance = CAM_CHANCE[room.type];

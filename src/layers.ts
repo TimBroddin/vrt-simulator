@@ -84,10 +84,23 @@ export const L = {
   BLOCKWALL: 79, // de gang naar de parking: painted concrete blocks, a dark band at the bottom
   STENCIL: 80, // 2 x 4 stencilled wall markings, on transparent
   BAREEL: 81, // de bareel: the blue welcome board (left half), the booth sign, the pedestrian sign
+  KOFFIE: 82, // de koffiekamer: door signs, the price list, the broodjesbar, the machines (see KOFFIE_UV)
 } as const;
 
 // artworks and their museum labels (8 labels per layer) follow the painted layers
-export const ART0 = 82;
+export const ART0 = 83;
+
+// where things are on the KOFFIE layer, in pixels of the 512 x 512 drawing (x0, y0, x1, y1)
+export const KOFFIE_PX = {
+  sign: [0, 0, 256, 128], signFr: [256, 0, 512, 128],
+  prices: [0, 128, 158, 352], display: [158, 128, 512, 240], menu: [158, 240, 512, 352],
+  fridge: [0, 352, 64, 512], coke: [64, 352, 144, 512], machine: [144, 352, 264, 512], mat: [264, 384, 392, 512],
+  in: [392, 352, 512, 432], out: [392, 432, 512, 512],
+} as const;
+// the same as uv rectangles (v = 0 at the bottom of the drawing)
+export const KOFFIE_UV = Object.fromEntries(
+  Object.entries(KOFFIE_PX).map(([k, [x0, y0, x1, y1]]) => [k, [x0 / 512, 1 - y1 / 512, x1 / 512, 1 - y0 / 512]]),
+) as Record<keyof typeof KOFFIE_PX, [number, number, number, number]>;
 export const LABEL0 = ART0 + ART.length;
 export const LAYER_COUNT = LABEL0 + Math.ceil(ART.length / 8);
 

@@ -38,6 +38,7 @@ export const PLACES: { id: string; name: string }[] = [
   { id: "archief", name: "Het archief" },
   { id: "doorgang", name: "De camping" },
   { id: "kantine", name: "Een kantine" },
+  { id: "koffiekamer", name: "De koffiekamer" },
   { id: "kostuums", name: "De kostuumdienst" },
   { id: "kleedkamer", name: "Een kleedkamer" },
   { id: "vipbar", name: "De VIP-bar" },
@@ -54,7 +55,7 @@ export const PLACES: { id: string; name: string }[] = [
 
 const ROOMS: Partial<Record<number, string>> = {
   [RT.MESS]: "mess", [RT.STUDIO]: "nieuwsstudio", [RT.KETNET]: "ketnet", [RT.SPORZA]: "sporza", [RT.TOOTS]: "toots",
-  [RT.REGIE]: "regie", [RT.SECURITY]: "bewaking", [RT.ARCHIVE]: "archief", [RT.CANTEEN]: "kantine", [RT.COSTUME]: "kostuums",
+  [RT.REGIE]: "regie", [RT.SECURITY]: "bewaking", [RT.ARCHIVE]: "archief", [RT.CANTEEN]: "kantine", [RT.KOFFIE]: "koffiekamer", [RT.COSTUME]: "kostuums",
   [RT.DRESSING]: "kleedkamer", [RT.VIPBAR]: "vipbar", [RT.VIPRESTO]: "viprestaurant", [RT.CEO]: "ceo", [RT.DOCK]: "laadperron", [RT.LOUNGE]: "pool", [RT.PASSAGE]: "doorgang",
 };
 const ODD: Record<string, string> = { poppen: "poppen", chairs: "stoelen", flooded: "onderwater", upside: "plafond", stairs: "trap" };

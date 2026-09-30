@@ -26,6 +26,7 @@ import { Places, placeAt } from "./places";
 import { layPostcards } from "./postcards";
 import { track, trackOnce } from "./analytics";
 import { Quests } from "./quests";
+import { Finale } from "./finale";
 import { ago, clearSave, loadSave, writeSave } from "./save";
 
 const params = new URLSearchParams(location.search);
@@ -124,7 +125,7 @@ function surfaceAt(f: number, gx: number, gz: number): { s: Surface; wet: number
     case K.ROOM: {
       if (anomalyAt(f, gx, gz) === "flooded") return { s: "wet", wet: 0.7 };
       const t = p.rooms[p.room[i]!]!.type;
-      if (t === RT.BATH || t === RT.SERVER || t === RT.CANTEEN) return { s: "tile", wet: 0.35 };
+      if (t === RT.BATH || t === RT.SERVER || t === RT.CANTEEN || t === RT.KOFFIE) return { s: "tile", wet: 0.35 };
       if (t === RT.STORAGE || t === RT.ARCHIVE || t === RT.DOCK) return { s: "concrete", wet: 0.3 };
       if (t === RT.STUDIO || t === RT.KETNET || t === RT.SPORZA || t === RT.SET) return { s: "wood", wet: 0.12 };
       return { s: "carpet", wet: 0.15 };
@@ -194,9 +195,38 @@ function studioNear(): number {
   return best;
 }
 scene.add(quests.root);
+// the end: all quests done, the floor gives way, and ten steps later you've finished the game
+const finale = new Finale(player, sound, !touch);
+scene.add(finale.root);
+const doneKey = `vrt-uitgespeeld-${seed}`;
+let finishSecs = 0;
 quests.onFinish = (secs) => {
-  $("endtime").textContent = `${Math.floor(secs / 60)} min ${String(Math.floor(secs % 60)).padStart(2, "0")} s`;
+  finishSecs = secs;
+  finale.start();
+};
+finale.onEnter = () => {
+  // the building is gone: only the hall is drawn
+  for (const c of scene.children) if (c !== finale.root) c.visible = false;
+  renderer.shadowMap.enabled = !touch;
+  document.body.classList.add("finale");
+  touchUi?.reset();
+  if (worldmap.waypoint) worldmap.setWaypoint(null, "finale");
+  sound.setEnv({ roof: false, garage: false, light: 0.3, wet: 0.9 });
+  $("loc").textContent = "DPG MEDIA";
+  $("floor").textContent = "VILVOORDE";
+  $("addr").textContent = "MEDIALAAN 1";
+  $("logo").textContent = "dpg";
+  $("logo").classList.remove("rtbf");
+  track("finale_reached", { seconds: Math.round(finishSecs) });
+};
+finale.onDone = () => {
+  $("endtime").textContent = `${Math.floor(finishSecs / 60)} min ${String(Math.floor(finishSecs % 60)).padStart(2, "0")} s`;
+  $("endsteps").textContent = `${steps.toLocaleString("nl-BE")} stappen`;
   $("endcard").classList.add("show");
+  sound.success();
+  localStorage.setItem(doneKey, "1");
+  track("game_completed", { seconds: Math.round(finishSecs), steps, meters: Math.round(pedMeters) });
+  if (!touch) document.exitPointerLock?.();
 };
 $("endcard").addEventListener("click", () => $("endcard").classList.remove("show"));
 
@@ -205,6 +235,10 @@ let steps = resume?.steps ?? 0, pedMeters = resume?.meters ?? 0;
 let stepsShown = "";
 player.onStep = (run) => {
   steps++;
+  if (finale.walking) {
+    sound.footstep(finale.surface(player.pos.x, player.pos.z), run);
+    return finale.step();
+  }
   const gx = Math.floor(player.pos.x / CELL), gz = Math.floor(player.pos.z / CELL);
   sound.footstep(surfaceAt(player.floor, gx, gz).s, run);
 };
@@ -300,7 +334,7 @@ document.addEventListener("pointerlockerror", () => {
 
 // --- de plattegrond
 function openMap() {
-  if (worldmap.open || !started) return;
+  if (worldmap.open || !started || finale.active) return;
   player.keys.clear();
   touchUi?.reset();
   worldmap.show(player.pos.x, player.pos.z, player.floor, player.yaw, quests.activeTarget());
@@ -383,6 +417,12 @@ $("overlay").addEventListener("click", () => {
   sound.start();
   radio.unlock();
   quests.start();
+  // ?finale skips to the end; a game that was finished but never reached the hall goes there too
+  if (!started && (params.has("finale") || (quests.quests.every((q) => q.done) && !localStorage.getItem(doneKey))))
+    setTimeout(() => {
+      finishSecs = quests.t - quests.startedAt;
+      finale.start();
+    }, 1500);
   $("saveinfo").textContent = "Het spel wordt automatisch bewaard";
   if (touch) {
     playing = true;
@@ -447,7 +487,7 @@ function updateEnv(dt: number) {
     trackOnce(`floor${f}`, "floor_visited", { floor: f });
     const area = onRoof ? "roof" : f === FLOOR_MIN ? "parking" : /PLANTENTUIN|JARDIN/.test(label) ? "plantentuin" : label === "MIDDENGANG" ? "middengang"
       : label === "ATRIUM" ? "atrium" : STATIONS.some((st) => st.label === label) ? "radio" : /^STUDIO/.test(label) ? "studio" : /REGIE|RÉGIE/.test(label) ? "regie" : /ARCHIEF|ARCHIVES/.test(label) ? "archive"
-      : /KANTINE|CANTINE/.test(label) ? "canteen" : /^KETNET/.test(label) ? "ketnet" : /^SPORZA/.test(label) ? "sporza" : /^DECOR/.test(label) ? "tvset" : /BEWAKING|SÉCURITÉ/.test(label) ? "security" : /DECORSTRAAT|RUE DES/.test(label) ? "decorstraat" : /MARCONI/.test(label) ? "marconi" : /TOOTS/.test(label) ? "toots" : /TOREN|LA TOUR/.test(label) ? "tower" : /VRT-BOS|LE BOIS/.test(label) ? "bos" : /BAREEL|BARRIÈRE/.test(label) ? "bareel" : "";
+      : /KANTINE|CANTINE/.test(label) ? "canteen" : /KOFFIEKAMER|CAFÉTÉRIA/.test(label) ? "koffiekamer" : /^KETNET/.test(label) ? "ketnet" : /^SPORZA/.test(label) ? "sporza" : /^DECOR/.test(label) ? "tvset" : /BEWAKING|SÉCURITÉ/.test(label) ? "security" : /DECORSTRAAT|RUE DES/.test(label) ? "decorstraat" : /MARCONI/.test(label) ? "marconi" : /TOOTS/.test(label) ? "toots" : /TOREN|LA TOUR/.test(label) ? "tower" : /VRT-BOS|LE BOIS/.test(label) ? "bos" : /BAREEL|BARRIÈRE/.test(label) ? "bareel" : "";
     if (area) trackOnce(`area:${area}`, "area_discovered", { area });
     if (fr) trackOnce("area:rtbf", "area_discovered", { area: "rtbf" });
   }
@@ -485,7 +525,7 @@ function frame() {
   last = now;
   renderer.info.reset();
   t += dt;
-  world.update(player.pos.x, player.pos.z, player.floor);
+  if (!finale.inHall) world.update(player.pos.x, player.pos.z, player.floor);
 
   if (!ready) {
     const r = world.readyAround(player.pos.x, player.pos.z, player.floor, 1);
@@ -505,10 +545,14 @@ function frame() {
 
   if (ready) {
     const active = (locked || playing || api.auto) && !worldmap.open;
-    player.update(dt, world, active && !lifts.ride?.phase.startsWith("clos") && !lifts.panelOpen);
+    finale.update(dt);
+    if (finale.walking) player.update(dt, finale, active);
+    else if (!finale.active) player.update(dt, world, active && !lifts.ride?.phase.startsWith("clos") && !lifts.panelOpen);
     if (active) pedMeters += Math.min(player.speed * dt, 1);
-    const used = quests.update(dt, interact && active);
-    lifts.update(t, dt, interact && !used);
+    if (!finale.inHall) {
+      const used = quests.update(dt, interact && active && !finale.active);
+      lifts.update(t, dt, interact && !used && !finale.active);
+    }
   }
   interact = false;
   sound.update(dt);
@@ -519,14 +563,14 @@ function frame() {
       if (playSecs >= m * 60) trackOnce(`play${m}`, "playtime", { minutes: m, meters: Math.round(walked), quests_done: quests.quests.filter((q) => q.done).length });
   }
   radio.update(dt, sound.env.roof);
-  if (ready && (nearT -= dt) <= 0) {
+  if (ready && !finale.inHall && (nearT -= dt) <= 0) {
     nearT = 0.4;
     nearStudio = studioNear();
   }
   live.update(dt, started ? (radio.station >= 0 ? radio.station : nearStudio) : -1);
-  if (ready) updateEnv(dt);
-  if (ready && started) cctv.update(dt);
-  if (ready) bareels.update(dt);
+  if (ready && !finale.inHall) updateEnv(dt);
+  if (ready && started && !finale.inHall) cctv.update(dt);
+  if (ready && !finale.inHall) bareels.update(dt);
 
   if (flickNear > 0 && t - lastFlickBuzz > 0.12 && Math.random() < flickNear * 0.25) {
     lastFlickBuzz = t;
@@ -550,21 +594,23 @@ function frame() {
   sky.position.copy(camera.position);
   tower.position.set(camera.position.x + 430, -30, camera.position.z - 330);
 
-  if (ready) {
+  if (ready && !finale.inHall) {
     const qt = quests.activeTarget(), wp = worldmap.waypoint;
     minimap.draw(player.floor, player.pos.x, player.pos.z, player.yaw, [...(qt ? [{ ...qt, col: "#ff2e7e" }] : []), ...(wp ? [{ ...wp, col: "#35d6ff" }] : [])]);
     guide(dt);
     worldmap.draw();
   }
   post.cam.uniforms.time!.value = t;
-  post.cam.uniforms.glitch!.value = lifts.ride?.phase === "moving" ? 0.15 + Math.random() * 0.1 : Math.random() < 0.002 ? 0.6 : 0;
+  post.cam.uniforms.glitch!.value = finale.glitch || (lifts.ride?.phase === "moving" ? 0.15 + Math.random() * 0.1 : Math.random() < 0.002 ? 0.6 : 0);
+  post.cam.uniforms.fade!.value = finale.fade;
   post.composer.render(dt);
   if (photoRequested) {
     // read the canvas right after rendering, before the browser clears it
     photoRequested = false;
     const gx = Math.floor(player.pos.x / CELL), gz = Math.floor(player.pos.z / CELL);
-    track("photo_taken", { floor: player.floor, location: cellLabel(player.floor, gx, gz) });
-    takePhoto(renderer.domElement, { hud: hudOn, tc: timecode(recT), floor: floorName(player.floor, isRtbf(Math.floor(gz / CH))), loc: cellLabel(player.floor, gx, gz) });
+    const loc = finale.inHall ? "DPG MEDIA" : cellLabel(player.floor, gx, gz);
+    track("photo_taken", { floor: player.floor, location: loc });
+    takePhoto(renderer.domElement, { hud: hudOn, tc: timecode(recT), floor: finale.inHall ? "MEDIALAAN 1" : floorName(player.floor, isRtbf(Math.floor(gz / CH))), loc });
     sound.shutter();
     const fl = $("flash");
     fl.classList.remove("go");
@@ -577,7 +623,7 @@ function frame() {
   if (locked || playing || api.auto) {
     $("tc").textContent = timecode(recT);
     $("rec").style.visibility = Math.floor(t * 1.4) % 2 ? "hidden" : "visible";
-    $("prompt").textContent = quests.prompt || lifts.prompt;
+    $("prompt").textContent = finale.active ? "" : quests.prompt || lifts.prompt;
     const disp = lifts.display;
     $("liftdisp").style.display = disp !== null ? "" : "none";
     if (disp !== null) $("liftnum").textContent = disp === String(FLOOR_MAX) ? "D" : disp;
@@ -600,7 +646,8 @@ function frame() {
 // --- autosave, every few seconds and when you leave
 let restarting = false;
 function save() {
-  if (!started || !ready || restarting) return;
+  // (not while falling or in the hall: a save keeps you in the building)
+  if (!started || !ready || restarting || finale.active) return;
   const P = player.pos, gx = Math.floor(P.x / CELL), gz = Math.floor(P.z / CELL);
   writeSave({
     v: 1, seed, of: startFloor, f: player.floor, x: P.x, y: P.y, z: P.z, yaw: player.yaw, pitch: player.pitch,
@@ -634,7 +681,7 @@ $("restart").addEventListener("click", (e) => {
 });
 
 // expose for automation / debugging
-const api = { player, world, camera, lifts, bareels, sound, quests, minimap, worldmap, openMap, closeMap, radio, live, cctv, places, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
+const api = { player, world, camera, lifts, bareels, sound, quests, finale, minimap, worldmap, openMap, closeMap, radio, live, cctv, places, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
 (window as any).__vrt = api;
 if (debug) $("debug").style.display = "block";
 frame();

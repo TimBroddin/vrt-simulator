@@ -186,27 +186,6 @@ const ITEMS: ItemDef[] = [
     },
   },
   {
-    id: "prompter", title: "Het Journaal begint zo, maar de prompterstick is weg", goal: "Zoek de USB-stick met de prompter", item: "de prompterstick van Het Journaal", short: "USB-stick",
-    done: "De prompter loopt weer. Goedenavond, dames en heren.", hint: (w) => `Waarschijnlijk blijven liggen in de ${w}`,
-    place: "rooms", types: [RT.REGIE], fallback: [RT.EDIT, RT.STUDIO], surface: "floor",
-    model: (b, fr) => {
-      fbox(b, fr, 0, 0, 0, 0.07, 0.018, 0.024, sp(L.WHITE, [0.1, 0.1, 0.12]));
-      fbox(b, fr, 0.045, 0.004, 0, 0.02, 0.01, 0.016, sp(L.STEEL));
-      fbox(b, fr, -0.02, 0.019, 0, 0.006, 0.002, 0.006, glow([0.2, 1.4, 0.4]));
-      for (let k = 0; k < 6; k++) fbox(b, fr, -0.06 - k * 0.04, 0.002, Math.sin(k) * 0.03, 0.04, 0.006, 0.012, glow([0.7, 0.08, 0.1]));
-    },
-  },
-  {
-    id: "karrewiet", title: "De Karrewiet-reporter is haar microfoon kwijt", goal: "Zoek de gele Karrewiet-microfoon", item: "de microfoon van Karrewiet", short: "Microfoon",
-    done: "De microfoon is terug. Karrewiet kan draaien!", hint: (w) => `Laatst gebruikt in ${w}`,
-    place: "rooms", types: [RT.STUDIO], fallback: [RT.REGIE, RT.EDIT], surface: "floor",
-    model: (b, fr) => {
-      fbox(b, fr, 0, 0.02, 0, 0.035, 0.035, 0.2, DARKS);
-      fbox(b, fr, 0, 0.012, 0.12, 0.055, 0.055, 0.06, sp(L.STEEL, [0.7, 0.7, 0.72]));
-      fbox(b, fr, 0, 0.01, 0.06, 0.07, 0.06, 0.06, glow([0.95, 0.8, 0.05]));
-    },
-  },
-  {
     id: "thuis", title: "Frank uit Thuis vindt zijn garagesleutels niet", goal: "Zoek de sleutels van de garage", item: "de garagesleutels van Frank", short: "Sleutelbos",
     done: "Frank kan zijn garage weer open doen. Volgende week in Thuis: nog meer drama.", hint: () => "Ergens in de parking, op -1",
     place: "garage",
@@ -231,15 +210,16 @@ const ITEMS: ItemDef[] = [
     },
   },
   {
-    id: "peter", title: "Peter Van de Veire is zijn koptelefoon kwijt", goal: "Zoek de koptelefoon van Peter", item: "de koptelefoon van Peter Van de Veire", short: "Koptelefoon",
-    done: "Peter heeft zijn koptelefoon terug. MNM zendt weer uit.", hint: (w) => `Hij zat nog in de studio: ${w}`,
-    place: "rooms", types: [RT.RADIO], only: (p, r) => radioStation(p, r) === MNM, fallback: [RT.EDIT, RT.OFFICE], surface: "table",
+    id: "peter", title: "Peter Van de Veire presenteert op blote voeten: zijn sokken zijn weg", goal: "Zoek de sokken van Peter", item: "de sokken van Peter Van de Veire", short: "Sokken",
+    done: "Peter heeft zijn sokken terug. De MNM-studio ruikt al een stuk beter.", hint: (w) => `Hij trok ze uit tijdens de uitzending: ${w}`,
+    place: "rooms", types: [RT.RADIO], only: (p, r) => radioStation(p, r) === MNM, fallback: [RT.EDIT, RT.OFFICE], surface: "floor",
     model: (b, fr) => {
-      for (let k = 0; k <= 6; k++) {
-        const a = (k / 6) * Math.PI;
-        fbox(b, fr, Math.cos(a) * 0.09, 0.005 + Math.sin(a) * 0.004, Math.sin(a) * 0.09 - 0.04, 0.03, 0.012, 0.03, sp(L.WHITE, [0.1, 0.1, 0.1]));
+      // two striped socks, one flung a bit further
+      for (const [x, z, a] of [[-0.06, 0, 0.3], [0.1, 0.07, -0.9]] as const) {
+        const f = new Frame(...fr.p(x, 0, z), fr.rot + a);
+        for (let k = 0; k < 5; k++) fbox(b, f, 0, 0, -0.1 + k * 0.04, 0.07, 0.025, 0.04, glow(k % 2 ? [1, 0.85, 0.1] : [0.95, 0.2, 0.45]));
+        fbox(b, f, 0.035, 0, 0.1, 0.13, 0.025, 0.06, glow([0.95, 0.2, 0.45]));
       }
-      for (const x of [-0.09, 0.09]) fbox(b, fr, x, 0, -0.04, 0.05, 0.07, 0.08, glow([0.1, 0.55, 0.3]));
     },
   },
   {
@@ -299,13 +279,14 @@ const ITEMS: ItemDef[] = [
     },
   },
   {
-    id: "badge", title: "De nieuwe stagiair is zijn badge kwijt", goal: "Zoek de badge van de stagiair", item: "de badge van de stagiair", short: "Badge",
-    done: "De stagiair kan weer binnen. Welkom bij de VRT, voor de derde keer.", hint: (w) => `Hij verdwaalde in ${w}`,
-    place: "corridor",
+    id: "koffie", title: "De stagiair zoekt al sinds 2019 de koffiemachine", goal: "Zoek de koffiebeker van de stagiair", item: "de koffiebeker van de stagiair", short: "Koffiebeker",
+    done: "De stagiair heeft zijn beker terug. Hij stond naast de koffiemachine. Nu nog een contract.", hint: (w) => `Hij zette hem neer om de weg te vragen, in ${w}`,
+    place: "rooms", types: [RT.KOFFIE], fallback: [RT.MEETING, RT.OFFICE], surface: "table",
     model: (b, fr) => {
-      fbox(b, fr, 0, 0, 0, 0.09, 0.004, 0.056, glow([0.8, 0.8, 0.78]));
-      fbox(b, fr, 0, 0.004, -0.018, 0.09, 0.001, 0.014, glow([1.1, 0.2, 0.5]));
-      for (let k = 0; k < 7; k++) fbox(b, fr, Math.sin(k * 0.9) * 0.05, 0.001, 0.05 + k * 0.035, 0.012, 0.003, 0.04, sp(L.WHITE, [0.1, 0.1, 0.12]));
+      fbox(b, fr, 0, 0, 0, 0.08, 0.1, 0.08, glow([0.85, 0.85, 0.82]));
+      fbox(b, fr, 0, 0.1, 0, 0.068, 0.002, 0.068, sp(L.WHITE, [0.18, 0.1, 0.05]));
+      fbox(b, fr, 0, 0.035, 0.0405, 0.08, 0.02, 0.001, glow([1.1, 0.2, 0.5]));
+      fbox(b, fr, 0.05, 0.03, 0, 0.02, 0.05, 0.012, glow([0.85, 0.85, 0.82]));
     },
   },
 ];
@@ -349,7 +330,7 @@ export class Quests {
     this.jan = { spot: janSpot, obj: null, timer: 150 };
 
     const where = (s: Spot | null) => (s ? `${s.label}, ${floorName(s.f).toLowerCase()}` : "ergens in het gebouw");
-    const items = ITEMS.map((d, k) => ({ d, spot: this.placeItem(d, cx0, cz0, k) }));
+    const items = ITEMS.map((d) => ({ d, spot: this.placeItem(d, cx0, cz0) }));
     const launch = [2, 25, 55, 85, 120, 160, 200, 240, 285, 330, 375];
     const special: Quest[] = [
       {
@@ -389,8 +370,8 @@ export class Quests {
 
   // --- placement ------------------------------------------------------------
 
-  private placeItem(d: ItemDef, cx0: number, cz0: number, k: number): Spot | null {
-    const rng = new Rng(hash(920, k));
+  private placeItem(d: ItemDef, cx0: number, cz0: number): Spot | null {
+    const rng = new Rng(hash(920, ...[...d.id].map((c) => c.charCodeAt(0))));
     const floors = floorsNear(this.startFloor);
     const cellSpot = (f: number, gx: number, gz: number, label: string): Spot => ({
       f, x: (gx + 0.5) * CELL + rng.range(-0.5, 0.5), z: (gz + 0.5) * CELL + rng.range(-0.5, 0.5), y: f * H, gx, gz, rot: rng.range(0, 6.28), label,
@@ -489,7 +470,7 @@ export class Quests {
     if (d.surface === "table") {
       const fur = getFurnished(p.f, p.cx, p.cz);
       const inRoom = (gx: number, gz: number) => p.room[idx(gx - p.cx * CH, gz - p.cz * CH)] === r.id;
-      const tops: Record<string, [number, number, number]> = { ctable: [0.745, 0, 0.8], mtable: [0.76, 0, 0.6], desks: [0.735, 0.55, 0.5], editdesk: [0.74, 0.55, 0.6], newsdesk: [0.97, -0.1, 0.9], messtable: [0.75, 0, 0.35], sdesk: [1.09, 0.05, 0.9], radiodesk: [0.76, 0.3, 0.3], vipbar: [1.1, 1.42, 1.2], lounge: [0.36, 0, 0.35] };
+      const tops: Record<string, [number, number, number]> = { ctable: [0.745, 0, 0.8], mtable: [0.76, 0, 0.6], desks: [0.735, 0.55, 0.5], editdesk: [0.74, 0.55, 0.6], newsdesk: [0.97, -0.1, 0.9], messtable: [0.75, 0, 0.35], sdesk: [1.09, 0.05, 0.9], radiodesk: [0.76, 0.3, 0.3], vipbar: [1.1, 1.42, 1.2], lounge: [0.36, 0, 0.35], koffiebar: [0.91, 0.56, 1.2], cocktail: [1.06, 0, 0.25], lowround: [0.75, 0, 0.2], bigtafel: [0.75, 0, 0.55] };
       // (a narrow VIP-bar has no counter)
       const tables = fur.props.filter((pr) => tops[pr.t] && inRoom(pr.gx, pr.gz) && !(pr.t === "vipbar" && pr.b));
       for (let tries = 0; tries < 24 && tables.length; tries++) {

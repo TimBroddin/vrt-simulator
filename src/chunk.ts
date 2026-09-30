@@ -104,6 +104,7 @@ function surf(p: Plan, i: number): Surf {
         case RT.DOCK: return { floor: sp(L.CONCRETE, [0.62, 0.62, 0.6]), ceil: sp(L.CONCRETE, [0.72, 0.72, 0.7]), wall: sp(L.BRICK, [0.6, 0.62, 0.64]), h: CEIL, base: false };
         case RT.RADIO: return { floor: sp(L.CARPET_GREY, [0.55, 0.55, 0.6]), ceil: sp(L.CEILTILE, [0.45, 0.45, 0.48]), wall: sp(L.FABRIC, [0.3, 0.3, 0.33]), h: CEIL, base: false };
         case RT.CANTEEN: return { floor: sp(L.TILEDARK, [1.1, 1.05, 1.0]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.95, 0.9, 0.82]), h: CEIL, base: true };
+        case RT.KOFFIE: return { floor: sp(L.CONCRETE, [0.44, 0.45, 0.47]), ceil: sp(L.CEILMETAL, [1.1, 1.1, 1.08]), wall: sp(L.PLASTER, [0.97, 0.97, 0.95]), h: CEIL, base: false };
         case RT.ARCHIVE: return { floor: sp(L.CONCRETE), ceil: sp(L.CONCRETE, [0.8, 0.8, 0.8]), wall: sp(L.BRICK, [0.8, 0.8, 0.78]), h: CEIL, base: false };
         case RT.REGIE: return { floor: sp(L.CARPET_GREY, [0.6, 0.6, 0.65]), ceil: sp(L.BLACK), wall: sp(L.BLACK, [1.4, 1.4, 1.45]), h: CEIL, base: false };
         case RT.MESS: return { floor: sp(L.TILEDARK, [0.8, 0.8, 0.8]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.95, 0.95, 0.93]), h: CEIL, base: false };
@@ -334,14 +335,16 @@ function emitSide(b: Builder, p: Plan, i: number, gx: number, gz: number, d: num
         break;
       }
       // trims
-      const trim = door.kind === "fire" ? sp(L.WHITE, [0.3, 0.32, 0.33]) : sp(L.WHITE, [0.55, 0.52, 0.48]);
+      // (de koffiekamer: lime green doors and frames)
+      const green = door.kind === "green";
+      const trim = door.kind === "fire" ? sp(L.WHITE, [0.3, 0.32, 0.33]) : green ? sp(L.WHITE, [0.42, 0.7, 0.08]) : sp(L.WHITE, [0.55, 0.52, 0.48]);
       sbox(-w / 2 - 0.06, -w / 2, T - 0.02, T + 0.001, 0, dh + 0.06, trim);
       sbox(w / 2, w / 2 + 0.06, T - 0.02, T + 0.001, 0, dh + 0.06, trim);
       sbox(-w / 2, w / 2, T - 0.02, T + 0.001, dh, dh + 0.06, trim);
       if (door.owner === i) {
-        const dspec: Spec = door.kind === "fire" ? { layer: L.DOOR_STEEL, uv: [0, 0, 1, 1] } : { layer: L.DOOR_WOOD, uv: [0, 0, 1, 1] };
-        const edge = DARKTRIM;
-        const leaves = door.kind === "double" ? [[-w / 2, 0, -1], [0, w / 2, 1]] : [[-w / 2, w / 2, 1]];
+        const dspec: Spec = door.kind === "fire" ? { layer: L.DOOR_STEEL, uv: [0, 0, 1, 1] } : green ? sp(L.WHITE, [0.48, 0.76, 0.1]) : { layer: L.DOOR_WOOD, uv: [0, 0, 1, 1] };
+        const edge = green ? sp(L.WHITE, [0.36, 0.6, 0.06]) : DARKTRIM;
+        const leaves = door.kind === "double" || green ? [[-w / 2, 0, -1], [0, w / 2, 1]] : [[-w / 2, w / 2, 1]];
         for (const [la, lb, hinge] of leaves as [number, number, number][]) {
           const lw = lb - la;
           if (door.kind === "glass") {

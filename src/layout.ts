@@ -44,6 +44,7 @@ export const RT = {
   SECURITY: 23, // de bewaking: the camera feeds
   TOOTS: 24, // Studio Toots: a small Marconi
   PASSAGE: 25, // een doorgang: steps down from one corridor, steps up to another
+  KOFFIE: 26, // de koffiekamer: the broodjesbar, the coffee machines, cocktail tables
 } as const;
 
 export const ROOM_LABEL = [
@@ -73,6 +74,7 @@ export const ROOM_LABEL = [
   "BEWAKING",
   "STUDIO TOOTS",
   "DE CAMPING",
+  "KOFFIEKAMER",
 ];
 
 // Side kinds
@@ -88,7 +90,7 @@ export const SK = {
 } as const;
 
 export interface Door {
-  kind: "door" | "double" | "glass" | "fire" | "elev";
+  kind: "door" | "double" | "glass" | "fire" | "elev" | "green";
   open: boolean;
   owner: number; // local cell index whose side draws the leaf
   w: number;
@@ -111,6 +113,7 @@ export interface Room {
   glass: boolean;
   num: number;
   pass?: [number, number]; // a doorgang: the two walls with a door, a few steps up to each
+  koffie?: Koffie; // de koffiekamer: where its doors and the broodjesbar are
 }
 
 export interface Structure {
@@ -561,7 +564,7 @@ function makePlan(f: number, cx: number, cz: number): Plan {
     if (!cands.length) continue;
     connected.add(room.id);
     const t = room.type;
-    const big = t === RT.STUDIO || t === RT.CANTEEN || t === RT.MESS || t === RT.KETNET || t === RT.SPORZA || t === RT.SET || t === RT.TOOTS || t === RT.COSTUME || t === RT.VIPRESTO || t === RT.DOCK;
+    const big = t === RT.STUDIO || t === RT.CANTEEN || t === RT.KOFFIE || t === RT.MESS || t === RT.KETNET || t === RT.SPORZA || t === RT.SET || t === RT.TOOTS || t === RT.COSTUME || t === RT.VIPRESTO || t === RT.DOCK;
     if (t === RT.MESS) continue; // its doors were placed above
     const openP = t === RT.STORAGE || t === RT.SERVER ? 0.45 : t === RT.BATH ? 0.9 : 0.78;
     // (rooms converted from offices, meetings and edit suites make the same draw, so the rest of the floor stays the same)
@@ -586,6 +589,8 @@ function makePlan(f: number, cx: number, cz: number): Plan {
     if (room.glass) {
       for (const [i, d] of cands) if (!p.sides.has(i * 4 + d)) setDoor(p, i, d, { kind: "glass", open: false, owner: i, w: 0 }, SK.GLASS);
     }
+    // (after the same draws as any other room, so the rest of the floor stays the same)
+    if (t === RT.KOFFIE) koffieDoors(p, room, cands);
   }
   let changed = true;
   while (changed) {
@@ -617,6 +622,44 @@ function makePlan(f: number, cx: number, cz: number): Plan {
       }
   makePassages(p);
   return p;
+}
+
+// De koffiekamer: its doors, redone by hand. Two green double doors in the
+// longest wall onto a corridor: one near an end, into the broodjesbar, and one
+// as far from it as it gets, into the koffiekamer itself.
+export interface Koffie {
+  d: number; // the wall with the doors, from the room out
+  shop: number; // the cell the broodjesbar door is in (-1: no door of its own)
+  end: number; // the broodjesbar is at this end of the wall: 1 = the far end along it
+}
+function koffieDoors(p: Plan, room: Room, cands: [number, number][]) {
+  // clear what the usual draw put in
+  for (const i of room.cells)
+    for (let d = 0; d < 4; d++) {
+      const s = p.sides.get(i * 4 + d);
+      if (!s?.door) continue;
+      p.sides.delete(i * 4 + d);
+      p.sides.delete(idx((i % CH) + DX[d]!, ((i / CH) | 0) + DZ[d]!) * 4 + ((d + 2) % 4));
+    }
+  const byDir: [number, number][][] = [[], [], [], []];
+  for (const c of cands) byDir[c[1]]!.push(c);
+  const h = hash(96, p.f, p.cx, p.cz, room.id);
+  const d = [0, 1, 2, 3].sort((a, b) => byDir[b]!.length - byDir[a]!.length || ((h >> a) & 1) - ((h >> b) & 1))[0]!;
+  // along the wall: x for the north and south walls, z for east and west
+  const u = (i: number) => (d % 2 === 1 ? i % CH : (i / CH) | 0);
+  const [u0, u1] = d % 2 === 1 ? [room.x0, room.x1] : [room.z0, room.z1];
+  const wall = byDir[d]!.map(([i]) => i).sort((a, b) => u(a) - u(b));
+  // the broodjesbar takes the two cells at one end; its door in the second one if it can
+  const end = (h >>> 4) & 1;
+  const inShop = (i: number) => (end ? u(i) >= u1 - 1 : u(i) <= u0 + 1);
+  const shopCands = wall.filter(inShop).sort((a, b) => (end ? u(a) - u(b) : u(b) - u(a)));
+  const shop = u1 - u0 >= 2 && shopCands.length ? shopCands[0]! : -1;
+  const rest = wall.filter((i) => !inShop(i) || u1 - u0 < 2);
+  const main = rest.length ? (end ? rest[0]! : rest[rest.length - 1]!) : -1;
+  for (const i of [shop, main]) if (i >= 0) setDoor(p, i, d, { kind: "green", open: true, owner: i, w: 1.8 });
+  // no door on that wall at all: keep the room reachable through any other
+  if (shop < 0 && main < 0 && cands.length) setDoor(p, cands[0]![0], cands[0]![1], { kind: "green", open: true, owner: cands[0]![0], w: 1.8 });
+  room.koffie = { d, shop, end };
 }
 
 // Doorgangen: now and then a room between two corridors is a few steps lower,
@@ -710,7 +753,7 @@ function serviceRoom(t: number, area: number, mn: number, f: number, h: number):
   if (t === RT.OFFICE && big) return h < 9 ? RT.COSTUME : f >= 9 && h < 20 ? RT.CEO : t;
   if (t === RT.OFFICE && area >= 4) return h < 7 ? RT.DRESSING : f >= 9 && h < 13 ? RT.CEO : t;
   if (t === RT.MEETING && area >= 4) return h < 12 ? RT.DRESSING : t;
-  if (t === RT.CANTEEN) return h < 35 ? RT.VIPRESTO : t;
+  if (t === RT.CANTEEN) return h < 35 ? RT.VIPRESTO : h < 62 ? RT.KOFFIE : t;
   if (t === RT.LOUNGE) return h < 45 ? RT.VIPBAR : t;
   if (t === RT.EMPTY && big) return f === 0 && h < 45 ? RT.DOCK : h < 12 ? RT.VIPBAR : t;
   if (t === RT.ARCHIVE && big && f === 0) return h < 40 ? RT.DOCK : t;
@@ -1002,7 +1045,7 @@ export function lightPass(f: number, gx: number, gz: number, d: number): boolean
 }
 
 // Human readable label for a cell (HUD).
-const ROOM_LABEL_FR = ["BUREAU", "SALLE DE RÉUNION", "SANITAIRES", "RÉSERVE", "SALLE DES SERVEURS", "STUDIO", "CANTINE", "ARCHIVES", "RÉGIE", "LOCAL VIDE", "MONTAGE", "LE MESS", "SALLE DE DÉTENTE", "STUDIO RADIO", "STUDIO", "STUDIO", "STUDIO", "COSTUMES", "LOGE", "BAR VIP", "RESTAURANT VIP", "BUREAU DU CEO", "QUAI DE CHARGEMENT", "SÉCURITÉ", "STUDIO TOOTS", "LE CAMPING"];
+const ROOM_LABEL_FR = ["BUREAU", "SALLE DE RÉUNION", "SANITAIRES", "RÉSERVE", "SALLE DES SERVEURS", "STUDIO", "CANTINE", "ARCHIVES", "RÉGIE", "LOCAL VIDE", "MONTAGE", "LE MESS", "SALLE DE DÉTENTE", "STUDIO RADIO", "STUDIO", "STUDIO", "STUDIO", "COSTUMES", "LOGE", "BAR VIP", "RESTAURANT VIP", "BUREAU DU CEO", "QUAI DE CHARGEMENT", "SÉCURITÉ", "STUDIO TOOTS", "LE CAMPING", "CAFÉTÉRIA"];
 
 export function cellLabel(f: number, gx: number, gz: number): string {
   const { p, i } = planAt(f, gx, gz);
@@ -1148,7 +1191,9 @@ function mirrorPlan(src: Plan, cz: number): Plan {
     kind: new Uint8Array(CH * CH),
     room: new Int16Array(CH * CH).fill(-1),
     zone: new Uint8Array(CH * CH),
-    rooms: src.rooms.map((r) => ({ ...r, z0: CH - 1 - r.z1, z1: CH - 1 - r.z0, cells: r.cells.map(mi), pass: r.pass && (r.pass.map(md) as [number, number]) })),
+    rooms: src.rooms.map((r) => ({ ...r, z0: CH - 1 - r.z1, z1: CH - 1 - r.z0, cells: r.cells.map(mi), pass: r.pass && (r.pass.map(md) as [number, number]),
+      // (along an east or west wall the ends swap)
+      koffie: r.koffie && { d: md(r.koffie.d), shop: r.koffie.shop >= 0 ? mi(r.koffie.shop) : -1, end: r.koffie.d % 2 === 0 ? 1 - r.koffie.end : r.koffie.end } })),
     sides: new Map(),
     style: src.style,
     dark: src.dark,

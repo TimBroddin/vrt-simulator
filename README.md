@@ -26,9 +26,15 @@ M (or KAART) opens a misty map of what's around you, turned so the way you're fa
 
 Quests arrive one by one while you wander. Only the active quest counts: pick up another quest's object and you get "telt niet". The signal meter and beeps get stronger as you get closer.
 
-Ben Crabbé's lunchbox, Tom Waes' shoelace, Jan Becaus (who wanders off every few minutes), Felice's ghost and the chairs, flushing every toilet in one of the bathrooms ("geen kak in de toiletten"), Frank Deboosere's umbrella (on the roof), the Journaal prompter stick, the Karrewiet microphone, Frank from Thuis' garage keys (in the parking), a misfiled Pano tape from 1987, Peter Van de Veire's headphones (in an MNM studio), Michel Wuyts' koersboekje (on a Sporza desk), Boma's worst (in De Mess or a canteen), the CEO's spine (on a boardroom table), Karen François' badge (in the VIP-bar, where else) and the intern's badge.
+Ben Crabbé's lunchbox, Tom Waes' shoelace, Jan Becaus (who wanders off every few minutes), Felice's ghost and the chairs, flushing every toilet in one of the bathrooms ("geen kak in de toiletten"), Frank Deboosere's umbrella (on the roof), Frank from Thuis' garage keys (in the parking), a misfiled Pano tape from 1987, Peter Van de Veire's socks (in an MNM studio), Michel Wuyts' koersboekje (on a Sporza desk), Boma's worst (in De Mess or a canteen), the CEO's spine (on a boardroom table), Karen François' badge (in the VIP-bar, where else) and the coffee cup of the intern who's been looking for the coffee machine since 2019.
 
 Add a quest by adding an entry to `ITEMS` in `src/quests.ts`. Progress is saved per seed in localStorage.
+
+## Het einde
+
+When the last quest is done the floor shakes, cracks, and you fall through it into a giant hall under the building: the entrance of DPG Media (VTM) on the Medialaan, indoors under a painted sky, with the glass front, the dpg media logo, the row of flags (Willy, Joe, Q, vtm, ...), the clipped hedges, the sign on the lawn and the arrow on the bricks. Ten steps in: "Proficiat! Je hebt VRT simulator uitgespeeld". See `src/finale.ts`.
+
+To test it without doing every quest: open `?finale` (e.g. `http://localhost:3000/?finale`) and click to start; the floor gives way after 1.5 s. From the console, `__vrt.finale.start()` does the same at any moment. A finished world that never reached the hall (say, the tab closed mid-fall) goes there on the next visit.
 
 ## How it works
 
@@ -56,6 +62,8 @@ The rekwisieten fill a warehouse two storeys high: rows of tall pallet racks ful
 
 Among the rooms: the kostuumdienst (rails of costumes, mannequins, hats, a lending counter), kleedkamers with mirrors framed in bulbs and a star on the door, a VIP bar (backlit bottles, a velvet rope), a VIP restaurant (round tables, chandeliers, a wine wall), the CEO's office on the top floors, and loading docks on the ground floor with roller doors, one of them half open onto daylight that isn't there. These rooms are converted by hash in `serviceRoom` (`src/layout.ts`), so existing floor plans stay the same.
 
+**De koffiekamer** (some canteens, also by hash): two lime green double doors, with the sign and the "Prijslijst koffiekamer" next to them in the corridor. One door leads into the broodjesbar, a walled-off corner of 6 by 6 m: in through a poortje, tall fridges with drinks and salads, the counter with the fillings under glass, the ovens and panini grills behind it with the menu above, and out through another poortje. Against its outside wall stand the three coffee machines, at table height, with an orange mat in front of each. Away from the doors: high cocktail tables with green and yellow stools, low round tables, one big round table, the Coca-Cola fridge and two vending machines, TVs and a red LED clock, under a slatted metal ceiling. See `furnishKoffie` in `src/furnish.ts`; the doors are placed by `koffieDoors` in `src/layout.ts`.
+
 ## Big places
 
 Like the sporthal and the rekwisieten, these fill a whole block, and the first one of each is near the start:
@@ -77,7 +85,7 @@ Flat figures cut out of MDF, standing in a block of pine, placed around the buil
 
 ## Plekken and postkaarten
 
-About 48 places are worth finding: the big places, every kind of room, each radio studio, the strange rooms, the top of De Toren. Walk into one and it's yours ("PLEK ONTDEKT"); the count is under the quests and the pause screen lists them all, the ones you haven't found blanked out. They're kept in the browser across worlds. See `src/places.ts`. The start screen has postcards from the building (`src/postcards/`).
+About 49 places are worth finding: the big places, every kind of room, each radio studio, the strange rooms, the top of De Toren. Walk into one and it's yours ("PLEK ONTDEKT"); the count is under the quests and the pause screen lists them all, the ones you haven't found blanked out. They're kept in the browser across worlds. See `src/places.ts`. The start screen has postcards from the building (`src/postcards/`).
 
 ## De bewaking
 
