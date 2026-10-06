@@ -11,6 +11,15 @@ export const SIGHT = 100; // metres you can see on the map
 const inSight = (px: number, pz: number, pf: number, x: number, z: number, f: number) => Math.hypot(x - px, z - pz) <= SIGHT && Math.abs(f - pf) <= 1;
 const TILE = CH * PX;
 
+// someone else walking round (see visitors.ts)
+export interface Person {
+  name: string;
+  x: number;
+  z: number;
+  f: number;
+}
+export const PERSON_COL = "#ffd23f";
+
 export interface Waypoint {
   x: number;
   z: number;
@@ -252,6 +261,9 @@ export class WorldMap {
   private found = new Map<string, Found | null>();
   private buttons: { name: string; find: Finder; el: HTMLButtonElement; head: HTMLElement }[] = [];
   private empty = document.createElement("div");
+  private peopleHead = document.createElement("div");
+  private peopleList = document.createElement("div");
+  people: Person[] = []; // (kept up to date while the map is open)
 
   constructor() {
     const floors = document.getElementById("wm-floors")!;
@@ -263,6 +275,10 @@ export class WorldMap {
       floors.appendChild(b);
     }
     const list = document.getElementById("wm-list")!;
+    // the others first: wherever they are, a waypoint to where they are now
+    this.peopleHead.className = "wm-grp";
+    this.peopleHead.textContent = "ANDEREN";
+    list.append(this.peopleHead, this.peopleList);
     for (const grp of DESTS) {
       const h = document.createElement("div");
       h.className = "wm-grp";
@@ -303,6 +319,27 @@ export class WorldMap {
     }
     for (const b of this.buttons) b.head.hidden = this.buttons.every((o) => o.head !== b.head || o.el.hidden);
     this.empty.hidden = this.buttons.some((b) => !b.el.hidden);
+    this.listPeople();
+  }
+
+  private listPeople() {
+    const P = this.player;
+    this.peopleList.replaceChildren();
+    const ppl = [...this.people].sort((a, b) => Math.hypot(a.x - P.x, a.z - P.z) + Math.abs(a.f - P.f) * 18 - (Math.hypot(b.x - P.x, b.z - P.z) + Math.abs(b.f - P.f) * 18));
+    for (const o of ppl) {
+      const b = document.createElement("button");
+      const df = o.f - P.f;
+      b.textContent = `${o.name} · ${Math.round(Math.hypot(o.x - P.x, o.z - P.z))} m${df ? ` · ${df > 0 ? "▲" : "▼"}${Math.abs(df)}` : ""}`;
+      b.className = "wm-person";
+      b.onclick = () => {
+        this.setWaypoint({ x: o.x, z: o.z, f: o.f, label: o.name.toUpperCase() }, "person");
+        this.vx = o.x;
+        this.vz = o.z;
+        this.setFloor(o.f);
+      };
+      this.peopleList.append(b);
+    }
+    this.peopleHead.hidden = !ppl.length;
   }
 
   private minScale() {
@@ -561,6 +598,23 @@ export class WorldMap {
         g.fillText(txt, X, Y - 36);
       }
     };
+    // the others in sight, with their names
+    g.textAlign = "center";
+    g.font = "700 11px ui-monospace, Menlo, monospace";
+    for (const o of this.people) {
+      if (!inSight(P.x, P.z, P.f, o.x, o.z, o.f) || Math.abs(o.f - f) > 1) continue;
+      const [X, Y] = scr(o.x, o.z);
+      g.globalAlpha = o.f === f ? 1 : 0.45;
+      g.fillStyle = PERSON_COL;
+      g.strokeStyle = "#000";
+      g.lineWidth = 2;
+      g.beginPath();
+      g.arc(X, Y, 6, 0, 7);
+      g.stroke();
+      g.fill();
+      g.fillText(o.f === f ? o.name : `${o.name} · ${o.f > f ? "▲" : "▼"}`, X, Y - 13);
+    }
+    g.globalAlpha = 1;
     if (this.quest && inSight(P.x, P.z, P.f, this.quest.x, this.quest.z, this.quest.f)) pin(this.quest.x, this.quest.z, this.quest.f, "#ff2e7e", "QUEST");
     if (this.waypoint) pin(this.waypoint.x, this.waypoint.z, this.waypoint.f, "#35d6ff", this.waypoint.label);
     g.save();

@@ -207,6 +207,8 @@ body.touch .wm-help.desk { display: none; } body.touch .wm-help.mob { display: i
 #worldmap button:disabled { opacity: 0.28; cursor: default; }
 #worldmap [hidden] { display: none !important; }
 .wm-empty { font-size: 11px; opacity: 0.55; line-height: 1.5; }
+#worldmap button.wm-person { border-left: 3px solid #ffd23f; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#worldmap button.wm-person:hover { border-color: #ffd23f; }
 .wm-actions { padding: 10px 12px 14px; border-top: 1px solid #222; }
 .wm-actions .close { background: var(--pink); border-color: var(--pink); color: #fff; text-align: center; }
 .wm-floors { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 3px; }
@@ -346,7 +348,7 @@ body.has-save #overlay:not(.paused) #savebar, #overlay.paused #savebar { display
 .b-code { height: 30px; margin: 0 14px 14px; background-repeat: no-repeat; }
 
 #enter { position: relative; display: block; min-width: 280px; margin: 0 auto 14px; padding: 15px 30px; overflow: hidden; font: 700 15px var(--osd); letter-spacing: 0.26em; text-transform: uppercase; color: #fff; background: rgba(255, 255, 255, 0.06); border: 1.5px solid rgba(255, 255, 255, 0.4); border-radius: 4px; cursor: wait; }
-#enter #loadbar { position: absolute; inset: 0 auto 0 0; width: 0; background: rgba(255, 46, 126, 0.35); transition: width 0.2s; }
+#enter #loadbar { position: absolute; inset: 0 auto 0 0; width: 0; background: rgba(255, 46, 126, 0.45); transition: width 0.3s; }
 #enter .lbl { position: relative; }
 #enter .new, #enter .cont { display: none; }
 #overlay.ready #enter { cursor: pointer; background: var(--pink); border-color: var(--pink); box-shadow: 0 0 32px rgba(255, 46, 126, 0.35); }
@@ -357,7 +359,13 @@ body.has-save #overlay.ready #enter .new { display: none; }
 body.has-save #overlay.ready #enter .cont { display: inline; }
 #overlay.ready #enter:hover { background: #ff4b91; }
 #enter:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
-#enter .wait::after { content: "…"; }
+#loadstep::after { content: "…"; }
+#loadpct { display: inline-block; min-width: 4ch; margin-left: 6px; text-align: right; opacity: 0.6; font-variant-numeric: tabular-nums; }
+/* still loading: a shine sweeps the button (from the very first moment, before the script has even arrived) */
+/* (a transform, so it keeps going while painting the textures holds up the page) */
+#overlay:not(.ready) #enter::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 40%; background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.14), transparent); transform: translateX(-100%); animation: sweep 1.6s linear infinite; will-change: transform; }
+@keyframes sweep { to { transform: translateX(260%); } }
+@media (prefers-reduced-motion: reduce) { #overlay:not(.ready) #enter::after { animation: none; } }
 #binnen { min-height: 1.5em; margin: 0 0 30px; font: 12px var(--osd); letter-spacing: 0.1em; opacity: 0.7; }
 #binnen.some { opacity: 1; }
 #binnen.some::before { content: "● "; color: var(--pink); animation: blink 1.6s steps(1) infinite; }

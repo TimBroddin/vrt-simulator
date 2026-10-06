@@ -3,7 +3,7 @@
 import { CEIL, CELL, CH, CHUNK, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, MID_FLOOR, SNAKE_HALF, ST_HALF, ST_U1, ST_U2, ST_VM, T, isRtbf } from "./config";
 import { Builder, Frame, LightCtx, UP, fbox, type Built, type RGB, type Spec, type V3 } from "./builder";
 import { getFurnished } from "./furnish";
-import { K, PASS_DROP, PASS_RUN, RT, SK, TALL, gardenStair, getStructure, kindAt, mazeAt, marconiGallery, roomAnomaly, sideAt, stairFrame, tallTop, towerSpec, bosSpec, BAREEL, bareelBooms, bareelLamps, bareelCanopyLamps, vosHill, parkLane, parkRise, isParkLane, PARK_Z0, PARK_Z1, type GardenStair, type Plan, type Room } from "./layout";
+import { K, isOpen, PASS_DROP, PASS_RUN, RT, SK, TALL, gardenStair, getStructure, kindAt, mazeAt, marconiGallery, roomAnomaly, sideAt, stairFrame, tallTop, towerSpec, bosSpec, BAREEL, bareelBooms, bareelLamps, bareelCanopyLamps, vosHill, parkLane, parkRise, isParkLane, PARK_Z0, PARK_Z1, type GardenStair, type Plan, type Room } from "./layout";
 import { hash } from "./rng";
 import { L } from "./layers";
 import { buildFixture, buildProp } from "./props";
@@ -370,7 +370,7 @@ function emitSide(b: Builder, p: Plan, i: number, gx: number, gz: number, d: num
         for (const [la, lb, hinge] of leaves as [number, number, number][]) {
           const lw = lb - la;
           if (door.kind === "glass") {
-            if (!door.open) {
+            if (!isOpen(door)) {
               sbox(la, lb, -0.025, 0.025, 0, dh, ALU, undefined, undefined, b);
               b.glass(pt(la + 0.06, 0, 0.1), [along[0] * (lw - 0.12), 0, along[2] * (lw - 0.12)], [0, dh - 0.2, 0], [0.75, 0.86, 0.86, 0.2]);
             } else {
@@ -379,7 +379,7 @@ function emitSide(b: Builder, p: Plan, i: number, gx: number, gz: number, d: num
             }
             continue;
           }
-          if (!door.open) {
+          if (!isOpen(door)) {
             sbox(la + 0.005, lb - 0.005, -0.022, 0.022, 0, dh - 0.01, edge, dspec, dspec);
             const hx = hinge > 0 ? la + 0.1 : lb - 0.1;
             sbox(hx - 0.06, hx + 0.06, -0.06, 0.06, 1.0, 1.035, STEELS);
@@ -417,7 +417,7 @@ function emitSide(b: Builder, p: Plan, i: number, gx: number, gz: number, d: num
       else {
         sbox(-0.47, 0.47, -0.04, 0.04, DOOR_H, DOOR_H + 0.06, fr);
         pane(-0.47, 0.47, DOOR_H + 0.06, top - 0.08);
-        if (!door.open) {
+        if (!isOpen(door)) {
           sbox(-0.47, 0.47, -0.025, 0.025, 0, 0.08, fr);
           pane(-0.44, 0.44, 0.1, DOOR_H - 0.04);
           sbox(0.3, 0.34, -0.08, 0.08, 0.9, 1.1, STEELS);
@@ -425,7 +425,7 @@ function emitSide(b: Builder, p: Plan, i: number, gx: number, gz: number, d: num
           sbox(0.41, 0.46, T + 0.02, T + 0.95, 0, DOOR_H - 0.02, fr);
         }
       }
-      if (hasDoor && door.open) {
+      if (hasDoor && isOpen(door)) {
         seg(-half, -0.5, -0.06, 0.06);
         seg(0.5, half, -0.06, 0.06);
       } else seg(-half, half, -0.06, 0.06);

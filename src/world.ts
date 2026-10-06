@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { CEIL, CELL, CH, FLOOR_MAX, FLOOR_MIN, H, ST_HALF, ST_U1, ST_U2, ST_VM } from "./config";
 import type { Built } from "./builder";
 import type { ElevOut } from "./chunk";
-import { K, gardenRampY, gardenStair, getStructure, kindAt, parkGround, passageOffset, stairFrame, towerGround, towerSpec } from "./layout";
+import { K, openDoor, gardenRampY, gardenStair, getStructure, kindAt, parkGround, passageOffset, stairFrame, towerGround, towerSpec } from "./layout";
 import { floorDiv } from "./rng";
 
 export interface ElevRT {
@@ -27,12 +27,14 @@ interface Rec {
   cx: number;
   cz: number;
   ready: boolean;
+  dirty?: number; // asked to be built again (a door opened): the version wanted
+  built?: number; // the version that's showing
   group?: THREE.Group;
   boxes?: Float32Array;
   elevs: ElevRT[];
 }
 
-type Job = { key: string; kind: "chunk" | "ext"; f: number; cx: number; cz: number; pri: number };
+type Job = { key: string; kind: "chunk" | "ext"; f: number; cx: number; cz: number; pri: number; ver?: number };
 
 const ck = (f: number, cx: number, cz: number) => `${f}:${cx},${cz}`;
 
@@ -82,11 +84,23 @@ export class World {
   }
 
   private onResult(wi: number, m: any) {
+    const job = this.busy[wi];
     this.busy[wi] = null;
     if (m.type === "chunk") {
       this.onChunkMs(m.ms);
       const rec = this.recs.get(m.key);
       if (!rec) return; // unloaded while building
+      // built again: the new one replaces the old (unless an older build came in late)
+      const ver = job?.ver ?? 0;
+      if (rec.ready && ver < (rec.built ?? 0)) return this.pump();
+      if (rec.group) {
+        this.root.remove(rec.group);
+        rec.group.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+      }
+      rec.elevs = [];
+      rec.built = ver;
+      if (rec.dirty !== undefined && ver >= rec.dirty) rec.dirty = undefined;
+      else if (rec.dirty !== undefined && !this.queue.some((j) => j.key === rec.key && j.ver === rec.dirty)) this.queue.unshift(...this.rebuilds().filter((j) => j.key === rec.key));
       const group = new THREE.Group();
       const mesh = new THREE.Mesh(this.geometry(m.built), this.mat);
       group.add(mesh);
@@ -198,7 +212,7 @@ export class World {
         }
       }
 
-    const jobs: Job[] = [];
+    const jobs: Job[] = this.rebuilds();
     for (const [k, j] of want)
       if (!this.recs.has(k)) {
         this.recs.set(k, { key: k, f: j.f, cx: j.cx, cz: j.cz, ready: false, elevs: [] });
@@ -210,8 +224,33 @@ export class World {
         jobs.push(j);
       } else if (!this.exts.get(k)!.ready) jobs.push(j);
     const inFlight = new Set(this.busy.filter(Boolean).map((j) => j!.kind + j!.key));
-    this.queue = jobs.filter((j) => !inFlight.has(j.kind + j.key)).sort((a, b) => a.pri - b.pri);
+    this.queue = jobs.filter((j) => j.ver || !inFlight.has(j.kind + j.key)).sort((a, b) => a.pri - b.pri);
     this.pump();
+  }
+
+  // A door you opened: here and in every worker, then its chunk is built again.
+  openDoor(f: number, gx: number, gz: number, d: number) {
+    openDoor(f, gx, gz, d);
+    for (const w of this.workers) w.postMessage({ type: "open", f, gx, gz, d });
+    const rec = this.recs.get(ck(f, Math.floor(gx / CH), Math.floor(gz / CH)));
+    if (!rec?.ready) return; // (it'll be built with the door open)
+    rec.dirty = Math.max(rec.dirty ?? 0, rec.built ?? 0) + 1;
+    this.queueRebuilds();
+  }
+
+  private queueRebuilds() {
+    const re = this.rebuilds();
+    this.queue = [...re, ...this.queue.filter((j) => !(j.kind === "chunk" && re.some((r) => r.key === j.key)))];
+    this.pump();
+  }
+
+  // the chunks to build again, first in line
+  private rebuilds(): Job[] {
+    const out: Job[] = [];
+    const inFlight = new Set(this.busy.filter((j) => j?.ver).map((j) => `${j!.key}@${j!.ver}`));
+    for (const r of this.recs.values())
+      if (r.dirty !== undefined && !inFlight.has(`${r.key}@${r.dirty}`)) out.push({ key: r.key, kind: "chunk", f: r.f, cx: r.cx, cz: r.cz, pri: -2, ver: r.dirty });
+    return out;
   }
 
   // Make sure a floor is being built around (x, z) without unloading anything.

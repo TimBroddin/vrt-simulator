@@ -1,8 +1,9 @@
 // Chunk generation worker: layout + geometry + baked lighting off the main thread.
 import { buildChunk, buildExterior } from "./chunk";
 import { setSeed } from "./rng";
+import { openDoor } from "./layout";
 
-type Msg = { type: "init"; seed: number } | { type: "chunk"; key: string; f: number; cx: number; cz: number } | { type: "ext"; key: string; cx: number; cz: number };
+type Msg = { type: "init"; seed: number } | { type: "open"; f: number; gx: number; gz: number; d: number } | { type: "chunk"; key: string; f: number; cx: number; cz: number } | { type: "ext"; key: string; cx: number; cz: number };
 
 const transfers = (b: { [k: string]: any }) =>
   Object.values(b).filter((v) => ArrayBuffer.isView(v)).map((v) => (v as ArrayBufferView).buffer as ArrayBuffer);
@@ -13,6 +14,8 @@ self.onmessage = (e: MessageEvent<Msg>) => {
     setSeed(m.seed);
     return;
   }
+  // a door you opened (before the chunk with it is built again)
+  if (m.type === "open") return openDoor(m.f, m.gx, m.gz, m.d);
   const t0 = performance.now();
   if (m.type === "chunk") {
     const { built, elevs } = buildChunk(m.f, m.cx, m.cz);

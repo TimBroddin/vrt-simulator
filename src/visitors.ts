@@ -92,6 +92,14 @@ export class Visitors {
     return n;
   }
 
+  // the others in your world, in the building, for the maps
+  people(): { name: string; x: number; z: number; f: number }[] {
+    const out = [];
+    for (const o of this.others.values())
+      if (o.n && o.s === this.seed && o.target) out.push({ name: o.n, x: o.pos.x, z: o.pos.z, f: Math.floor((o.pos.y + 0.7) / H) });
+    return out;
+  }
+
   // you come in, under this name
   join(name: string) {
     this.name = clean(name, NAME_MAX) || "Bezoeker";

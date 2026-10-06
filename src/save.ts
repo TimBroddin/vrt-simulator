@@ -40,6 +40,7 @@ export function writeSave(s: Save) {
 export function clearSave(seed: number) {
   localStorage.removeItem(KEY);
   localStorage.removeItem(`vrt-quests-${seed}`);
+  localStorage.removeItem(`vrt-deuren-${seed}`);
 }
 
 export function ago(at: number) {

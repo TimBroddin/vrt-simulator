@@ -109,7 +109,8 @@ export const SK = {
 
 export interface Door {
   kind: "door" | "double" | "glass" | "fire" | "elev" | "green";
-  open: boolean;
+  open: boolean; // as the building was made (quest items go behind these)
+  opened?: boolean; // opened by you (E), see openDoor
   owner: number; // local cell index whose side draws the leaf
   w: number;
 }
@@ -384,6 +385,29 @@ export function getPlan(f: number, cx: number, cz: number): Plan {
   return p;
 }
 
+// Doors you've opened (E), per chunk-floor: [cell, side]. They're kept apart
+// from the plan's own `open`, which decides where quest items go, so opening a
+// door never moves one. Both the main thread and the workers keep this list.
+const opened = new Map<string, [number, number][]>();
+export const isOpen = (d: Door) => d.open || !!d.opened;
+export function openDoor(f: number, gx: number, gz: number, d: number) {
+  const cx = Math.floor(gx / CH), cz = Math.floor(gz / CH);
+  const i = (gz - cz * CH) * CH + (gx - cx * CH);
+  const k = `${f}:${cx},${cz}`;
+  const list = opened.get(k) ?? [];
+  if (!list.some(([a, b]) => a === i && b === d)) list.push([i, d]);
+  opened.set(k, list);
+  // (and in the plan, if it's been made already)
+  const door = planCache.get(k)?.sides.get(i * 4 + d)?.door;
+  if (door) door.opened = true;
+}
+function applyOpened(p: Plan) {
+  for (const [i, d] of opened.get(`${p.f}:${p.cx},${p.cz}`) ?? []) {
+    const door = p.sides.get(i * 4 + d)?.door;
+    if (door) door.opened = true;
+  }
+}
+
 function setDoor(p: Plan, a: number, d: number, door: Door, sk: number = SK.DOOR) {
   const ax = a % CH, az = (a / CH) | 0;
   const b = idx(ax + DX[d]!, az + DZ[d]!);
@@ -392,7 +416,12 @@ function setDoor(p: Plan, a: number, d: number, door: Door, sk: number = SK.DOOR
 }
 
 function makePlan(f: number, cx: number, cz: number): Plan {
-  if (cz < MID_CZ) return mirrorPlan(getPlan(f, cx, 2 * MID_CZ - cz), cz);
+  if (cz < MID_CZ) {
+    // (the mirror has its own copies of the doors: the ones you opened there are its own)
+    const m = mirrorPlan(getPlan(f, cx, 2 * MID_CZ - cz), cz);
+    applyOpened(m);
+    return m;
+  }
   const st = getStructure(cx, cz);
   const p: Plan = {
     f,
@@ -670,6 +699,7 @@ function makePlan(f: number, cx: number, cz: number): Plan {
         p.room[i] = -1;
       }
   makePassages(p);
+  applyOpened(p);
   return p;
 }
 
@@ -1124,7 +1154,7 @@ export function lightPass(f: number, gx: number, gz: number, d: number): boolean
   if (ka === K.VOID || kb === K.VOID) return ka === K.VOID ? kb === K.VOID || kb === K.CORR : ka === K.CORR;
   const s = sideAt(f, gx, gz, d);
   if (s.sk === SK.OPEN || s.sk === SK.GLASS || s.sk === SK.RAIL) return true;
-  if (s.sk === SK.DOOR) return !!s.door?.open;
+  if (s.sk === SK.DOOR) return !!s.door && isOpen(s.door);
   return false;
 }
 

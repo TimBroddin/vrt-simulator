@@ -48,6 +48,8 @@ export interface MapTarget {
   z: number;
   f: number;
   col: string;
+  r?: number; // dot size (default 8)
+  near?: boolean; // only when it's on your floor and on the map (the others), not pinned to the edge
 }
 
 export class Minimap {
@@ -116,19 +118,20 @@ export class Minimap {
     g.lineTo(R - 9, R + 9);
     g.closePath();
     g.fill();
-    // the active quest, the waypoint
+    // the others, the active quest, the waypoint
     for (const target of targets) {
       const dx = (target.x - x) * s, dz = (target.z - z) * s;
       const c = Math.cos(yaw), sn = Math.sin(yaw);
       let mx = dx * c - dz * sn, my = dx * sn + dz * c;
       const len = Math.hypot(mx, my), lim = R - 16;
+      if (target.near && (target.f !== f || len > lim)) continue;
       if (len > lim) {
         mx *= lim / len;
         my *= lim / len;
       }
       g.fillStyle = target.col;
       g.beginPath();
-      g.arc(R + mx, R + my, 8, 0, Math.PI * 2);
+      g.arc(R + mx, R + my, target.r ?? 8, 0, Math.PI * 2);
       g.fill();
       if (target.f !== f) {
         g.font = "700 17px ui-monospace, Menlo, monospace";

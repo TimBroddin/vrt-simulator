@@ -16,7 +16,7 @@ import { STATIONS } from "./stations";
 import { isTouch, setupTouch } from "./touch";
 import { takePhoto } from "./photo";
 import { Minimap } from "./minimap";
-import { WorldMap, nearestWay } from "./worldmap";
+import { PERSON_COL, WorldMap, nearestWay } from "./worldmap";
 import { ClockFace } from "./clockface";
 import { Dashboard } from "./dashboard";
 import { DevConsole, WarpMenu, isConsoleKey } from "./devconsole";
@@ -34,6 +34,7 @@ import { Quests } from "./quests";
 import { Finale } from "./finale";
 import { ago, clearSave, loadSave, writeSave } from "./save";
 import { Visitors } from "./visitors";
+import { Doors } from "./doors";
 import { Chat } from "./chat";
 import { NAME_MAX, clean } from "./protocol";
 
@@ -54,6 +55,24 @@ if (touch) document.body.classList.add("touch");
 
 const $ = (id: string) => document.getElementById(id)!;
 
+// --- loading: the button on the start screen fills up as it goes, a step at a
+// time (the script itself was the first quarter)
+function loadStep(k: number, label: string) {
+  $("loadbar").style.width = `${Math.round(k * 100)}%`;
+  $("loadstep").textContent = label;
+  $("loadpct").textContent = `${Math.round(k * 100)}%`;
+}
+loadStep(0.25, "de kunst ophangen");
+// the generation worker: downloaded once for all of them
+const workerSrc = (document.querySelector('meta[name="worker"]') as HTMLMetaElement | null)?.content || "/worker.js";
+let loaded = 0;
+const toLoad = ART_URLS.length + Object.keys(LOGO_URLS).length + 8; // (the worker counts for 8 pictures)
+const tick = (n = 1) => loadStep(0.25 + 0.33 * ((loaded += n) / toLoad), "de kunst ophangen");
+const workerUrl = fetch(workerSrc)
+  .then((r) => (r.ok ? r.blob() : Promise.reject()))
+  .then((b) => URL.createObjectURL(new Blob([b], { type: "text/javascript" })), () => workerSrc)
+  .finally(() => tick(8));
+
 // --- renderer
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
 renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
@@ -67,14 +86,17 @@ const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerH
 const loadImg = (u: string) =>
   new Promise<HTMLImageElement | null>((res) => {
     const i = new Image();
-    i.onload = () => res(i);
-    i.onerror = () => res(null);
+    i.onload = () => (tick(), res(i));
+    i.onerror = () => (tick(), res(null));
     i.src = u;
   });
 const [artImgs, logoImgs] = await Promise.all([
   Promise.all(ART_URLS.map(loadImg)),
   Promise.all(Object.entries(LOGO_URLS).map(async ([k, u]) => [k, await loadImg(u)] as const)).then((e) => Object.fromEntries(e) as Record<LogoName, HTMLImageElement | null>),
 ]);
+// (a frame for the step to show: painting the textures holds everything up for a moment)
+loadStep(0.6, "de muren schilderen");
+await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 const atlas = makeTextureArray(renderer, artImgs, logoImgs, touch ? 256 : 512);
 const mat = makeWorldMaterial(atlas);
 const glassMat = makeGlassMaterial(mat);
@@ -82,8 +104,7 @@ const clockFace = new ClockFace();
 mat.uniforms.clockTex!.value = clockFace.tex;
 const dash = new Dashboard();
 mat.uniforms.dashTex!.value = dash.tex;
-const workerUrl = (document.querySelector('meta[name="worker"]') as HTMLMetaElement | null)?.content || "/worker.js";
-const world = new World(workerUrl, seed, mat, glassMat, touch ? 1 : 2);
+const world = new World(await workerUrl, seed, mat, glassMat, touch ? 1 : 2);
 scene.add(world.root);
 const sky = makeSky();
 scene.add(sky);
@@ -95,6 +116,8 @@ post.setSize(window.innerWidth, window.innerHeight);
 const player = new Player();
 const sound = new Sound();
 const lifts = new Lifts(world, player, sound);
+// closed doors: E opens them (and the ones you opened before)
+const doors = new Doors(world, player, sound, seed);
 
 // --- spawn in a straight stretch of corridor near the origin
 function spawn(f: number) {
@@ -437,6 +460,7 @@ function openMap() {
   if (worldmap.open || !started || finale.active) return;
   player.keys.clear();
   touchUi?.reset();
+  worldmap.people = visitors.people();
   worldmap.show(player.pos.x, player.pos.z, player.floor, player.yaw, quests.activeTarget());
   track("worldmap_opened", { device: touch ? "touch" : "desktop" });
   if (!touch) document.exitPointerLock?.();
@@ -703,7 +727,7 @@ function frame() {
 
   if (!ready) {
     const r = world.readyAround(player.pos.x, player.pos.z, player.floor, 1);
-    $("loadbar").style.width = `${Math.round(r * 100)}%`;
+    loadStep(0.64 + 0.36 * r, "de gangen bouwen");
     if (r >= 1) {
       ready = true;
       $("overlay").classList.add("ready");
@@ -728,7 +752,8 @@ function frame() {
       if (finale.active) cars.leave(true);
       const inCar = cars.update(dt, interact && !finale.active, active) || !!cars.driving;
       const used = quests.update(dt, interact && active && !finale.active && !inCar);
-      lifts.update(t, dt, interact && !used && !inCar && !finale.active);
+      const opened = !inCar && !finale.active && doors.update(interact && active && !used);
+      lifts.update(t, dt, interact && !used && !opened && !inCar && !finale.active);
     }
   }
   interact = false;
@@ -779,7 +804,13 @@ function frame() {
 
   if (ready && !finale.inHall) {
     const qt = quests.activeTarget(), wp = worldmap.waypoint;
-    minimap.draw(player.floor, player.pos.x, player.pos.z, player.yaw, [...(qt ? [{ ...qt, col: "#ff2e7e" }] : []), ...(wp ? [{ ...wp, col: "#35d6ff" }] : [])]);
+    const ppl = visitors.people();
+    minimap.draw(player.floor, player.pos.x, player.pos.z, player.yaw, [
+      ...ppl.map((o) => ({ ...o, col: PERSON_COL, r: 5, near: true })),
+      ...(qt ? [{ ...qt, col: "#ff2e7e" }] : []),
+      ...(wp ? [{ ...wp, col: "#35d6ff" }] : []),
+    ]);
+    worldmap.people = ppl;
     guide(dt);
     worldmap.draw();
   }
@@ -806,7 +837,7 @@ function frame() {
   if (locked || playing || api.auto) {
     $("tc").textContent = timecode(recT);
     $("rec").style.visibility = Math.floor(t * 1.4) % 2 ? "hidden" : "visible";
-    $("prompt").textContent = finale.active ? "" : cars.prompt || quests.prompt || lifts.prompt;
+    $("prompt").textContent = finale.active ? "" : cars.prompt || quests.prompt || lifts.prompt || doors.prompt;
     const disp = lifts.display;
     $("liftdisp").style.display = disp !== null ? "" : "none";
     if (disp !== null) $("liftnum").textContent = disp === String(FLOOR_MAX) ? "D" : disp;
@@ -864,7 +895,7 @@ $("restart").addEventListener("click", (e) => {
 });
 
 // expose for automation / debugging
-const api = { player, world, visitors, chat, openChat, camera, lifts, bareels, sound, quests, finale, minimap, worldmap, openMap, closeMap, radio, live, cctv, weer, cars, places, dev, warpMenu, dash, findWarp, warpTo, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
+const api = { player, world, visitors, chat, openChat, doors, camera, lifts, bareels, sound, quests, finale, minimap, worldmap, openMap, closeMap, radio, live, cctv, weer, cars, places, dev, warpMenu, dash, findWarp, warpTo, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
 (window as any).__vrt = api;
 if (debug) $("debug").style.display = "block";
 frame();

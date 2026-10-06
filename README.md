@@ -20,13 +20,21 @@ The HUD also has a pedometer: the steps you've taken and how far you've walked.
 
 The game saves itself every few seconds (the world, where you are, the quests, the pedometer) and continues there next time; OPNIEUW BEGINNEN on the start or pause screen starts over, back at the start of the shared world. The places you've found are kept either way. See `src/save.ts`.
 
-Controls: WASD / ZQSD to walk, Shift to run, mouse to look, E to use things (lifts, quest items), Tab to switch quests, M for the map (plattegrond), K for the minimap, F for the camera lamp, P for a photo, C to chat, scroll to zoom, N to mute, H to hide the HUD.
+Controls: WASD / ZQSD to walk, Shift to run, mouse to look, E to use things (lifts, quest items, closed doors), Tab to switch quests, M for the map (plattegrond), K for the minimap, F for the camera lamp, P for a photo, C to chat, scroll to zoom, N to mute, H to hide the HUD.
+
+## Doors
+
+Some doors are closed. Walk up to one and E opens it: its chunk is built again, so the leaf swings open, you can walk through, and the light from the room spills out. The doors you opened are kept per world (OPNIEUW BEGINNEN closes them again). They're kept apart from the plan's own open doors, which decide where quest items go, so opening one never moves an item. See `src/doors.ts` and `openDoor` in `src/layout.ts`.
+
+## Loading
+
+The button on the start screen is the loading bar: the script, de kunst ophangen (the art and logos, and the generation worker, downloaded once for all its threads), de muren schilderen (the texture array), de gangen bouwen (the chunks around you), then BINNENGAAN.
 
 ## Multiplayer
 
 Everyone is in one room and, unless the URL picks another seed, in one world, the same building, starting in the same corridor. You see the others walking around as camera operators, on your floor, within 60 m. Positions go round 5 times a second while you move, nothing while you stand still.
 
-The start screen asks your name on a visitor's badge (a random one is filled in, like "Stagiair 42"; whatever you pick is remembered). The HUD shows how many others are in the building, bottom left, with a feed of who came in, who left and what they said. C opens a line to chat with everyone in your world (Enter sends, Esc closes). In the console, `wie` tells you how many others there are.
+The start screen asks your name on a visitor's badge (a random one is filled in, like "Stagiair 42"; whatever you pick is remembered). The HUD shows how many others are in the building, bottom left, with a feed of who came in, who left and what they said. C opens a line to chat with everyone in your world (Enter sends, Esc closes). The others are yellow dots on the minimap (on your floor) and on the plattegrond (in sight, with their names); the plattegrond also lists everyone under ANDEREN, and clicking a name sets a waypoint to where they are. In the console, `wie` tells you how many others there are.
 
 In production the room is a Cloudflare Durable Object (`server/index.ts`, bound in `wrangler.jsonc`), using the hibernation API, so it isn't billed while nobody moves. With `bun run dev`, the dev server in `index.ts` plays the room. Both speak the protocol in `src/protocol.ts` and share its room logic; the client is `src/visitors.ts`, the feed and chat line `src/chat.ts`. `bun run deploy` builds and deploys the Worker.
 
