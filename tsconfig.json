@@ -26,5 +26,7 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  // (the Cloudflare Worker has its own, see server/tsconfig.json)
+  "exclude": ["server", "node_modules", "dist"]
 }

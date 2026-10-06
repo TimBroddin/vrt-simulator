@@ -1,6 +1,10 @@
 {
   "name": "vrt-reyers",
   "compatibility_date": "2026-09-01",
-  "assets": { "directory": "./dist", "not_found_handling": "single-page-application" },
+  // the static site, plus /ws: the room everyone is in (a Durable Object)
+  "main": "server/index.ts",
+  "assets": { "directory": "./dist", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/ws"] },
+  "durable_objects": { "bindings": [{ "name": "LOBBY", "class_name": "Lobby" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Lobby"] }],
   "routes": [{ "pattern": "vrt.titans.sh", "custom_domain": true }]
 }

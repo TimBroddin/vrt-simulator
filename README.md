@@ -8,19 +8,27 @@ bun run dev     # http://localhost:3000
 bun run build   # static site in dist/
 ```
 
-URL options: `?seed=1234` (same building every time), `?floor=7` (start floor; the default is 0, the ground floor), `?debug` (fps / chunk stats).
+URL options: `?seed=1234` (another building; without it everyone is in the same one, world 1953), `?floor=7` (start floor; the default is 0, the ground floor), `?debug` (fps / chunk stats).
 
 ## De debug console
 
-The key left of 1 (`` ` `` or `²`) opens a console at the top of the screen. `help` lists the commands (`pos`, `seed`, `fps`, `plekken`, `clear`, `exit`), but not all of them: `warp` opens the warp menu. It lists every plek (and the active quest); type to filter, ↑↓ and Enter (or click) to go. It finds the nearest one on any floor, well beyond what the plattegrond shows, and puts you just inside its door, clear of the furniture. `warp sport` opens the menu already filtered. See `src/devconsole.ts` and `src/warp.ts`. Not on phones and tablets (no keyboard).
+The key left of 1 (`` ` `` or `²`) opens a console at the top of the screen. `help` lists the commands (`pos`, `seed`, `fps`, `wie`, `plekken`, `clear`, `exit`), but not all of them: `warp` opens the warp menu. It lists every plek (and the active quest); type to filter, ↑↓ and Enter (or click) to go. It finds the nearest one on any floor, well beyond what the plattegrond shows, and puts you just inside its door, clear of the furniture. `warp sport` opens the menu already filtered. See `src/devconsole.ts` and `src/warp.ts`. Not on phones and tablets (no keyboard).
 
 On phones and tablets: left thumb walks (push far to run), right thumb looks, plus buttons for E, QUEST, LAMP, FOTO, KAART (the plattegrond) and pause. Play in landscape.
 
 The HUD also has a pedometer: the steps you've taken and how far you've walked.
 
-The game saves itself every few seconds (the world, where you are, the quests, the pedometer) and continues there next time; OPNIEUW BEGINNEN on the start or pause screen starts over in a new world. The places you've found are kept either way. See `src/save.ts`.
+The game saves itself every few seconds (the world, where you are, the quests, the pedometer) and continues there next time; OPNIEUW BEGINNEN on the start or pause screen starts over, back at the start of the shared world. The places you've found are kept either way. See `src/save.ts`.
 
-Controls: WASD / ZQSD to walk, Shift to run, mouse to look, E to use things (lifts, quest items), Tab to switch quests, M for the map (plattegrond), K for the minimap, F for the camera lamp, P for a photo, scroll to zoom, N to mute, H to hide the HUD.
+Controls: WASD / ZQSD to walk, Shift to run, mouse to look, E to use things (lifts, quest items), Tab to switch quests, M for the map (plattegrond), K for the minimap, F for the camera lamp, P for a photo, C to chat, scroll to zoom, N to mute, H to hide the HUD.
+
+## Multiplayer
+
+Everyone is in one room and, unless the URL picks another seed, in one world, the same building, starting in the same corridor. You see the others walking around as camera operators, on your floor, within 60 m. Positions go round 5 times a second while you move, nothing while you stand still.
+
+The start screen asks your name on a visitor's badge (a random one is filled in, like "Stagiair 42"; whatever you pick is remembered). The HUD shows how many others are in the building, bottom left, with a feed of who came in, who left and what they said. C opens a line to chat with everyone in your world (Enter sends, Esc closes). In the console, `wie` tells you how many others there are.
+
+In production the room is a Cloudflare Durable Object (`server/index.ts`, bound in `wrangler.jsonc`), using the hibernation API, so it isn't billed while nobody moves. With `bun run dev`, the dev server in `index.ts` plays the room. Both speak the protocol in `src/protocol.ts` and share its room logic; the client is `src/visitors.ts`, the feed and chat line `src/chat.ts`. `bun run deploy` builds and deploys the Worker.
 
 ## De plattegrond
 

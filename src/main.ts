@@ -33,14 +33,19 @@ import { track, trackOnce } from "./analytics";
 import { Quests } from "./quests";
 import { Finale } from "./finale";
 import { ago, clearSave, loadSave, writeSave } from "./save";
+import { Visitors } from "./visitors";
+import { Chat } from "./chat";
+import { NAME_MAX, clean } from "./protocol";
 
 const params = new URLSearchParams(location.search);
 const seedParam = params.get("seed");
 const seedFromParam = seedParam ? (/^\d+$/.test(seedParam) ? Number(seedParam) : hash(...[...seedParam].map((c) => c.charCodeAt(0)))) : null;
+// everyone shares one world (so you meet the others), unless the URL asks for another
+const WORLD = 1953;
 // continue where you were, unless the URL asks for another world or floor
 const saved = loadSave();
 const resume = saved && !params.has("floor") && (seedFromParam === null || seedFromParam === saved.seed) ? saved : null;
-const seed = seedFromParam ?? resume?.seed ?? (Math.random() * 1e6) | 0;
+const seed = seedFromParam ?? resume?.seed ?? WORLD;
 setSeed(seed);
 const startFloor = params.has("floor") ? Math.max(FLOOR_MIN, Math.min(FLOOR_MAX, Number(params.get("floor")))) : resume ? resume.of : 0;
 let debug = params.has("debug");
@@ -113,8 +118,9 @@ function spawn(f: number) {
       }
   return { x: 1.5, z: 1.5, yaw: 0 };
 }
+// (everyone starts here: a little apart, so you don't all stand in each other)
 const sp = spawn(startFloor);
-player.pos.set(sp.x, startFloor * H, sp.z);
+player.pos.set(sp.x + (Math.random() - 0.5) * 1.2, startFloor * H, sp.z + (Math.random() - 0.5) * 1.2);
 player.viewY = player.pos.y;
 player.yaw = sp.yaw;
 
@@ -176,6 +182,60 @@ const cctv = new CCTV(renderer, scene, mat, world, player, touch);
 const weer = new WeerCam(renderer, scene, mat, world, player, touch);
 const cars = new Cars(scene, mat, world, player, sound, seed);
 const bareels = new Bareels(scene, mat, world, player, sound);
+// the others walking round
+const visitors = new Visitors(world, seed, `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+scene.add(visitors.root);
+// who came in, who left, what they said; C to say something
+const chat = new Chat();
+visitors.onJoin = (n) => chat.line("join", " kwam binnen", n);
+visitors.onLeave = (n) => chat.line("leave", " is vertrokken", n);
+visitors.onChat = (n, m) => chat.line("chat", m, n);
+chat.onSend = (m) => {
+  if (visitors.say(m)) chat.line("me", m, visitors.name!);
+  else chat.line("note", visitors.online ? "Niets verstuurd" : "Niet verbonden: niemand hoort je");
+};
+let othersShown = "";
+function showOthers() {
+  const n = visitors.count, on = visitors.online;
+  const key = `${n}${on}`;
+  if (key === othersShown) return;
+  othersShown = key;
+  const txt = !on ? "" : n ? `${n} ${n === 1 ? "ANDER" : "ANDEREN"} IN HET GEBOUW` : "ALLEEN IN HET GEBOUW";
+  $("anderen").textContent = txt;
+  $("anderen").classList.toggle("some", n > 0);
+  $("binnen").textContent = !on ? "" : n ? `${n} ${n === 1 ? "ander is" : "anderen zijn"} al binnen` : "nog niemand binnen";
+  $("binnen").classList.toggle("some", n > 0);
+}
+
+// --- your visitor's badge: the name the others see
+const ROLES = ["Stagiair", "Cameraman", "Klankman", "Scripte", "Floormanager", "Grimeur", "Lichtman", "Monteur", "Bode", "Regisseur", "Weerman", "Nieuwslezer"];
+const nameIn = $("name") as HTMLInputElement;
+nameIn.maxLength = NAME_MAX;
+nameIn.value = localStorage.getItem("vrt-naam") || `${ROLES[(Math.random() * ROLES.length) | 0]} ${10 + ((Math.random() * 90) | 0)}`;
+// the barcode follows the name
+function barcode() {
+  const t = nameIn.value || "?";
+  let h = 2166136261, x = 0;
+  const stops: string[] = [];
+  for (let i = 0; x < 200; i++) {
+    h = Math.imul(h ^ t.charCodeAt(i % t.length) ^ i, 16777619);
+    const w = 1 + ((h >>> 0) % 4);
+    if (i % 2 === 0) stops.push(`#121316 ${x}px ${x + w}px`, `transparent ${x + w}px`);
+    x += w;
+  }
+  $("b-code").style.backgroundImage = `linear-gradient(90deg, ${stops.join(", ")})`;
+  $("b-code").style.backgroundSize = `${x}px 100%`;
+}
+barcode();
+nameIn.addEventListener("input", barcode);
+// (typing a name doesn't walk you round; Enter goes in)
+nameIn.addEventListener("keydown", (e) => {
+  e.stopPropagation();
+  if (e.code === "Enter" || e.code === "NumpadEnter") begin();
+});
+nameIn.addEventListener("keyup", (e) => e.stopPropagation());
+const today = new Date();
+$("b-date").textContent = `${String(today.getDate()).padStart(2, "0")}.${String(today.getMonth() + 1).padStart(2, "0")}.${today.getFullYear()}`;
 // plekken: the places you've found, kept across visits
 const places = new Places();
 $("plekken").textContent = `PLEKKEN ${places.count}`;
@@ -279,7 +339,7 @@ const canvas = renderer.domElement;
 // follows the key's position (WASD / ZQSD). Non-Latin layouts fall back to position.
 const letter = (e: KeyboardEvent, l: string) => (/^[a-z]$/i.test(e.key) ? e.key.toLowerCase() === l : e.code === `Key${l.toUpperCase()}`);
 document.addEventListener("keydown", (e) => {
-  if (dev.open || warpMenu.open) return; // they take the keys themselves
+  if (dev.open || warpMenu.open || chat.open) return; // they take the keys themselves
   if (worldmap.open) {
     if (letter(e, "m") || e.code === "Escape") closeMap();
     return;
@@ -323,6 +383,10 @@ document.addEventListener("keydown", (e) => {
     if (minimap.visible) track("minimap_opened", { device: "desktop" });
   }
   if (letter(e, "p")) photoRequested = true;
+  if (letter(e, "c")) {
+    e.preventDefault();
+    openChat();
+  }
   if (letter(e, "h")) {
     hudOn = !hudOn;
     $("hud").style.display = hudOn ? "" : "none";
@@ -341,7 +405,7 @@ document.addEventListener("wheel", (e) => {
   if (locked) zoom = Math.max(0, Math.min(1, zoom + e.deltaY * -0.001));
 });
 // the plattegrond, the console and the warp menu free the mouse without pausing
-const menuOpen = () => worldmap.open || dev.open || warpMenu.open;
+const menuOpen = () => worldmap.open || dev.open || warpMenu.open || chat.open;
 document.addEventListener("pointerlockchange", () => {
   locked = document.pointerLockElement === canvas;
   $("overlay").classList.toggle("hidden", locked || menuOpen());
@@ -357,6 +421,16 @@ document.addEventListener("pointerlockerror", () => {
   $("overlay").classList.remove("hidden");
   $("overlay").classList.add("paused");
 });
+
+// --- chat (C): the mouse is freed while you type, like the console
+function openChat() {
+  if (chat.open || !started || worldmap.open) return;
+  player.keys.clear();
+  touchUi?.reset();
+  chat.show();
+  if (!touch) document.exitPointerLock?.();
+}
+chat.onClose = relock;
 
 // --- de plattegrond
 function openMap() {
@@ -410,6 +484,10 @@ dev.add("fps", "fps en chunks aan/uit", () => {
   debug = !debug;
   $("debug").style.display = debug ? "block" : "none";
   return debug ? "debug aan" : "debug uit";
+});
+dev.add("wie", "wie er nog rondloopt", () => {
+  const n = visitors.count;
+  return n ? `${n} ${n === 1 ? "ander" : "anderen"} in deze wereld` : "niemand anders in deze wereld";
 });
 dev.add("plekken", "welke plekken nog te vinden zijn", () => {
   const left = PLACES.filter((p) => !places.found.has(p.id)).map((p) => p.name);
@@ -500,8 +578,15 @@ const touchUi = touch
       },
     })
   : null;
-$("overlay").addEventListener("click", () => {
+$("overlay").addEventListener("click", begin);
+function begin() {
   if (!ready) return;
+  if (!visitors.name) {
+    const n = clean(nameIn.value, NAME_MAX) || nameIn.placeholder || "Bezoeker";
+    localStorage.setItem("vrt-naam", n);
+    visitors.join(n);
+    nameIn.blur();
+  }
   if (!started) track("game_start", { seed, floor: startFloor, device: touch ? "touch" : "desktop" });
   sound.start();
   radio.unlock();
@@ -518,7 +603,7 @@ $("overlay").addEventListener("click", () => {
     $("overlay").classList.add("hidden");
   } else canvas.requestPointerLock?.();
   started = true;
-});
+}
 $("seed").textContent = String(seed);
 ($("seedlink") as HTMLAnchorElement).href = `?seed=${seed}`;
 
@@ -665,6 +750,8 @@ function frame() {
   if (ready && started && !finale.inHall) cctv.update(dt);
   if (ready && started && !finale.inHall) weer.update(dt);
   if (ready && !finale.inHall) bareels.update(dt);
+  showOthers();
+  visitors.update(dt, started && ready && !finale.inHall ? { s: seed, x: player.pos.x, y: player.pos.y, z: player.pos.z, a: player.yaw } : null);
 
   if (flickNear > 0 && t - lastFlickBuzz > 0.12 && Math.random() < flickNear * 0.25) {
     lastFlickBuzz = t;
@@ -773,11 +860,11 @@ $("restart").addEventListener("click", (e) => {
   track("restart", { seed, seconds: Math.round(playSecs) });
   restarting = true;
   clearSave(seed);
-  location.href = location.pathname; // a new world
+  location.href = location.pathname; // back to the start of the shared world
 });
 
 // expose for automation / debugging
-const api = { player, world, camera, lifts, bareels, sound, quests, finale, minimap, worldmap, openMap, closeMap, radio, live, cctv, weer, cars, places, dev, warpMenu, dash, findWarp, warpTo, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
+const api = { player, world, visitors, chat, openChat, camera, lifts, bareels, sound, quests, finale, minimap, worldmap, openMap, closeMap, radio, live, cctv, weer, cars, places, dev, warpMenu, dash, findWarp, warpTo, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
 (window as any).__vrt = api;
 if (debug) $("debug").style.display = "block";
 frame();

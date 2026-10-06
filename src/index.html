@@ -17,7 +17,7 @@
       <div id="top-right"><span class="drop" id="logo">vrt</span> <span id="addr">REYERSLAAN 52</span></div>
       <div id="station"><img id="stationlogo" alt="" /><div><span class="lbl">ERGENS SPEELT EEN RADIO</span><span id="stationname"></span></div></div>
       <canvas id="minimap" width="200" height="200"></canvas>
-      <div id="bottom-left"><div id="floor"></div><div id="loc"></div><div id="plekken"></div><div id="stappen">0 STAPPEN · 0,00 KM</div></div>
+      <div id="bottom-left"><div id="feed"></div><div id="chat"><span>ZEG</span><input id="chat-in" autocomplete="off" spellcheck="false" placeholder="iets tegen de anderen" enterkeyhint="send" /></div><div id="floor"></div><div id="loc"></div><div id="plekken"></div><div id="stappen">0 STAPPEN · 0,00 KM</div><div id="anderen"></div></div>
       <div id="bottom-right"><span id="zoom"></span><span id="lamp">LAMP</span><span class="bat"><b></b><b></b><b></b><b class="low"></b></span></div>
       <div id="prompt"></div>
       <div id="liftpanel" style="display:none">
@@ -65,18 +65,45 @@
       <div id="postcards"></div>
       <div class="card">
         <div class="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        <div class="titles">
-          <h1 class="title">VRT<br />SIMULATOR</h1>
-          <h1 class="pause">EVEN GEDULD</h1>
-          <p class="sub">een eindeloze wandeling door het oude VRT-gebouw</p>
+        <div class="hero">
+          <div class="titles">
+            <h1 class="title">VRT<br />SIMULATOR</h1>
+            <h1 class="pause">EVEN GEDULD</h1>
+            <p class="sub">een eindeloze wandeling door het oude VRT-gebouw</p>
+            <blockquote class="review">
+              <span class="label">RECENSIE</span><span class="stars">★★★★★</span>
+              <q>Tim, van alles dat je al gemaakt hebt, en je weet hoeveel respect ik heb voor Lucs Rolstoel Race, is dit het beste.</q>
+              <cite>Pauline Libeert</cite>
+            </blockquote>
+          </div>
+          <!-- your visitor's badge: the name the others see -->
+          <div id="badge" onclick="event.stopPropagation()">
+            <div class="strap" aria-hidden="true"><span>vrt · vrt · vrt · vrt · vrt · vrt · vrt · vrt · vrt · vrt · vrt · vrt · vrt · vrt · vrt · vrt · vrt · vrt · vrt · vrt</span></div>
+            <div class="clip" aria-hidden="true"></div>
+            <div class="b-card">
+              <div class="b-top"><span class="b-logo">vrt</span><b>BEZOEKER</b></div>
+              <div class="b-body">
+                <svg class="b-photo" viewBox="0 0 60 76" aria-hidden="true">
+                  <rect width="60" height="76" fill="#cfd4da" />
+                  <path d="M6 76c1-15 9-22 24-22s23 7 24 22z" fill="#8c939c" />
+                  <circle cx="30" cy="34" r="12" fill="#8c939c" />
+                  <rect x="3" y="44" width="20" height="13" rx="1.5" fill="#5d636b" />
+                  <rect x="0" y="48" width="5" height="5" fill="#5d636b" />
+                  <circle cx="19" cy="47" r="1.3" fill="#ff2e7e" />
+                </svg>
+                <div class="b-fields">
+                  <label for="name">naam</label>
+                  <input id="name" maxlength="20" autocomplete="nickname" spellcheck="false" enterkeyhint="go" />
+                  <span class="b-meta">Reyerslaan 52</span>
+                  <span class="b-meta"><span id="b-date"></span> · wereld <a id="seedlink" onclick="event.stopPropagation()"><span id="seed"></span></a></span>
+                </div>
+              </div>
+              <div class="b-code" id="b-code" aria-hidden="true"></div>
+            </div>
+          </div>
         </div>
-        <blockquote class="review">
-          <span class="label">RECENSIE</span><span class="stars">★★★★★</span>
-          <q>Tim, van alles dat je al gemaakt hebt, en je weet hoeveel respect ik heb voor Lucs Rolstoel Race, is dit het beste.</q>
-          <cite>Pauline Libeert</cite>
-        </blockquote>
-        <div class="load"><div id="loadbar"></div></div>
-        <p class="go"><span class="desk">Klik</span><span class="mob">Tik</span> om <span class="new">binnen te gaan</span><span class="cont">verder te spelen</span></p>
+        <button id="enter" type="button"><span id="loadbar"></span><span class="lbl"><span class="wait">het gebouw laadt</span><span class="new">binnengaan</span><span class="cont">verder spelen</span></span></button>
+        <p id="binnen"></p>
         <p class="resume"><span class="desk">Klik</span><span class="mob">Tik</span> om verder te gaan</p>
         <div id="savebar" onclick="event.stopPropagation()"><span id="saveinfo"></span><button id="restart">OPNIEUW BEGINNEN</button></div>
         <div id="places" onclick="event.stopPropagation()"></div>
@@ -100,9 +127,10 @@
           <span><kbd>N</kbd> geluid</span>
           <span><kbd>H</kbd> beeld</span>
           <span><kbd>P</kbd> foto</span>
+          <span><kbd>C</kbd> chat</span>
         </div>
         <p class="credits">Door <a href="https://broddin.be" target="_blank" rel="noopener" onclick="event.stopPropagation()">Tim Broddin</a> &amp; Claude Opus<br />Met dank aan Vincent Schroeven en Matti Meurisse voor hun input op het scenario<br /><span class="lic">Logo's via Wikimedia Commons · foto's De Kampioenen: Ferran Cornellà (CC BY-SA 3.0), Druyts.t (CC BY-SA 4.0) · muurschildering Hec Leemans</span></p>
-        <p class="seed">wereld <a id="seedlink"><span id="seed"></span></a> · geluid aan voor de beste ervaring</p>
+        <p class="seed">geluid aan voor de beste ervaring</p>
       </div>
     </div>
     <div id="endcard">
