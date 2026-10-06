@@ -2,7 +2,7 @@
 // kept in the browser across worlds (they're in every building), so you collect
 // them over many visits.
 import { CEIL, CELL, CH, FLOOR_MAX, FLOOR_MIN, H, MID_CZ } from "./config";
-import { K, RT, getPlan, mazeAt, radioStation, roomAnomaly, setIsThuis, towerSpec } from "./layout";
+import { K, RT, getPlan, mazeAt, radioStation, roomAnomaly, setIsThuis, towerSpec, type Plan, type Room } from "./layout";
 import { STATIONS } from "./stations";
 
 export const PLACES: { id: string; name: string }[] = [
@@ -39,6 +39,7 @@ export const PLACES: { id: string; name: string }[] = [
   { id: "doorgang", name: "De camping" },
   { id: "kantine", name: "Een kantine" },
   { id: "koffiekamer", name: "De koffiekamer" },
+  { id: "dpc", name: "Het DPC" },
   { id: "kostuums", name: "De kostuumdienst" },
   { id: "kleedkamer", name: "Een kleedkamer" },
   { id: "vipbar", name: "De VIP-bar" },
@@ -55,7 +56,7 @@ export const PLACES: { id: string; name: string }[] = [
 
 const ROOMS: Partial<Record<number, string>> = {
   [RT.MESS]: "mess", [RT.STUDIO]: "nieuwsstudio", [RT.KETNET]: "ketnet", [RT.SPORZA]: "sporza", [RT.TOOTS]: "toots",
-  [RT.REGIE]: "regie", [RT.SECURITY]: "bewaking", [RT.ARCHIVE]: "archief", [RT.CANTEEN]: "kantine", [RT.KOFFIE]: "koffiekamer", [RT.COSTUME]: "kostuums",
+  [RT.REGIE]: "regie", [RT.SECURITY]: "bewaking", [RT.ARCHIVE]: "archief", [RT.CANTEEN]: "kantine", [RT.KOFFIE]: "koffiekamer", [RT.DPC]: "dpc", [RT.COSTUME]: "kostuums",
   [RT.DRESSING]: "kleedkamer", [RT.VIPBAR]: "vipbar", [RT.VIPRESTO]: "viprestaurant", [RT.CEO]: "ceo", [RT.DOCK]: "laadperron", [RT.LOUNGE]: "pool", [RT.PASSAGE]: "doorgang",
 };
 const ODD: Record<string, string> = { poppen: "poppen", chairs: "stoelen", flooded: "onderwater", upside: "plafond", stairs: "trap" };
@@ -83,16 +84,20 @@ export function placeAt(f: number, x: number, z: number, y: number): string | nu
     return m[a.kind] ?? null;
   }
   if (k === K.ROOM) {
-    const r = p.rooms[p.room[i]!]!;
-    const an = roomAnomaly(p, r);
-    if (an && ODD[an]) return ODD[an]!;
-    if (r.type === RT.SET) return setIsThuis(p, r) ? "thuis" : "kampioenen";
-    if (r.type === RT.RADIO) return `radio-${STATIONS[radioStation(p, r)]!.logo}`;
-    const id = ROOMS[r.type];
+    const id = roomPlace(p, p.rooms[p.room[i]!]!);
     if (id) return id;
   }
   if (cz < MID_CZ && f > FLOOR_MIN && f < FLOOR_MAX) return "rtbf";
   return null;
+}
+
+// Which place a room is, if any.
+export function roomPlace(p: Plan, r: Room): string | null {
+  const an = roomAnomaly(p, r);
+  if (an && ODD[an]) return ODD[an]!;
+  if (r.type === RT.SET) return setIsThuis(p, r) ? "thuis" : "kampioenen";
+  if (r.type === RT.RADIO) return `radio-${STATIONS[radioStation(p, r)]!.logo}`;
+  return ROOMS[r.type] ?? null;
 }
 
 const KEY = "vrt-plekken";

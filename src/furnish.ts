@@ -256,6 +256,10 @@ function furnish(p: Plan): Furnished {
               const pp = wallPoint(i, d, -0.01, -off * 1.1);
               prop("prijslijst", pp.wx, y0 + 1.2, pp.wz, faceRot(d), c.gx, c.gz);
             }
+            if (r.type === RT.DPC) {
+              const sp = wallPoint(i, d, -0.01, off);
+              prop("dpcsign", sp.wx, y0 + 1.55, sp.wz, faceRot(d), c.gx, c.gz, 0, rtbf ? 1 : 0);
+            }
             // a star for the guest, a nameplate for the CEO, a board for the restaurant
             const plaque = r.type === RT.DRESSING ? 7 : r.type === RT.CEO ? 3 : r.type === RT.VIPRESTO ? 4 : -1;
             if (plaque >= 0) {
@@ -702,6 +706,7 @@ function furnishRoom(p: Plan, room: Room, rng: Rng, c: Ctx) {
 
   roomCamera(p, room, c, perimeter, roomCenter);
   if (room.type === RT.KOFFIE) return furnishKoffie(p, room, rng, c);
+  if (room.type === RT.DPC) return furnishDpc(p, room, rng, c, perimeter, roomCenter);
   if (room.type === RT.TOOTS && !isRtbf(p.cz)) return furnishToots(p, room, rng, c, perimeter, roomCenter);
   if (furnishService(p, room, rng, c, perimeter, roomCenter)) return;
   const brand = room.type === RT.KETNET || room.type === RT.SPORZA || room.type === RT.SET || room.type === RT.TOOTS;
@@ -1186,10 +1191,116 @@ function furnishKoffie(p: Plan, room: Room, rng: Rng, c: Ctx) {
   put("ledclock", S + (L - S) * 0.53, D - T, OUT, 0, 0, 2.2);
 }
 
+// Het DPC, where the computer nerds are. The live ticket dashboards along the
+// longest wall (a red LED clock above them), the Red Hat flag across from them,
+// desks with two screens each, a stand-up corner with the sprint board on wheels
+// and a dashboard on a stand, posters, and a giant Tux in a corner on beanbags.
+function furnishDpc(p: Plan, room: Room, rng: Rng, c: Ctx, perimeter: Perimeter, rc: { x: number; z: number }) {
+  const { light, prop, center, wallPoint, wallDirs, hasDoor, y0 } = c;
+  const w = room.x1 - room.x0 + 1, d = room.z1 - room.z0 + 1;
+  const rot = w >= d ? 0 : Math.PI / 2;
+  const cells = room.cells;
+  // cool panels, a lot of them off: they like it dim in here
+  for (const i of cells) {
+    const q = center(i);
+    light(q.x, y0 + CEIL - 0.03, q.z, COOL, 1.0, 7, q.gx, q.gz, "panel", { rot, dead: rng.chance(room.dark ? 0.75 : 0.35), flick: rng.chance(c.flickP) });
+  }
+  if (!perimeter.length) return;
+  const { bd, pieces } = mainWall(p, perimeter);
+  const used = new Set<string>();
+  const use = (i: number, dd: number) => used.add(i + ":" + dd);
+
+  // the dashboards: up to three pieces of the main wall, the middle ones; whiteboards on the rest
+  const m0 = Math.max(0, Math.floor((pieces.length - 3) / 2));
+  pieces.forEach(([i], k) => {
+    const wp = wallPoint(i, bd);
+    use(i, bd);
+    if (k >= m0 && k < m0 + 3) {
+      prop("dashwall", wp.wx, y0, wp.wz, faceRot(bd), wp.gx, wp.gz, (2 * k) % 4, (2 * k + 1) % 4);
+      light(wp.wx - DX[bd]! * 1.0, y0 + 1.9, wp.wz - DZ[bd]! * 1.0, [0.7, 0.8, 1.0], 0.55, 5, wp.gx, wp.gz, null);
+      if (k === m0 + Math.min(1, pieces.length - 1 - m0)) prop("ledclock", wp.wx, y0 + 2.36, wp.wz, faceRot(bd), wp.gx, wp.gz);
+    } else prop("dpcboard", wp.wx, y0 + 1.55, wp.wz, faceRot(bd), wp.gx, wp.gz, k % 2);
+  });
+
+  // the Red Hat flag across from them (or on whatever wall there is)
+  const ob = (bd + 2) % 4;
+  const across = perimeter.filter(([, dd]) => dd === ob);
+  const flagAt = across.length ? across[Math.floor(across.length / 2)]! : perimeter.find(([i, dd]) => !used.has(i + ":" + dd));
+  if (flagAt) {
+    const [i, dd] = flagAt;
+    const wp = wallPoint(i, dd);
+    prop("redhat", wp.wx, y0 + 0.95, wp.wz, faceRot(dd), wp.gx, wp.gz);
+    light(wp.wx - DX[dd]! * 1.3, y0 + 2.45, wp.wz - DZ[dd]! * 1.3, WARM, 0.65, 4.5, wp.gx, wp.gz, null);
+    use(i, dd);
+  }
+
+  // Tux in a corner without a door, on beanbags, looking into the room
+  const free = cells.filter((i) => !hasDoor(i));
+  const corners = free.filter((i) => wallDirs(i).length >= 2);
+  const tc = corners.length ? rng.pick(corners) : free.find((i) => wallDirs(i).length) ?? -1;
+  if (tc >= 0) {
+    const q = center(tc);
+    const wd = wallDirs(tc);
+    const [d1, d2] = [wd[0]!, wd[1] ?? wd[0]!];
+    const off = CELL / 2 - T - 0.62;
+    const tx = q.x + (DX[d1]! + (d2 !== d1 ? DX[d2]! : 0)) * off, tz = q.z + (DZ[d1]! + (d2 !== d1 ? DZ[d2]! : 0)) * off;
+    const face = Math.atan2(rc.x - tx, rc.z - tz);
+    prop("tux", tx, y0, tz, face + rng.range(-0.2, 0.2), q.gx, q.gz, 100);
+    for (const s of [-1, 1]) {
+      const a = face + s * 0.9;
+      const bx = tx + Math.sin(a) * 1.05, bz = tz + Math.cos(a) * 1.05;
+      prop("beanbag", bx, y0, bz, Math.atan2(rc.x - bx, rc.z - bz), Math.floor(bx / CELL), Math.floor(bz / CELL), rng.int(0, 4));
+    }
+    light(tx + Math.sin(face) * 1.2, y0 + 2.2, tz + Math.cos(face) * 1.2, WARM, 0.5, 4, q.gx, q.gz, null);
+    for (const dd of wd) use(tc, dd);
+  }
+
+  // the stand-up corner: the sprint board on wheels and a dashboard on a stand, by a
+  // wall (in the middle of one; in a corner there's only room for the board)
+  const edges = free.filter((i) => i !== tc && wallDirs(i).some((dd) => !used.has(i + ":" + dd)));
+  const mids = edges.filter((i) => wallDirs(i).length === 1);
+  const su = mids.length ? rng.pick(mids) : edges.length ? rng.pick(edges) : -1;
+  if (su >= 0) {
+    const wd = wallDirs(su).find((dd) => !used.has(su + ":" + dd))!;
+    if (wallDirs(su).length === 1) {
+      const kb = wallPoint(su, wd, 0.5, -0.5);
+      prop("kanban", kb.wx, y0, kb.wz, faceRot(wd), kb.gx, kb.gz, rng.int(0, 1));
+      const ds = wallPoint(su, wd, 0.55, 1.1);
+      prop("dashstand", ds.wx, y0, ds.wz, faceRot(wd) - 0.35, ds.gx, ds.gz, rng.int(0, 3));
+    } else {
+      // away from the other wall
+      const along = wallDirs(su).includes((wd + 1) % 4) ? -0.35 : 0.35;
+      const kb = wallPoint(su, wd, 0.5, along);
+      prop("kanban", kb.wx, y0, kb.wz, faceRot(wd), kb.gx, kb.gz, rng.int(0, 1));
+    }
+    for (const dd of wallDirs(su)) use(su, dd);
+  }
+
+  // desks everywhere else, the screens glowing blue
+  cells.forEach((i, n) => {
+    if (i === tc || i === su || hasDoor(i)) return;
+    const q = center(i);
+    if (!rng.chance(0.9)) return;
+    prop("devdesk", q.x, y0, q.z, rot, q.gx, q.gz, rng.int(0, 999));
+    if (n % 2 === 0) light(q.x, y0 + 1.15, q.z, [0.45, 0.6, 1.0], 0.35, 3.5, q.gx, q.gz, null, { flick: rng.chance(0.1) });
+  });
+
+  // posters and boards on the walls that are left, now and then a plant nobody waters
+  const posters = rng.shuffle([0, 1, 2, 3, 4, 5]);
+  for (const [i, dd] of rng.shuffle(perimeter.filter(([i, dd]) => !used.has(i + ":" + dd)))) {
+    const wp = wallPoint(i, dd);
+    const r = rng.next();
+    if (r < 0.45 && posters.length) prop("dpcposter", wp.wx, y0 + 1.6, wp.wz, faceRot(dd), wp.gx, wp.gz, posters.pop()!);
+    else if (r < 0.6) prop("dpcboard", wp.wx, y0 + 1.55, wp.wz, faceRot(dd), wp.gx, wp.gz, rng.int(0, 1));
+    else if (r < 0.7) prop("plant", wp.wx, y0, wp.wz, faceRot(dd), wp.gx, wp.gz);
+    else if (r < 0.78) prop("cabinet", wp.wx, y0, wp.wz, faceRot(dd), wp.gx, wp.gz);
+  }
+}
+
 // Security cameras in the rooms worth watching (the one in the bewaking watches the bewaking).
 const CAM_CHANCE: Partial<Record<number, number>> = {
   [RT.SECURITY]: 100, [RT.MESS]: 100, [RT.DOCK]: 80, [RT.SET]: 60, [RT.VIPBAR]: 60, [RT.STUDIO]: 45, [RT.KETNET]: 50, [RT.SPORZA]: 50,
-  [RT.CANTEEN]: 50, [RT.KOFFIE]: 50, [RT.TOOTS]: 60, [RT.COSTUME]: 50, [RT.VIPRESTO]: 50, [RT.SERVER]: 50, [RT.CEO]: 40, [RT.LOUNGE]: 40, [RT.ARCHIVE]: 35, [RT.RADIO]: 35,
+  [RT.CANTEEN]: 50, [RT.KOFFIE]: 50, [RT.DPC]: 40, [RT.TOOTS]: 60, [RT.COSTUME]: 50, [RT.VIPRESTO]: 50, [RT.SERVER]: 50, [RT.CEO]: 40, [RT.LOUNGE]: 40, [RT.ARCHIVE]: 35, [RT.RADIO]: 35,
 };
 function roomCamera(p: Plan, room: Room, c: Ctx, perimeter: Perimeter, rc: { x: number; z: number }) {
   const chance = CAM_CHANCE[room.type];

@@ -85,10 +85,14 @@ export const L = {
   STENCIL: 80, // 2 x 4 stencilled wall markings, on transparent
   BAREEL: 81, // de bareel: the blue welcome board (left half), the booth sign, the pedestrian sign
   KOFFIE: 82, // de koffiekamer: door signs, the price list, the broodjesbar, the machines (see KOFFIE_UV)
+  DPC: 83, // het DPC: door signs, the Red Hat flag, the screens on the desks (see DPC_UV)
+  SPRINT: 84, // het DPC: the sprint board on top (BOARD_UV), three posters below (POSTER_UV)
+  BURNDOWN: 85, // het DPC: the burndown and the retro on top, three more posters below
+  DASH: 86, // the live ticket dashboards, 2 x 2 panels, sampled from a separate canvas texture
 } as const;
 
 // artworks and their museum labels (8 labels per layer) follow the painted layers
-export const ART0 = 83;
+export const ART0 = 87;
 
 // where things are on the KOFFIE layer, in pixels of the 512 x 512 drawing (x0, y0, x1, y1)
 export const KOFFIE_PX = {
@@ -101,6 +105,19 @@ export const KOFFIE_PX = {
 export const KOFFIE_UV = Object.fromEntries(
   Object.entries(KOFFIE_PX).map(([k, [x0, y0, x1, y1]]) => [k, [x0 / 512, 1 - y1 / 512, x1 / 512, 1 - y0 / 512]]),
 ) as Record<keyof typeof KOFFIE_PX, [number, number, number, number]>;
+
+// where things are on the DPC layer, in pixels of the 512 x 512 drawing (x0, y0, x1, y1)
+export const DPC_PX = {
+  sign: [0, 0, 256, 128], signFr: [256, 0, 512, 128],
+  flag: [0, 128, 512, 384],
+  code: [0, 384, 128, 512], term: [128, 384, 256, 512], graph: [256, 384, 384, 512], deploy: [384, 384, 512, 512],
+} as const;
+export const DPC_UV = Object.fromEntries(
+  Object.entries(DPC_PX).map(([k, [x0, y0, x1, y1]]) => [k, [x0 / 512, 1 - y1 / 512, x1 / 512, 1 - y0 / 512]]),
+) as Record<keyof typeof DPC_PX, [number, number, number, number]>;
+// on SPRINT and BURNDOWN: the board fills the top 320 px, three posters share the 192 below
+export const BOARD_UV: [number, number, number, number] = [0, 192 / 512, 1, 1];
+export const POSTER_UV = (k: number): [number, number, number, number] => [(k * 171) / 512, 0, (k * 171 + 170) / 512, 192 / 512];
 export const LABEL0 = ART0 + ART.length;
 export const LAYER_COUNT = LABEL0 + Math.ceil(ART.length / 8);
 

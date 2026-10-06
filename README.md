@@ -10,6 +10,10 @@ bun run build   # static site in dist/
 
 URL options: `?seed=1234` (same building every time), `?floor=7` (start floor; the default is 0, the ground floor), `?debug` (fps / chunk stats).
 
+## De debug console
+
+The key left of 1 (`` ` `` or `²`) opens a console at the top of the screen. `help` lists the commands (`pos`, `seed`, `fps`, `plekken`, `clear`, `exit`), but not all of them: `warp` opens the warp menu. It lists every plek (and the active quest); type to filter, ↑↓ and Enter (or click) to go. It finds the nearest one on any floor, well beyond what the plattegrond shows, and puts you just inside its door, clear of the furniture. `warp sport` opens the menu already filtered. See `src/devconsole.ts` and `src/warp.ts`. Not on phones and tablets (no keyboard).
+
 On phones and tablets: left thumb walks (push far to run), right thumb looks, plus buttons for E, QUEST, LAMP, FOTO, KAART (the plattegrond) and pause. Play in landscape.
 
 The HUD also has a pedometer: the steps you've taken and how far you've walked.
@@ -62,6 +66,8 @@ The rekwisieten fill a warehouse two storeys high: rows of tall pallet racks ful
 
 Among the rooms: the kostuumdienst (rails of costumes, mannequins, hats, a lending counter), kleedkamers with mirrors framed in bulbs and a star on the door, a VIP bar (backlit bottles, a velvet rope), a VIP restaurant (round tables, chandeliers, a wine wall), the CEO's office on the top floors, and loading docks on the ground floor with roller doors, one of them half open onto daylight that isn't there. These rooms are converted by hash in `serviceRoom` (`src/layout.ts`), so existing floor plans stay the same.
 
+**Het DPC** (some big offices, also by hash): where the computer nerds are. Along the longest wall a row of big screens with the live ticket dashboards (open tickets, incidents coming in, the status of VRT MAX, Sporza, the radio streams..., days without an incident: never many) under a red LED clock. Across from them the Red Hat flag. Desks with two screens each (code, a terminal, Grafana, a pipeline), glowing keyboards, energy drinks, rubber ducks, hoodies over the chairs; some desks are standing desks. A stand-up corner with the sprint board on wheels (the burndown and the retro on the back) and a dashboard on a stand, posters ("It works on my machine", "Nooit deployen op vrijdag", RTFM...), and in a corner, on two beanbags, a giant Tux. The dashboards are one live canvas (`src/dashboard.ts`), only redrawn while you're near one. See `furnishDpc` in `src/furnish.ts`.
+
 **De koffiekamer** (some canteens, also by hash): two lime green double doors, with the sign and the "Prijslijst koffiekamer" next to them in the corridor. One door leads into the broodjesbar, a walled-off corner of 6 by 6 m: in through a poortje, tall fridges with drinks and salads, the counter with the fillings under glass, the ovens and panini grills behind it with the menu above, and out through another poortje. Against its outside wall stand the three coffee machines, at table height, with an orange mat in front of each. Away from the doors: high cocktail tables with green and yellow stools, low round tables, one big round table, the Coca-Cola fridge and two vending machines, TVs and a red LED clock, under a slatted metal ceiling. See `furnishKoffie` in `src/furnish.ts`; the doors are placed by `koffieDoors` in `src/layout.ts`.
 
 ## Big places
@@ -85,7 +91,7 @@ Flat figures cut out of MDF, standing in a block of pine, placed around the buil
 
 ## Plekken and postkaarten
 
-About 49 places are worth finding: the big places, every kind of room, each radio studio, the strange rooms, the top of De Toren. Walk into one and it's yours ("PLEK ONTDEKT"); the count is under the quests and the pause screen lists them all, the ones you haven't found blanked out. They're kept in the browser across worlds. See `src/places.ts`. The start screen has postcards from the building (`src/postcards/`).
+About 50 places are worth finding: the big places, every kind of room, each radio studio, the strange rooms, the top of De Toren. Walk into one and it's yours ("PLEK ONTDEKT"); the count is under the quests and the pause screen lists them all, the ones you haven't found blanked out. They're kept in the browser across worlds. See `src/places.ts`. The start screen has postcards from the building (`src/postcards/`).
 
 ## De bewaking
 

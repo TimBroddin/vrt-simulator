@@ -104,6 +104,7 @@ function surf(p: Plan, i: number): Surf {
         case RT.DOCK: return { floor: sp(L.CONCRETE, [0.62, 0.62, 0.6]), ceil: sp(L.CONCRETE, [0.72, 0.72, 0.7]), wall: sp(L.BRICK, [0.6, 0.62, 0.64]), h: CEIL, base: false };
         case RT.RADIO: return { floor: sp(L.CARPET_GREY, [0.55, 0.55, 0.6]), ceil: sp(L.CEILTILE, [0.45, 0.45, 0.48]), wall: sp(L.FABRIC, [0.3, 0.3, 0.33]), h: CEIL, base: false };
         case RT.CANTEEN: return { floor: sp(L.TILEDARK, [1.1, 1.05, 1.0]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.95, 0.9, 0.82]), h: CEIL, base: true };
+        case RT.DPC: return { floor: sp(L.CARPET_GREY, [0.42, 0.43, 0.48]), ceil: sp(L.CEILTILE, [0.85, 0.86, 0.88]), wall: sp(L.PLASTER, [0.86, 0.88, 0.9]), h: CEIL, base: true };
         case RT.KOFFIE: return { floor: sp(L.CONCRETE, [0.44, 0.45, 0.47]), ceil: sp(L.CEILMETAL, [1.1, 1.1, 1.08]), wall: sp(L.PLASTER, [0.97, 0.97, 0.95]), h: CEIL, base: false };
         case RT.ARCHIVE: return { floor: sp(L.CONCRETE), ceil: sp(L.CONCRETE, [0.8, 0.8, 0.8]), wall: sp(L.BRICK, [0.8, 0.8, 0.78]), h: CEIL, base: false };
         case RT.REGIE: return { floor: sp(L.CARPET_GREY, [0.6, 0.6, 0.65]), ceil: sp(L.BLACK), wall: sp(L.BLACK, [1.4, 1.4, 1.45]), h: CEIL, base: false };

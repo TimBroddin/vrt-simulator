@@ -18,11 +18,14 @@ import { takePhoto } from "./photo";
 import { Minimap } from "./minimap";
 import { WorldMap, nearestWay } from "./worldmap";
 import { ClockFace } from "./clockface";
+import { Dashboard } from "./dashboard";
+import { DevConsole, WarpMenu, isConsoleKey } from "./devconsole";
+import { findWarp, warpNear, type WarpSpot } from "./warp";
 import { GhostRadio } from "./radio";
 import { LiveTV } from "./live";
 import { CCTV } from "./cctv";
 import { Bareels } from "./bareel";
-import { Places, placeAt } from "./places";
+import { PLACES, Places, placeAt } from "./places";
 import { layPostcards } from "./postcards";
 import { track, trackOnce } from "./analytics";
 import { Quests } from "./quests";
@@ -38,7 +41,7 @@ const resume = saved && !params.has("floor") && (seedFromParam === null || seedF
 const seed = seedFromParam ?? resume?.seed ?? (Math.random() * 1e6) | 0;
 setSeed(seed);
 const startFloor = params.has("floor") ? Math.max(FLOOR_MIN, Math.min(FLOOR_MAX, Number(params.get("floor")))) : resume ? resume.of : 0;
-const debug = params.has("debug");
+let debug = params.has("debug");
 const touch = isTouch() || params.has("touch");
 if (touch) document.body.classList.add("touch");
 
@@ -70,6 +73,8 @@ const mat = makeWorldMaterial(atlas);
 const glassMat = makeGlassMaterial(mat);
 const clockFace = new ClockFace();
 mat.uniforms.clockTex!.value = clockFace.tex;
+const dash = new Dashboard();
+mat.uniforms.dashTex!.value = dash.tex;
 const workerUrl = (document.querySelector('meta[name="worker"]') as HTMLMetaElement | null)?.content || "/worker.js";
 const world = new World(workerUrl, seed, mat, glassMat, touch ? 1 : 2);
 scene.add(world.root);
@@ -194,6 +199,15 @@ function studioNear(): number {
       }
   return best;
 }
+// a ticket dashboard in sight: they only run while someone can see them
+function dashNear(): boolean {
+  const f = player.floor, cx = Math.floor(player.pos.x / (CH * CELL)), cz = Math.floor(player.pos.z / (CH * CELL));
+  for (let dz = -1; dz <= 1; dz++)
+    for (let dx = -1; dx <= 1; dx++)
+      for (const p of getFurnished(f, cx + dx, cz + dz).props)
+        if ((p.t === "dashwall" || p.t === "dashstand") && Math.hypot(p.x - player.pos.x, p.z - player.pos.z) < 30) return true;
+  return false;
+}
 scene.add(quests.root);
 // the end: all quests done, the floor gives way, and ten steps later you've finished the game
 const finale = new Finale(player, sound, !touch);
@@ -260,12 +274,17 @@ const canvas = renderer.domElement;
 // follows the key's position (WASD / ZQSD). Non-Latin layouts fall back to position.
 const letter = (e: KeyboardEvent, l: string) => (/^[a-z]$/i.test(e.key) ? e.key.toLowerCase() === l : e.code === `Key${l.toUpperCase()}`);
 document.addEventListener("keydown", (e) => {
+  if (dev.open || warpMenu.open) return; // they take the keys themselves
   if (worldmap.open) {
     if (letter(e, "m") || e.code === "Escape") closeMap();
     return;
   }
   player.keys.add(e.code);
   if (!locked) return;
+  if (isConsoleKey(e)) {
+    e.preventDefault();
+    return openDev();
+  }
   if (lifts.panelOpen) {
     // choosing a floor: the lift panel takes the keys
     const k = e.code;
@@ -316,10 +335,12 @@ document.addEventListener("wheel", (e) => {
   if (locked && lifts.panelOpen) return lifts.panelInput(e.deltaY < 0 ? "up" : "down");
   if (locked) zoom = Math.max(0, Math.min(1, zoom + e.deltaY * -0.001));
 });
+// the plattegrond, the console and the warp menu free the mouse without pausing
+const menuOpen = () => worldmap.open || dev.open || warpMenu.open;
 document.addEventListener("pointerlockchange", () => {
   locked = document.pointerLockElement === canvas;
-  $("overlay").classList.toggle("hidden", locked || worldmap.open);
-  if (!locked && started && !worldmap.open) {
+  $("overlay").classList.toggle("hidden", locked || menuOpen());
+  if (!locked && started && !menuOpen()) {
     places.render($("places"));
     $("overlay").classList.add("paused");
     player.keys.clear();
@@ -327,7 +348,7 @@ document.addEventListener("pointerlockchange", () => {
 });
 // the lock can be refused right after leaving it (Esc): fall back to the pause card
 document.addEventListener("pointerlockerror", () => {
-  if (!started || worldmap.open) return;
+  if (!started || menuOpen()) return;
   $("overlay").classList.remove("hidden");
   $("overlay").classList.add("paused");
 });
@@ -344,18 +365,80 @@ function openMap() {
 function closeMap() {
   if (!worldmap.open) return;
   worldmap.hide();
-  if (!touch) {
-    const r = canvas.requestPointerLock?.() as unknown as Promise<void> | undefined;
-    r?.catch?.(() => {
-      $("overlay").classList.remove("hidden");
-      $("overlay").classList.add("paused");
-    });
-  }
+  relock();
+}
+// back to walking around (if the lock is refused, the pause card)
+function relock() {
+  if (touch) return;
+  const r = canvas.requestPointerLock?.() as unknown as Promise<void> | undefined;
+  r?.catch?.(() => {
+    $("overlay").classList.remove("hidden");
+    $("overlay").classList.add("paused");
+  });
 }
 worldmap.onClose = closeMap;
 worldmap.onMinimap = () => minimap.toggle();
 worldmap.onChange = (w, how) => {
   if (w) track("waypoint_set", { how, label: w.label, floor: w.f });
+};
+
+// --- the debug console (` or ², the key left of 1), and the warp menu behind `warp`
+const dev = new DevConsole();
+const warpMenu = new WarpMenu([{ id: "quest", name: "De actieve quest" }]);
+function openDev() {
+  if (dev.open || warpMenu.open || worldmap.open || !started || finale.active) return;
+  player.keys.clear();
+  touchUi?.reset();
+  dev.show();
+  if (!touch) document.exitPointerLock?.();
+}
+dev.onClose = () => {
+  if (!warpMenu.open) relock();
+};
+warpMenu.onClose = relock;
+dev.add("pos", "waar ben ik", () => {
+  const P = player.pos, gx = Math.floor(P.x / CELL), gz = Math.floor(P.z / CELL);
+  return `${P.x.toFixed(1)}, ${P.y.toFixed(1)}, ${P.z.toFixed(1)} · ${floorName(player.floor, isRtbf(Math.floor(gz / CH)))} · ${cellLabel(player.floor, gx, gz)} · blok ${Math.floor(gx / CH)},${Math.floor(gz / CH)}`;
+});
+dev.add("seed", "de wereld", () => `wereld ${seed} · ${location.origin}${location.pathname}?seed=${seed}`);
+dev.add("fps", "fps en chunks aan/uit", () => {
+  debug = !debug;
+  $("debug").style.display = debug ? "block" : "none";
+  return debug ? "debug aan" : "debug uit";
+});
+dev.add("plekken", "welke plekken nog te vinden zijn", () => {
+  const left = PLACES.filter((p) => !places.found.has(p.id)).map((p) => p.name);
+  return `${places.count} ontdekt${left.length ? `\nnog te vinden: ${left.join(", ")}` : ""}`;
+});
+// (not on the list)
+dev.add("warp", null, (args) => {
+  warpMenu.show(places.found, args.join(" "));
+  dev.hide();
+});
+
+// Teleport, and stand still until the building around you has loaded.
+let warping = false;
+function warpTo(s: WarpSpot, label: string) {
+  player.pos.set(s.x, s.y, s.z);
+  player.viewY = s.y;
+  player.yaw = s.yaw;
+  player.pitch = 0;
+  player.vx = player.vz = 0;
+  warping = true;
+  quests.toast("WARP", label, "ok");
+}
+warpMenu.onPick = (id, name) => {
+  if (lifts.ride) return warpMenu.setNote("Niet tijdens een liftrit");
+  warpMenu.setNote("Zoeken…");
+  // (a moment for the note to show: finding something far away takes a while)
+  setTimeout(() => {
+    const P = player.pos, q = quests.activeTarget();
+    const s = id === "quest" ? q && warpNear(q.f, q.x, q.z) : findWarp(id, P.x, P.z, player.floor);
+    if (!s) return warpMenu.setNote(id === "quest" ? "Geen actieve quest" : `${name}: niets gevonden in de buurt`);
+    dev.print(`warp → ${name} · ${floorName(s.f)} · ${s.x.toFixed(1)}, ${s.z.toFixed(1)}`);
+    warpTo(s, name);
+    warpMenu.hide();
+  }, 30);
 };
 
 // the waypoint line: direction, distance, and the way up or down
@@ -487,7 +570,7 @@ function updateEnv(dt: number) {
     trackOnce(`floor${f}`, "floor_visited", { floor: f });
     const area = onRoof ? "roof" : f === FLOOR_MIN ? "parking" : /PLANTENTUIN|JARDIN/.test(label) ? "plantentuin" : label === "MIDDENGANG" ? "middengang"
       : label === "ATRIUM" ? "atrium" : STATIONS.some((st) => st.label === label) ? "radio" : /^STUDIO/.test(label) ? "studio" : /REGIE|RÉGIE/.test(label) ? "regie" : /ARCHIEF|ARCHIVES/.test(label) ? "archive"
-      : /KANTINE|CANTINE/.test(label) ? "canteen" : /KOFFIEKAMER|CAFÉTÉRIA/.test(label) ? "koffiekamer" : /^KETNET/.test(label) ? "ketnet" : /^SPORZA/.test(label) ? "sporza" : /^DECOR/.test(label) ? "tvset" : /BEWAKING|SÉCURITÉ/.test(label) ? "security" : /DECORSTRAAT|RUE DES/.test(label) ? "decorstraat" : /MARCONI/.test(label) ? "marconi" : /TOOTS/.test(label) ? "toots" : /TOREN|LA TOUR/.test(label) ? "tower" : /VRT-BOS|LE BOIS/.test(label) ? "bos" : /BAREEL|BARRIÈRE/.test(label) ? "bareel" : "";
+      : /KANTINE|CANTINE/.test(label) ? "canteen" : /KOFFIEKAMER|CAFÉTÉRIA/.test(label) ? "koffiekamer" : /^DPC$|INFORMATIQUE/.test(label) ? "dpc" : /^KETNET/.test(label) ? "ketnet" : /^SPORZA/.test(label) ? "sporza" : /^DECOR/.test(label) ? "tvset" : /BEWAKING|SÉCURITÉ/.test(label) ? "security" : /DECORSTRAAT|RUE DES/.test(label) ? "decorstraat" : /MARCONI/.test(label) ? "marconi" : /TOOTS/.test(label) ? "toots" : /TOREN|LA TOUR/.test(label) ? "tower" : /VRT-BOS|LE BOIS/.test(label) ? "bos" : /BAREEL|BARRIÈRE/.test(label) ? "bareel" : "";
     if (area) trackOnce(`area:${area}`, "area_discovered", { area });
     if (fr) trackOnce("area:rtbf", "area_discovered", { area: "rtbf" });
   }
@@ -544,10 +627,11 @@ function frame() {
   }
 
   if (ready) {
-    const active = (locked || playing || api.auto) && !worldmap.open;
+    const active = (locked || playing || api.auto) && !menuOpen();
     finale.update(dt);
+    if (warping && world.readyAround(player.pos.x, player.pos.z, player.floor, 1) >= 1) warping = false;
     if (finale.walking) player.update(dt, finale, active);
-    else if (!finale.active) player.update(dt, world, active && !lifts.ride?.phase.startsWith("clos") && !lifts.panelOpen);
+    else if (!finale.active && !warping) player.update(dt, world, active && !lifts.ride?.phase.startsWith("clos") && !lifts.panelOpen);
     if (active) pedMeters += Math.min(player.speed * dt, 1);
     if (!finale.inHall) {
       const used = quests.update(dt, interact && active && !finale.active);
@@ -566,6 +650,7 @@ function frame() {
   if (ready && !finale.inHall && (nearT -= dt) <= 0) {
     nearT = 0.4;
     nearStudio = studioNear();
+    dash.active = dashNear();
   }
   live.update(dt, started ? (radio.station >= 0 ? radio.station : nearStudio) : -1);
   if (ready && !finale.inHall) updateEnv(dt);
@@ -587,6 +672,7 @@ function frame() {
   const u = mat.uniforms;
   u.time!.value = t;
   clockFace.update();
+  dash.update(dt);
   u.lampOn!.value += (lampTarget - u.lampOn!.value) * Math.min(1, dt * 10);
   u.lampPos!.value.copy(camera.position).addScaledVector(fwd, -0.1);
   u.lampPos!.value.y -= 0.15;
@@ -681,7 +767,7 @@ $("restart").addEventListener("click", (e) => {
 });
 
 // expose for automation / debugging
-const api = { player, world, camera, lifts, bareels, sound, quests, finale, minimap, worldmap, openMap, closeMap, radio, live, cctv, places, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
+const api = { player, world, camera, lifts, bareels, sound, quests, finale, minimap, worldmap, openMap, closeMap, radio, live, cctv, places, dev, warpMenu, dash, findWarp, warpTo, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
 (window as any).__vrt = api;
 if (debug) $("debug").style.display = "block";
 frame();
