@@ -21,6 +21,23 @@ interface Feed {
   floor: string;
 }
 
+// You, as the cameras see you: someone with a camera on their shoulder. Only
+// cameras with `layer` enabled see it.
+export function makeFigure(scene: THREE.Scene, mat: THREE.ShaderMaterial, world: World, layer: number, k = 0.5) {
+  const b = new Builder(new LightCtx(0, 0, 0, "outdoor"));
+  const fr = new Frame(0, 0, 0, 0);
+  person(b, fr, [0.18, 0.2, 0.24], [0.25, 0.18, 0.12], [0.18, 0.2, 0.24], false);
+  fbox(b, fr, 0.2, 1.46, 0.05, 0.16, 0.2, 0.42, { layer: L.WHITE, tint: [0.1, 0.1, 0.11] });
+  fbox(b, fr, 0.2, 1.52, 0.29, 0.1, 0.1, 0.08, { layer: L.WHITE, tint: [0.05, 0.05, 0.05] });
+  const built = b.finish();
+  for (let i = 0; i < built.light.length; i++) built.light[i]! *= k;
+  const m = new THREE.Mesh(world.geometry(built), mat);
+  m.layers.set(layer);
+  m.frustumCulled = false;
+  scene.add(m);
+  return m;
+}
+
 export class CCTV {
   private rts = [0, 1].map(() => new THREE.WebGLRenderTarget(FW * 3, FH * 2, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false }));
   private read = 0;
@@ -44,18 +61,7 @@ export class CCTV {
     mat.uniforms.cctvTex!.value = this.rts[0]!.texture;
     mat.uniforms.cctvLabels!.value = this.labels;
     this.drawLabels();
-    // you, as the cameras see you: someone with a camera on their shoulder
-    const b = new Builder(new LightCtx(0, 0, 0, "outdoor"));
-    const fr = new Frame(0, 0, 0, 0);
-    person(b, fr, [0.18, 0.2, 0.24], [0.25, 0.18, 0.12], [0.18, 0.2, 0.24], false);
-    fbox(b, fr, 0.2, 1.46, 0.05, 0.16, 0.2, 0.42, { layer: L.WHITE, tint: [0.1, 0.1, 0.11] });
-    fbox(b, fr, 0.2, 1.52, 0.29, 0.1, 0.1, 0.08, { layer: L.WHITE, tint: [0.05, 0.05, 0.05] });
-    const built = b.finish();
-    for (let i = 0; i < built.light.length; i++) built.light[i]! *= 0.5;
-    this.figure = new THREE.Mesh(world.geometry(built), mat);
-    this.figure.layers.set(FIGURE);
-    this.figure.frustumCulled = false;
-    scene.add(this.figure);
+    this.figure = makeFigure(scene, mat, world, FIGURE);
   }
 
   // the monitor wall of the security room you're near, if any

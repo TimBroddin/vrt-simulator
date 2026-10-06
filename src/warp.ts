@@ -142,7 +142,8 @@ function locate(id: string, px: number, pz: number, pf: number): Cand | null {
         return out;
       });
     case "parkeertoren":
-      return search(px, pz, pf, 8, (cx, cz) => (getStructure(cx, cz).special === "park" ? [{ f: fl, ...cellCenter(cx, cz, 6, 6), yaw: 0 }] : []));
+      // (in an aisle, clear of the parked cars)
+      return search(px, pz, pf, 8, (cx, cz) => { const st = getStructure(cx, cz); return st.special === "park" ? [{ f: fl, ...cellCenter(cx, cz, st.park === "e" ? 4 : 7, 6), yaw: 0 }] : []; });
     case "plantentuin":
     case "atrium":
       return atrium([id === "plantentuin" ? "garden" : "lobby"], (st) => {

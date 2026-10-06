@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { L } from "./layers";
+import { L, NWS_UV } from "./layers";
 
 export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
   return new THREE.ShaderMaterial({
@@ -24,6 +24,11 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
       cctvTex: { value: null as THREE.Texture | null },
       cctvLabels: { value: null as THREE.Texture | null },
       cctvLayer: { value: L.CCTV },
+      weerTex: { value: null as THREE.Texture | null },
+      weerOn: { value: 0 },
+      weerLayer: { value: L.WEERLIVE },
+      weerMap: { value: new THREE.Vector4(...NWS_UV.weer) },
+      nwsLayer: { value: L.NWS },
     },
     vertexShader: /* glsl */ `
       in float layer;
@@ -77,6 +82,11 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
       uniform sampler2D cctvTex;
       uniform sampler2D cctvLabels;
       uniform float cctvLayer;
+      uniform sampler2D weerTex;
+      uniform float weerOn;
+      uniform float weerLayer;
+      uniform vec4 weerMap;
+      uniform float nwsLayer;
       uniform float clockLayer;
       uniform float time;
       flat in float vLive;
@@ -112,6 +122,16 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
           c *= 0.5 + 0.5 * smoothstep(0.78, 0.25, length(cell - 0.5));
           vec4 lab = texture(cctvLabels, vUv);
           t = vec4(mix(c, lab.rgb, lab.a), 1.0);
+        } else if (abs(li - weerLayer) < 0.5) {
+          // de weerstudio: the weather map, and over it whatever the studio camera sees that isn't green
+          vec3 m = texture(atlas, vec3(mix(weerMap.xy, weerMap.zw, vUv), nwsLayer)).rgb;
+          if (weerOn > 0.5) {
+            vec3 c = 1.0 - exp(-texture(weerTex, vUv).rgb * 2.4);
+            float key = smoothstep(0.03, 0.12, c.g - max(c.r, c.b));
+            c.g = min(c.g, max(c.r, c.b) + 0.03); // no green fringe
+            m = mix(c, m, key);
+          }
+          t = vec4(m, 1.0);
         } else if (abs(li - clockLayer) < 0.5) t = texture(clockTex, vUv);
         else if (abs(li - dashLayer) < 0.5) t = texture(dashTex, vUv);
         else t = texture(atlas, vec3(vUv, li));

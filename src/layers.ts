@@ -89,10 +89,15 @@ export const L = {
   SPRINT: 84, // het DPC: the sprint board on top (BOARD_UV), three posters below (POSTER_UV)
   BURNDOWN: 85, // het DPC: the burndown and the retro on top, three more posters below
   DASH: 86, // the live ticket dashboards, 2 x 2 panels, sampled from a separate canvas texture
+  NWS: 87, // door signs (douches, fietsenstalling, vossenhol), the anchor's name panel, the weather map (see NWS_UV)
+  SKYLINE: 88, // de journaalstudio: the LED wall, Brussels at dusk
+  WPANEL: 89, // het vossenhol: white wall panels
+  R3: 90, // de perszaal, het creative lab, het Tiktak-huis: door signs, the roll-up banner, sheep, the clock (see R3_UV)
+  WEERLIVE: 91, // the return monitors in de weerstudio: the studio camera, keyed over the weather map (see src/weer.ts)
 } as const;
 
 // artworks and their museum labels (8 labels per layer) follow the painted layers
-export const ART0 = 87;
+export const ART0 = 92;
 
 // where things are on the KOFFIE layer, in pixels of the 512 x 512 drawing (x0, y0, x1, y1)
 export const KOFFIE_PX = {
@@ -118,6 +123,29 @@ export const DPC_UV = Object.fromEntries(
 // on SPRINT and BURNDOWN: the board fills the top 320 px, three posters share the 192 below
 export const BOARD_UV: [number, number, number, number] = [0, 192 / 512, 1, 1];
 export const POSTER_UV = (k: number): [number, number, number, number] => [(k * 171) / 512, 0, (k * 171 + 170) / 512, 192 / 512];
+
+// where things are on the NWS layer, in pixels of the 512 x 512 drawing (x0, y0, x1, y1)
+export const NWS_PX = {
+  shower: [0, 0, 128, 64], showerFr: [128, 0, 256, 64], bikes: [256, 0, 384, 64], bikesFr: [384, 0, 512, 64],
+  vos: [0, 64, 128, 128], vosFr: [128, 64, 256, 128], laad: [256, 64, 512, 128],
+  name: [0, 128, 128, 512], nameFr: [128, 128, 256, 512],
+  weer: [256, 128, 512, 272], plaque: [352, 272, 512, 336],
+  panel: [256, 336, 384, 512],
+} as const;
+export const NWS_UV = Object.fromEntries(
+  Object.entries(NWS_PX).map(([k, [x0, y0, x1, y1]]) => [k, [x0 / 512, 1 - y1 / 512, x1 / 512, 1 - y0 / 512]]),
+) as Record<keyof typeof NWS_PX, [number, number, number, number]>;
+
+// where things are on the R3 layer, in pixels of the 512 x 512 drawing (x0, y0, x1, y1)
+export const R3_PX = {
+  pers: [0, 0, 128, 64], persFr: [128, 0, 256, 64], lab: [256, 0, 384, 64], labFr: [384, 0, 512, 64],
+  tiktak: [0, 64, 128, 128], tiktakFr: [128, 64, 256, 128], box: [256, 64, 384, 128],
+  sheep: [0, 128, 256, 256], sheepBlack: [0, 256, 256, 384], rollup: [0, 384, 256, 512],
+  clock: [256, 128, 384, 256], curtain: [384, 128, 512, 320], roof: [256, 256, 384, 384],
+} as const;
+export const R3_UV = Object.fromEntries(
+  Object.entries(R3_PX).map(([k, [x0, y0, x1, y1]]) => [k, [x0 / 512, 1 - y1 / 512, x1 / 512, 1 - y0 / 512]]),
+) as Record<keyof typeof R3_PX, [number, number, number, number]>;
 export const LABEL0 = ART0 + ART.length;
 export const LAYER_COUNT = LABEL0 + Math.ceil(ART.length / 8);
 
@@ -151,5 +179,6 @@ SCALE[L.PLYWOOD] = 2.4;
 SCALE[L.WALLPAPER] = 1.2;
 SCALE[L.HAZARD] = 0.8;
 SCALE[L.PANELS] = 2.4;
+SCALE[L.WPANEL] = 4.8; // four panels of 1.2 m
 SCALE[L.BLOCKWALL] = 2.5; // one wall height: the band stays at the bottom
 SCALE[L.CYC] = 6 * 3.6 + 2.7; // one sky from the floor to the ceiling of De Toren

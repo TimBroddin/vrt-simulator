@@ -28,6 +28,8 @@ export const PLACES: { id: string; name: string }[] = [
   { id: "bos", name: "Het VRT-bos" },
   { id: "bareel", name: "De bareel" },
   { id: "nieuwsstudio", name: "Een nieuwsstudio" },
+  { id: "journaal", name: "De journaalstudio" },
+  { id: "weer", name: "De weerstudio" },
   { id: "ketnet", name: "De Ketnet-studio" },
   { id: "sporza", name: "De Sporza-studio" },
   { id: "thuis", name: "Het decor van Thuis" },
@@ -40,6 +42,12 @@ export const PLACES: { id: string; name: string }[] = [
   { id: "kantine", name: "Een kantine" },
   { id: "koffiekamer", name: "De koffiekamer" },
   { id: "dpc", name: "Het DPC" },
+  { id: "douches", name: "De douches" },
+  { id: "fietsen", name: "De fietsenstalling" },
+  { id: "vossenhol", name: "Het vossenhol" },
+  { id: "perszaal", name: "De perszaal" },
+  { id: "creativelab", name: "Het oude creative lab" },
+  { id: "tiktak", name: "Het Tiktak-huis" },
   { id: "kostuums", name: "De kostuumdienst" },
   { id: "kleedkamer", name: "Een kleedkamer" },
   { id: "vipbar", name: "De VIP-bar" },
@@ -58,6 +66,8 @@ const ROOMS: Partial<Record<number, string>> = {
   [RT.MESS]: "mess", [RT.STUDIO]: "nieuwsstudio", [RT.KETNET]: "ketnet", [RT.SPORZA]: "sporza", [RT.TOOTS]: "toots",
   [RT.REGIE]: "regie", [RT.SECURITY]: "bewaking", [RT.ARCHIVE]: "archief", [RT.CANTEEN]: "kantine", [RT.KOFFIE]: "koffiekamer", [RT.DPC]: "dpc", [RT.COSTUME]: "kostuums",
   [RT.DRESSING]: "kleedkamer", [RT.VIPBAR]: "vipbar", [RT.VIPRESTO]: "viprestaurant", [RT.CEO]: "ceo", [RT.DOCK]: "laadperron", [RT.LOUNGE]: "pool", [RT.PASSAGE]: "doorgang",
+  [RT.JOURNAAL]: "journaal", [RT.WEER]: "weer", [RT.SHOWER]: "douches", [RT.BIKES]: "fietsen", [RT.VOS]: "vossenhol",
+  [RT.PERS]: "perszaal", [RT.LAB]: "creativelab", [RT.TIKTAK]: "tiktak",
 };
 const ODD: Record<string, string> = { poppen: "poppen", chairs: "stoelen", flooded: "onderwater", upside: "plafond", stairs: "trap" };
 

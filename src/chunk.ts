@@ -3,7 +3,7 @@
 import { CEIL, CELL, CH, CHUNK, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, MID_FLOOR, SNAKE_HALF, ST_HALF, ST_U1, ST_U2, ST_VM, T, isRtbf } from "./config";
 import { Builder, Frame, LightCtx, UP, fbox, type Built, type RGB, type Spec, type V3 } from "./builder";
 import { getFurnished } from "./furnish";
-import { K, PASS_DROP, PASS_RUN, RT, SK, TALL, gardenStair, getStructure, kindAt, mazeAt, marconiGallery, roomAnomaly, sideAt, stairFrame, tallTop, towerSpec, bosSpec, BAREEL, bareelBooms, bareelLamps, bareelCanopyLamps, type GardenStair, type Plan } from "./layout";
+import { K, PASS_DROP, PASS_RUN, RT, SK, TALL, gardenStair, getStructure, kindAt, mazeAt, marconiGallery, roomAnomaly, sideAt, stairFrame, tallTop, towerSpec, bosSpec, BAREEL, bareelBooms, bareelLamps, bareelCanopyLamps, vosHill, parkLane, parkRise, isParkLane, PARK_Z0, PARK_Z1, type GardenStair, type Plan, type Room } from "./layout";
 import { hash } from "./rng";
 import { L } from "./layers";
 import { buildFixture, buildProp } from "./props";
@@ -105,6 +105,15 @@ function surf(p: Plan, i: number): Surf {
         case RT.RADIO: return { floor: sp(L.CARPET_GREY, [0.55, 0.55, 0.6]), ceil: sp(L.CEILTILE, [0.45, 0.45, 0.48]), wall: sp(L.FABRIC, [0.3, 0.3, 0.33]), h: CEIL, base: false };
         case RT.CANTEEN: return { floor: sp(L.TILEDARK, [1.1, 1.05, 1.0]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [0.95, 0.9, 0.82]), h: CEIL, base: true };
         case RT.DPC: return { floor: sp(L.CARPET_GREY, [0.42, 0.43, 0.48]), ceil: sp(L.CEILTILE, [0.85, 0.86, 0.88]), wall: sp(L.PLASTER, [0.86, 0.88, 0.9]), h: CEIL, base: true };
+        case RT.SHOWER: return { floor: sp(L.TILE_BLUE, [0.75, 0.8, 0.85]), ceil: sp(L.CEILTILE, [0.95, 0.97, 0.98]), wall: sp(L.TILE_SMALL, [1.32, 1.34, 1.36]), h: CEIL, base: false };
+        case RT.BIKES: return { floor: sp(L.CONCRETE, [0.62, 0.63, 0.62]), ceil: sp(L.CONCRETE, [0.78, 0.78, 0.77]), wall: sp(L.BRICK_DOTS, [0.82, 0.83, 0.82]), h: CEIL, base: false };
+        case RT.JOURNAAL:
+          return { floor: sp(L.TILEDARK, [0.3, 0.42, 0.75]), ceil: sp(L.BLACK, [0.5, 0.5, 0.6]), wall: sp(L.BLACK, [0.7, 0.8, 1.2]), h: 3.3, base: false };
+        case RT.WEER: return { floor: sp(L.WHITE, [0.14, 0.66, 0.26]), ceil: sp(L.BLACK, [0.6, 0.6, 0.6]), wall: sp(L.WHITE, [0.15, 0.7, 0.28]), h: 3.3, base: false };
+        case RT.VOS: return { floor: sp(L.GRASS, [0.95, 1.45, 0.7]), ceil: sp(L.CEILTILE, [1.15, 1.16, 1.17]), wall: sp(L.WPANEL), h: 3.3, base: false };
+        case RT.PERS: return { floor: sp(L.CARPET_GREY, [0.95, 0.93, 0.9]), ceil: sp(L.CEILTILE, [1.12, 1.12, 1.14]), wall: sp(L.FABRIC, [0.66, 0.64, 0.86]), h: 3.0, base: true };
+        case RT.LAB: return { floor: sp(L.CARPET_BLUE, [0.95, 0.85, 1.45]), ceil: sp(L.CEILMETAL, [1.2, 1.2, 1.17]), wall: sp(L.PLASTER, [1.05, 1.05, 1.04]), h: CEIL, base: true };
+        case RT.TIKTAK: return { floor: sp(L.WOOD_FLOOR, [1.05, 0.9, 0.7]), ceil: sp(L.CEILTILE), wall: sp(L.PLASTER, [1.0, 0.98, 0.94]), h: 3.3, base: true };
         case RT.KOFFIE: return { floor: sp(L.CONCRETE, [0.44, 0.45, 0.47]), ceil: sp(L.CEILMETAL, [1.1, 1.1, 1.08]), wall: sp(L.PLASTER, [0.97, 0.97, 0.95]), h: CEIL, base: false };
         case RT.ARCHIVE: return { floor: sp(L.CONCRETE), ceil: sp(L.CONCRETE, [0.8, 0.8, 0.8]), wall: sp(L.BRICK, [0.8, 0.8, 0.78]), h: CEIL, base: false };
         case RT.REGIE: return { floor: sp(L.CARPET_GREY, [0.6, 0.6, 0.65]), ceil: sp(L.BLACK), wall: sp(L.BLACK, [1.4, 1.4, 1.45]), h: CEIL, base: false };
@@ -162,6 +171,9 @@ function emitCell(b: Builder, p: Plan, i: number, gx: number, gz: number, y0: nu
     return;
   }
   if (k === K.COURT) return;
+  // de parkeertoren: the ramps, and the openings they come up through
+  const lane = p.st.special === "park" ? parkLane(p.st, f, i % CH, (i / CH) | 0) : null;
+  if (lane) return buildParkLane(b, p, i, gx, gz, y0, lane);
   if (k === K.VOID) {
     const a = p.st.atrium!;
     if (f === a.f1 && a.kind === "garden") {
@@ -192,12 +204,21 @@ function emitCell(b: Builder, p: Plan, i: number, gx: number, gz: number, y0: nu
     } else {
       // a doorgang: the floor a few steps down
       const pr = k === K.ROOM ? p.rooms[p.room[i]!]! : null;
-      b.hrect(x0, z0, x1, z1, y0 - (pr?.pass ? PASS_DROP : 0), true, s.floor);
+      if (pr?.type === RT.VOS) buildHillCell(b, p, pr, x0, z0, y0, s.floor);
+      else b.hrect(x0, z0, x1, z1, y0 - (pr?.pass ? PASS_DROP : 0), true, s.floor);
       if (pr?.pass) buildPassageCell(b, p, pr, i, gx, gz, y0, s);
     }
     if (s.ceil && !(k === K.CORR && p.zone[i] === 2)) b.hrect(x0, z0, x1, z1, y0 + s.h, false, s.ceil);
   }
-  if (k === K.GARAGE) {
+  if (k === K.GARAGE && p.st.special === "park") {
+    // the bays either side of the middle aisle, nose to the ramps
+    const lx = i % CH, lz = (i / CH) | 0;
+    if ((lx === 4 || lx === 7) && lz >= PARK_Z0 && lz <= PARK_Z1 + 1) {
+      const xa = lx === 4 ? x0 : x1 - 4.8;
+      b.hrect(xa, z0 - 0.05, xa + 4.8, z0 + 0.05, y0 + 0.004, true, sp(L.WHITE, [0.8, 0.8, 0.75]), 0);
+    }
+    if (gz % 2 === 0) b.aabox(x0, y0 + 2.2, z0 - 0.2, x1, y0 + 2.6, z0 + 0.2, { all: sp(L.CONCRETE, [0.7, 0.7, 0.68]), py: null }, 1.5);
+  } else if (k === K.GARAGE) {
     const row = ((gz % 4) + 4) % 4;
     if (row === 1 || row === 2) b.hrect(x0 - 0.05, z0, x0 + 0.05, z1, y0 + 0.004, true, sp(L.WHITE, [0.8, 0.8, 0.75]), 0);
     if (row === 0) b.hrect(x0, z0 + 1.4, x1, z0 + 1.6, y0 + 0.004, true, sp(L.WHITE, [0.8, 0.7, 0.2]), 0);
@@ -707,10 +728,12 @@ function buildMidExterior(cx: number, cz: number): Built {
         }
       }
       const deck = isDeck(x, z);
+      // (the lanes of the ramps have no slabs: every floor up they're a ramp or the opening above one)
+      const ramp = deck && isParkLane(st, x, z);
       // slab band per floor, filling the plenum between one ceiling and the next floor
       // (the middengang is a single-storey bridge: its floor and its roof)
       for (let f = 1; f <= FLOOR_MAX; f++)
-        if (!st.mid || f === MID_FLOOR || f === MID_FLOOR + 1) b.aabox(gx, f * H - (deck ? 1.0 : H - CEIL) + 0.02, gz, gx + CELL, f * H - 0.03, gz + CELL, { all: slab }, 0);
+        if ((!st.mid || f === MID_FLOOR || f === MID_FLOOR + 1) && !ramp) b.aabox(gx, f * H - (deck ? 1.0 : H - CEIL) + 0.02, gz, gx + CELL, f * H - 0.03, gz + CELL, { all: slab }, 0);
       for (let d = 0; d < 4; d++) {
         const nx = x + DX[d]!, nz = z + DZ[d]!;
         if (nx < 0 || nz < 0 || nx >= CH || nz >= CH || solid(nx, nz)) continue;
@@ -741,6 +764,7 @@ function buildMidExterior(cx: number, cz: number): Built {
   for (let k = 0; k < CH; k++)
     for (const [x, z, d] of [[k, 0, 3], [k, CH - 1, 1], [0, k, 2], [CH - 1, k, 0]] as const) {
       if (st.mid && d % 2 === 0) continue; // the middengang continues east and west
+      if ((st.park === "w" && d === 0) || (st.park === "e" && d === 2)) continue; // the other half of the parkeertoren
       // where a link of the middengang meets the building, the facade only opens on that floor
       const spans: [number, number][] = !solid(x, z) ? [[0, top]] : st.mid ? [[0, MID_FLOOR * H], [(MID_FLOOR + 1) * H, top]] : [];
       const gx = X0 + x * CELL, gz = Z0 + z * CELL;
@@ -1282,6 +1306,97 @@ function buildSnake(b: Builder, p: Plan) {
     if (!open[1]) box(-w, w, w, e);
     if (!open[3]) box(-w, -e, w, -w);
   }
+}
+
+// A cell of a ramp lane in the parkeertoren. On the floor its ramp starts on: the
+// concrete slope and its underside, a curb either side with a yellow railing on
+// it, and at the top end a wall down to this floor (on the ground floor the
+// whole wedge under it is filled in). On the floor above, where it comes up: a
+// railing along both sides of the opening and across the end it doesn't arrive at.
+function buildParkLane(b: Builder, p: Plan, i: number, gx: number, gz: number, y0: number, l: { lane: number; ramp: boolean }) {
+  const lz = (i / CH) | 0, lx = i % CH;
+  const x0 = gx * CELL, x1 = x0 + CELL, z0 = gz * CELL, z1 = z0 + CELL;
+  const fl = l.ramp ? y0 : y0 - H; // the floor the ramp starts on
+  // the lane is two cells wide: curbs and railings only on its outer sides
+  const outer = [x0 + (l.ramp ? 0.1 : 0.08), x1 - (l.ramp ? 0.1 : 0.08)].filter((_, k) => !isParkLane(p.st, lx + (k ? 1 : -1), lz));
+  const ya = fl + parkRise(l.lane, lz) * H, yb = fl + parkRise(l.lane, lz + 1) * H;
+  const concrete = sp(L.CONCRETE, [0.72, 0.72, 0.7]), yellow = sp(L.WHITE, [0.9, 0.7, 0.1]), steel = sp(L.STEEL, [0.8, 0.8, 0.82]);
+  // the stairwell's wall where it stands next to the lane (a whole storey, every floor)
+  for (const d of [0, 2]) {
+    const nx = (i % CH) + DX[d]!;
+    if (p.kind[lz * CH + nx] !== K.STAIR) continue;
+    const xs = d === 0 ? x1 - T : x0 + T;
+    b.vrect(true, xs, z0, z1, y0, y0 + H, d === 0 ? -1 : 1, sp(L.PLASTER, [0.85, 0.85, 0.83]), 1.0, y0);
+    b.solid(xs - 0.12, z0, xs + 0.12, z1);
+  }
+  // a box from (xs, za, ya) to (xs, zb, yb), following the slope: w wide (x), h high, its bottom `lift` above the line
+  const slant = (xs: number, za: number, ia: number, zb: number, ib: number, w: number, h: number, lift: number, s: Spec) => {
+    const dz = zb - za, dy = ib - ia, len = Math.hypot(dz, dy);
+    const ax: V3 = [0, dy / len, dz / len], ay: V3 = [0, dz / len, -dy / len];
+    b.obox([xs, (ia + ib) / 2 + (lift + h / 2) * (dz / len), (za + zb) / 2 - (lift + h / 2) * (dy / len)], ax, ay, [1, 0, 0], [len / 2, h / 2, w / 2], s);
+  };
+  const rail = (xs: number, za: number, ia: number, zb: number, ib: number) => {
+    slant(xs, za, ia, zb, ib, 0.06, 0.06, 1.0, yellow);
+    slant(xs, za, ia, zb, ib, 0.04, 0.04, 0.5, steel);
+    for (const t of [0.25, 0.75]) {
+      const z = za + (zb - za) * t, y = ia + (ib - ia) * t;
+      b.aabox(xs - 0.03, y, z - 0.03, xs + 0.03, y + 1.03, z + 0.03, steel);
+    }
+  };
+  if (l.ramp) {
+    const n = [0, CELL, -(yb - ya)], nl = Math.hypot(n[1]!, n[2]!);
+    const up: V3 = [0, n[1]! / nl, n[2]! / nl];
+    b.quad4([[x0, ya, z0], [x1, ya, z0], [x1, yb, z1], [x0, yb, z1]], [[x0 / 4, z0 / 4], [x1 / 4, z0 / 4], [x1 / 4, z1 / 4], [x0 / 4, z1 / 4]], up, concrete);
+    b.quad4([[x0, ya - 0.35, z0], [x1, ya - 0.35, z0], [x1, yb - 0.35, z1], [x0, yb - 0.35, z1]], [[0, 0], [1, 0], [1, 1], [0, 1]], [-up[0], -up[1], -up[2]], sp(L.CONCRETE, [0.55, 0.55, 0.54]));
+    // a painted arrow up the middle, now and then
+    if (lz === (PARK_Z0 + PARK_Z1) >> 1) slant((x0 + x1) / 2, z0 + 0.6, ya + (yb - ya) * 0.2, z1 - 0.6, yb - (yb - ya) * 0.2, 0.18, 0.006, 0.003, sp(L.WHITE, [0.9, 0.9, 0.85]));
+    for (const xs of outer) {
+      slant(xs, z0, ya, z1, yb, 0.2, 0.5, -0.35, concrete);
+      rail(xs, z0, ya + 0.15, z1, yb + 0.15);
+      b.solid(xs - 0.12, z0, xs + 0.12, z1);
+    }
+    // the top end: a wall down to this floor, under the ramp
+    if (lz === (l.lane ? PARK_Z1 : PARK_Z0)) {
+      const zt = l.lane ? z1 : z0;
+      b.aabox(x0, fl, zt - 0.1, x1, fl + H - 0.35, zt + 0.1, { all: concrete }, 1);
+    }
+    // on the ground floor the wedge under the ramp is solid
+    if (p.f === 0)
+      for (const [xs, nx] of [[x0, -1], [x1, 1]] as const)
+        if (!isParkLane(p.st, lx + nx, lz)) b.quad4([[xs, fl, z0], [xs, fl, z1], [xs, yb - 0.35, z1], [xs, ya - 0.35, z0]], [[0, 0], [1, 0], [1, 1], [0, 1]], [nx, 0, 0], concrete);
+    return;
+  }
+  // the opening: railings along both sides, and across the far end
+  for (const xs of outer) {
+    rail(xs, z0, y0, z1, y0);
+    b.aabox(xs - 0.04, y0, z0, xs + 0.04, y0 + 0.12, z1, yellow);
+    b.solid(xs - 0.1, z0, xs + 0.1, z1);
+  }
+  const far = l.lane ? PARK_Z0 : PARK_Z1; // where the ramp below starts, a floor down
+  if (lz === far) {
+    const zf = l.lane ? z0 + 0.08 : z1 - 0.08;
+    b.aabox(x0, y0 + 1.0, zf - 0.03, x1, y0 + 1.06, zf + 0.03, yellow);
+    b.aabox(x0, y0, zf - 0.04, x1, y0 + 0.12, zf + 0.04, yellow);
+    for (const x of [x0 + 0.75, x0 + 1.5, x0 + 2.25]) b.aabox(x - 0.03, y0, zf - 0.03, x + 0.03, y0 + 1.0, zf + 0.03, steel);
+    b.solid(x0, zf - 0.1, x1, zf + 0.1);
+  }
+}
+
+// A cell of het vossenhol: the grass over the hills, in quads of 37.5 cm.
+function buildHillCell(b: Builder, p: Plan, r: Room, x0: number, z0: number, y0: number, s: Spec) {
+  const N = 8, st = CELL / N, sc = 3;
+  const pt = (x: number, z: number): V3 => [x, y0 + vosHill(p, r, x, z), z];
+  for (let j = 0; j < N; j++)
+    for (let k = 0; k < N; k++) {
+      const xa = x0 + k * st, za = z0 + j * st, xb = xa + st, zb = za + st;
+      const q: [V3, V3, V3, V3] = [pt(xa, za), pt(xb, za), pt(xb, zb), pt(xa, zb)];
+      // the normal from the diagonals, pointing up
+      const d1 = [q[2][0] - q[0][0], q[2][1] - q[0][1], q[2][2] - q[0][2]], d2 = [q[3][0] - q[1][0], q[3][1] - q[1][1], q[3][2] - q[1][2]];
+      let n: V3 = [d1[1]! * d2[2]! - d1[2]! * d2[1]!, d1[2]! * d2[0]! - d1[0]! * d2[2]!, d1[0]! * d2[1]! - d1[1]! * d2[0]!];
+      if (n[1] < 0) n = [-n[0], -n[1], -n[2]];
+      const l = Math.hypot(n[0], n[1], n[2]);
+      b.quad4(q, [[xa / sc, za / sc], [xb / sc, za / sc], [xb / sc, zb / sc], [xa / sc, zb / sc]], [n[0] / l, n[1] / l, n[2] / l], s);
+    }
 }
 
 // A cell of a doorgang: the walls reach down to its lower floor, and in front

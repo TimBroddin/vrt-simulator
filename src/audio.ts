@@ -305,6 +305,49 @@ export class Sound {
     this.tone(55, 0.6, 0.18, 0, "sine", 0, 1);
   }
 
+  // a car engine: idle to revving (rpm 0 to 1), off at level 0. Made on first use.
+  private eng: { g: GainNode; o: OscillatorNode[]; lp: BiquadFilterNode } | null = null;
+  engine(level: number, rpm: number) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, now = ctx.currentTime;
+    if (!this.eng) {
+      if (level <= 0) return;
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = 300;
+      const o = [0, 1].map((k) => {
+        const os = ctx.createOscillator();
+        os.type = "sawtooth";
+        os.frequency.value = 32 * (k ? 2.01 : 1);
+        os.connect(lp);
+        os.start();
+        return os;
+      });
+      const nl = ctx.createBiquadFilter();
+      nl.type = "lowpass";
+      nl.frequency.value = 500;
+      const ng = ctx.createGain();
+      ng.gain.value = 0.3;
+      this.loopNoise().connect(nl).connect(ng).connect(lp);
+      lp.connect(g).connect(this.dry);
+      this.eng = { g, o, lp };
+    }
+    const f = 30 + rpm * 85;
+    this.eng.o[0]!.frequency.setTargetAtTime(f, now, 0.08);
+    this.eng.o[1]!.frequency.setTargetAtTime(f * 2.01, now, 0.08);
+    this.eng.lp.frequency.setTargetAtTime(260 + rpm * 900, now, 0.1);
+    this.eng.g.gain.setTargetAtTime(level * (0.07 + rpm * 0.07), now, level > 0 ? 0.15 : 0.4);
+  }
+
+  // a car hitting something
+  bump(v: number) {
+    if (!this.ctx || this.muted) return;
+    this.burst(0.25, "lowpass", 260, 1, Math.min(0.6, 0.15 + v * 0.08), 0, 0, 0.5);
+    this.burst(0.12, "bandpass", 1200, 2, Math.min(0.2, v * 0.03), 0.01, 0, 0.3);
+  }
+
   motor(on: boolean) {
     if (!this.ctx) return;
     this.motorGain.gain.setTargetAtTime(on ? 0.12 : 0, this.ctx.currentTime, on ? 0.6 : 0.3);

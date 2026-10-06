@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { FLOOR_MAX, FLOOR_MIN } from "./config";
 import { ART } from "./art";
-import { ART0, DPC_PX, KOFFIE_PX, L, LABEL0, LAYER_COUNT } from "./layers";
+import { ART0, DPC_PX, KOFFIE_PX, L, LABEL0, LAYER_COUNT, NWS_PX, R3_PX } from "./layers";
 import type { LogoName } from "./logoImages";
 import { Rng } from "./rng";
 
@@ -1026,6 +1026,19 @@ const painters: Record<number, (c: Ctx) => void> = {
   },
   [L.KOFFIE]: (c) => koffieSheet(c),
   [L.DPC]: (c) => dpcSheet(c),
+  [L.NWS]: (c) => nwsSheet(c),
+  [L.SKYLINE]: (c) => skyline(c),
+  [L.R3]: (c) => r3Sheet(c),
+  [L.WPANEL]: (c) => {
+    // het vossenhol: white panels, 1.2 m each, the seams a shade darker
+    fill(c, "#efefeb");
+    blotches(c, 20, "#e2e3df", 30, 90, 0.25);
+    for (let x = 0; x < S; x += 128) {
+      fillRect(c, x, 0, 3, S, "#c3c4bf");
+      fillRect(c, x + 3, 0, 1, S, "#fafaf8");
+    }
+    noise(c, 4);
+  },
   [L.SPRINT]: (c) => {
     sprintBoard(c);
     dpcPosters(c, 0);
@@ -1629,6 +1642,289 @@ function dpcSheet(c: Ctx) {
       }
     }
   });
+}
+
+// The NWS sheet: door signs for the douches, the fietsenstalling and het
+// vossenhol, the charging point sign, the anchor's name panel, the weather map
+// on the return monitors, the plaque in het vossenhol.
+function nwsSheet(c: Ctx) {
+  const K = NWS_PX;
+  const box = (k: keyof typeof K) => { const [x0, y0, x1, y1] = K[k]; return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }; };
+  // door signs, like the other services' (at half the size: 128 x 64)
+  for (const [k, t, edge] of [
+    ["shower", "DOUCHES", "#2a9ad6"], ["showerFr", "DOUCHES", "#1a64c8"],
+    ["bikes", "FIETSENSTALLING", "#7ac70c"], ["bikesFr", "PARKING VÉLOS", "#1a64c8"],
+    ["vos", "VOSSENHOL", "#e2711d"], ["vosFr", "TERRIER", "#1a64c8"],
+  ] as const) {
+    const b = box(k);
+    fillRect(c, b.x, b.y, b.w, b.h, "#2b2d31");
+    fillRect(c, b.x, b.y, 7, b.h, edge);
+    text(c, t, b.x + 68, b.y + 33, t.length > 11 ? 11 : t.length > 8 ? 14 : 17, "#f5f5f5", "700");
+  }
+  // LAADPUNT E-BIKES: white on green, a bolt and a plug
+  {
+    const b = box("laad");
+    fillRect(c, b.x, b.y, b.w, b.h, "#1d8a3c");
+    fillRect(c, b.x + 4, b.y + 4, b.w - 8, b.h - 8, "#21a046");
+    c.fillStyle = "#ffe14a";
+    c.beginPath();
+    for (const [x, y] of [[30, 8], [16, 34], [27, 34], [20, 56], [40, 26], [29, 26], [36, 8]]) c.lineTo(b.x + x!, b.y + y!);
+    c.closePath();
+    c.fill();
+    text(c, "LAADPUNT", b.x + 148, b.y + 23, 24, "#fff", "800");
+    text(c, "E-BIKES · enkel voor personeel", b.x + 148, b.y + 46, 12, "#e6f6e9", "600");
+  }
+  // the anchor's name panel: a tall blue panel, lighter at the top, the name in white
+  for (const [k, l1, l2] of [["name", "Wim", "De Vilder"], ["nameFr", "Le JT", "19h30"]] as const) {
+    const b = box(k);
+    aspect(c, 1.3 / 3.0, (w, h) => {
+      const g = c.createLinearGradient(0, 0, w * 0.6, h);
+      g.addColorStop(0, "#5aa0f0");
+      g.addColorStop(0.45, "#2f6fd8");
+      g.addColorStop(1, "#1846a8");
+      c.fillStyle = g;
+      c.fillRect(0, 0, w, h);
+      c.fillStyle = "rgba(255,255,255,0.05)";
+      c.beginPath(); c.ellipse(w * 1.05, h * 0.7, w * 0.9, h * 0.5, 0, 0, 7); c.fill();
+      text(c, l1, w * 0.1, h * 0.3, w * 0.17, "#fff", "300", "left");
+      text(c, l2, w * 0.1, h * 0.36, w * 0.17, "#fff", "300", "left");
+    }, b.x, b.y, b.w, b.h);
+  }
+  // a plain blue panel, the same blue
+  {
+    const b = box("panel");
+    const g = c.createLinearGradient(b.x, b.y, b.x + b.w, b.y + b.h);
+    g.addColorStop(0, "#4b92ea");
+    g.addColorStop(1, "#1d4fb0");
+    c.fillStyle = g;
+    c.fillRect(b.x, b.y, b.w, b.h);
+  }
+  // the weather map: Belgium in green on a blue sea, sun and clouds, temperatures
+  {
+    const b = box("weer");
+    aspect(c, 16 / 9, (w, h) => {
+      const g = c.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, "#2a6fc4");
+      g.addColorStop(1, "#174f99");
+      c.fillStyle = g;
+      c.fillRect(0, 0, w, h);
+      // (lon, lat) along the border, clockwise from De Panne
+      const BE = [
+        [2.55, 51.09], [3.37, 51.37], [3.85, 51.21], [4.25, 51.37], [4.53, 51.48], [4.78, 51.43], [5.03, 51.48], [5.24, 51.31], [5.56, 51.27], [5.85, 51.15], [5.64, 50.85],
+        [5.69, 50.76], [6.02, 50.75], [6.27, 50.63], [6.4, 50.33], [6.14, 50.13], [5.97, 50.17], [5.75, 49.98], [5.82, 49.55], [5.47, 49.5], [4.85, 49.79], [4.87, 50.15],
+        [4.43, 49.94], [4.15, 50.0], [4.23, 50.27], [3.71, 50.35], [3.29, 50.53], [3.06, 50.78], [2.62, 50.8],
+      ];
+      const px = (lon: number) => w * 0.16 + (lon - 2.5) * h * 0.235, py = (lat: number) => h * 0.08 + (51.55 - lat) * h * 0.37;
+      c.fillStyle = "#3d9a3a";
+      c.beginPath();
+      for (const [lon, lat] of BE) c.lineTo(px(lon!), py(lat!));
+      c.closePath();
+      c.fill();
+      c.strokeStyle = "#cfe8c4";
+      c.lineWidth = 1.2;
+      c.stroke();
+      const sun = (x: number, y: number, r: number) => {
+        c.fillStyle = "#ffd21f";
+        c.beginPath(); c.arc(x, y, r, 0, 7); c.fill();
+        c.strokeStyle = "#ffd21f"; c.lineWidth = r * 0.25;
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          c.beginPath(); c.moveTo(x + Math.cos(a) * r * 1.3, y + Math.sin(a) * r * 1.3); c.lineTo(x + Math.cos(a) * r * 1.7, y + Math.sin(a) * r * 1.7); c.stroke();
+        }
+      };
+      const cloud = (x: number, y: number, r: number, col = "#f4f6f8") => {
+        c.fillStyle = col;
+        for (const [ox, oy, rr] of [[-0.7, 0.2, 0.6], [0, -0.15, 0.85], [0.75, 0.2, 0.6]]) { c.beginPath(); c.arc(x + ox! * r, y + oy! * r, rr! * r, 0, 7); c.fill(); }
+        c.fillRect(x - r * 0.7, y + r * 0.1, r * 1.45, r * 0.7);
+      };
+      sun(px(3.3), py(51.15), 9);
+      cloud(px(3.6), py(51.0), 9);
+      sun(px(4.4), py(50.95), 8);
+      cloud(px(5.4), py(51.05), 10);
+      cloud(px(5.5), py(50.25), 10, "#c9ced4");
+      c.strokeStyle = "#7fc4ff"; c.lineWidth = 1.5;
+      for (let k = 0; k < 4; k++) { c.beginPath(); c.moveTo(px(5.3) + k * 5, py(50.12)); c.lineTo(px(5.3) + k * 5 - 3, py(50.0)); c.stroke(); }
+      for (const [t, lon, lat] of [["17°", 2.95, 51.0], ["19°", 4.4, 51.2], ["20°", 4.35, 50.72], ["18°", 5.55, 50.62], ["14°", 5.75, 49.9], ["19°", 3.75, 50.62]] as const) {
+        text(c, t, px(lon) + 1, py(lat) + 1, 13, "rgba(0,0,0,0.5)", "800");
+        text(c, t, px(lon), py(lat), 13, "#fff", "800");
+      }
+      fillRect(c, 0, h - 18, w, 18, "rgba(5,20,50,0.85)");
+      text(c, "HET WEER", 10, h - 9, 10, "#fff", "800", "left");
+      text(c, "MORGEN · zon en wolken, later een bui in de Ardennen", w - 8, h - 9, 7, "#cfe0f5", "500", "right");
+    }, b.x, b.y, b.w, b.h);
+  }
+  // in het vossenhol, by the door
+  {
+    const b = box("plaque");
+    fillRect(c, b.x, b.y, b.w, b.h, "#e9ebe7");
+    fillRect(c, b.x + 4, b.y + 4, b.w - 8, b.h - 8, "#f6f7f4");
+    text(c, "VOSSENHOL", b.x + b.w / 2, b.y + 24, 22, "#1f5d57", "700");
+    text(c, "Afdeling Vossenwelzijn · VRT", b.x + b.w / 2, b.y + 44, 9.5, "#3b6f69", "500");
+  }
+}
+
+// The R3 sheet: door signs for de perszaal, het creative lab and het
+// Tiktak-huis; the roll-up banner; for Tik Tak the
+// sheep, the clock, the striped curtains in the arches, the red roof and a box.
+function r3Sheet(c: Ctx) {
+  const K = R3_PX;
+  const box = (k: keyof typeof K) => { const [x0, y0, x1, y1] = K[k]; return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }; };
+  c.clearRect(0, 0, S, S);
+  for (const [k, t, edge] of [
+    ["pers", "PERSZAAL", "#e8326e"], ["persFr", "SALLE DE PRESSE", "#1a64c8"],
+    ["lab", "CREATIVE LAB", "#7b4fd6"], ["labFr", "CREATIVE LAB", "#1a64c8"],
+    ["tiktak", "TIK TAK", "#e2a21d"], ["tiktakFr", "TIC TAC", "#1a64c8"],
+  ] as const) {
+    const b = box(k);
+    fillRect(c, b.x, b.y, b.w, b.h, "#2b2d31");
+    fillRect(c, b.x, b.y, 7, b.h, edge);
+    text(c, t, b.x + 68, b.y + 33, t.length > 11 ? 11 : t.length > 8 ? 14 : 17, "#f5f5f5", "700");
+  }
+  // a Tik Tak box: dark blue, the yellow title
+  {
+    const b = box("box");
+    fillRect(c, b.x, b.y, b.w, b.h, "#2a2f9a");
+    c.fillStyle = "#4a52d8";
+    c.beginPath(); c.arc(b.x + 96, b.y + 18, 26, 0, 7); c.fill();
+    text(c, "TIK", b.x + 40, b.y + 26, 24, "#ffd21a", "900");
+    text(c, "TAK", b.x + 84, b.y + 46, 24, "#ffd21a", "900");
+  }
+  // the roll-up banner in de perszaal: white, the logo in a green circle (drawn for 0.85 x 2 m)
+  {
+    const b = box("rollup");
+    aspect(c, 0.85 / 2.0, (w, h) => {
+      fillRect(c, 0, 0, w, h, "#f4f5f2");
+      c.fillStyle = "#5fd13a";
+      c.beginPath(); c.arc(w * 0.62, h * 0.25, w * 0.3, 0, 7); c.fill();
+      text(c, "vrt", w * 0.62, h * 0.255, w * 0.24, "#fff", "700");
+      fillRect(c, 0, h * 0.94, w, h * 0.06, "#d9dbd6");
+    }, b.x, b.y, b.w, b.h);
+  }
+  // the sheep, cut out of cardboard: a cloud of wool, the head, two legs
+  for (const [k, head] of [["sheep", "#8f8f8c"], ["sheepBlack", "#222"]] as const) {
+    const b = box(k);
+    c.save();
+    c.translate(b.x, b.y);
+    c.fillStyle = "#4a4643";
+    c.fillRect(150, 92, 16, 34);
+    c.fillStyle = head;
+    c.fillRect(72, 92, 16, 34);
+    c.fillStyle = "#b8b6b1";
+    c.beginPath(); c.ellipse(140, 64, 82, 40, 0, 0, 7); c.fill();
+    for (let n = 0; n < 22; n++) {
+      const a = (n / 22) * Math.PI * 2;
+      c.fillStyle = n % 2 ? "#c9c7c2" : "#d6d4cf";
+      c.beginPath(); c.arc(140 + Math.cos(a) * 70, 64 + Math.sin(a) * 32, 15, 0, 7); c.fill();
+    }
+    c.fillStyle = "#d9d7d2";
+    c.beginPath(); c.ellipse(140, 62, 70, 30, 0, 0, 7); c.fill();
+    c.strokeStyle = "#c3c1bc"; c.lineWidth = 2;
+    for (let n = 0; n < 16; n++) { c.beginPath(); c.arc(90 + (n % 8) * 15, 50 + Math.floor(n / 8) * 22, 7, 0, 7); c.stroke(); }
+    // the head, pointing down to the grass
+    c.fillStyle = head;
+    c.beginPath(); c.moveTo(78, 40); c.quadraticCurveTo(30, 52, 12, 92); c.quadraticCurveTo(26, 100, 44, 88); c.quadraticCurveTo(66, 74, 86, 66); c.closePath(); c.fill();
+    c.beginPath(); c.ellipse(70, 46, 16, 7, -0.5, 0, 7); c.fill();
+    c.fillStyle = "#111"; c.beginPath(); c.arc(42, 66, 3, 0, 7); c.fill();
+    c.restore();
+  }
+  // the clock on the tower: a black flower of four round petals, a cardboard middle
+  {
+    const b = box("clock");
+    const cx = b.x + 64, cy = b.y + 64;
+    fillRect(c, b.x, b.y, b.w, b.h, "#cf9a54");
+    c.fillStyle = "#f0e9dc"; c.beginPath(); c.arc(cx, cy, 58, 0, 7); c.fill();
+    c.strokeStyle = "#111"; c.lineWidth = 3; c.stroke();
+    c.fillStyle = "#111";
+    for (let k = 0; k < 4; k++) {
+      const a = Math.PI / 4 + (k * Math.PI) / 2;
+      c.beginPath(); c.arc(cx + Math.cos(a) * 26, cy + Math.sin(a) * 26, 22, 0, 7); c.fill();
+    }
+    c.fillStyle = "#d8b27c"; c.beginPath(); c.arc(cx, cy, 20, 0, 7); c.fill();
+    noise(c, 10, true, b.x, b.y, b.w, b.h);
+  }
+  // a doorway: an arch with green and yellow stripes, a dark cut edge, nothing around it
+  {
+    const b = box("curtain");
+    c.save();
+    c.beginPath();
+    c.moveTo(b.x + 4, b.y + b.h);
+    c.lineTo(b.x + 4, b.y + 64);
+    c.arc(b.x + 64, b.y + 64, 60, Math.PI, 0);
+    c.lineTo(b.x + 124, b.y + b.h);
+    c.closePath();
+    c.fillStyle = "#3b4a25";
+    c.fill();
+    c.clip();
+    for (let x = 0; x < 128; x += 14) {
+      fillRect(c, b.x + x + 8, b.y, 7, b.h, "#2f6a2c");
+      fillRect(c, b.x + x + 15, b.y, 7, b.h, "#b8c46a");
+    }
+    c.strokeStyle = "#3a2f22"; c.lineWidth = 8; c.stroke();
+    c.restore();
+  }
+  // the roof: red, ribbed
+  {
+    const b = box("roof");
+    fillRect(c, b.x, b.y, b.w, b.h, "#d9452c");
+    for (let x = 0; x < b.w; x += 12) {
+      fillRect(c, b.x + x, b.y, 3, b.h, "#b8331f");
+      fillRect(c, b.x + x + 3, b.y, 1, b.h, "#ee6a50");
+    }
+    noise(c, 8, true, b.x, b.y, b.w, b.h);
+  }
+}
+
+// The LED wall of de journaalstudio: Brussels at dusk in blue, plain blue below.
+// Tiles across: the skyline wraps.
+function skyline(c: Ctx) {
+  const g = c.createLinearGradient(0, 0, 0, S);
+  g.addColorStop(0, "#0d2f86");
+  g.addColorStop(0.35, "#3477d8");
+  g.addColorStop(0.55, "#8cc2f2");
+  g.addColorStop(0.58, "#4f8fe0");
+  g.addColorStop(1, "#1a4cc0");
+  c.fillStyle = g;
+  c.fillRect(0, 0, S, S);
+  // thin clouds
+  for (let i = 0; i < 9; i++) {
+    const x = R() * S, y = 60 + R() * 170, w = 60 + R() * 110;
+    for (const ox of [-S, 0, S]) {
+      c.fillStyle = `rgba(220,235,255,${0.12 + R() * 0.12})`;
+      c.beginPath(); c.ellipse(x + ox, y, w, 6 + R() * 6, 0, 0, 7); c.fill();
+    }
+  }
+  // the city: rows of blocks, further ones paler, lit windows
+  const H0 = S * 0.56;
+  for (const [far, col, hmin, hmax] of [[1, "#6d9fe0", 6, 26], [0, "#3a6cc4", 8, 44]] as const) {
+    let x = 0;
+    while (x < S) {
+      const w = 6 + R() * 18, h = hmin + R() * (hmax - hmin);
+      c.fillStyle = col;
+      c.fillRect(x, H0 - h + far * 6, w, h + 80);
+      if (!far) for (let wy = H0 - h + 4; wy < H0 + 60; wy += 5) for (let wx = x + 2; wx < x + w - 2; wx += 4) if (R() < 0.3) fillRect(c, wx, wy, 2, 2, R() < 0.5 ? "#ffe9b0" : "#cfe6ff");
+      x += w;
+    }
+  }
+  // the Reyers tower on the left, the Atomium on the right
+  c.fillStyle = "#2c5bb0";
+  fillRect(c, 96, H0 - 120, 6, 120, "#2c5bb0");
+  c.beginPath(); c.ellipse(99, H0 - 100, 16, 5, 0, 0, 7); c.fill();
+  fillRect(c, 98, H0 - 150, 2, 30, "#2c5bb0");
+  for (const [ax, ay] of [[380, H0 - 64], [368, H0 - 50], [392, H0 - 50], [380, H0 - 36], [370, H0 - 62], [390, H0 - 62]]) { c.beginPath(); c.arc(ax!, ay!, 5, 0, 7); c.fill(); }
+  fillRect(c, 379, H0 - 64, 2, 64, "#2c5bb0");
+  // the ground below the city, then the plain lower half of the screens
+  fillRect(c, 0, H0 + 40, S, S - H0 - 40, "#2457c8");
+  const g2 = c.createLinearGradient(0, H0 + 40, 0, S);
+  g2.addColorStop(0, "rgba(120,180,255,0.35)");
+  g2.addColorStop(1, "rgba(10,30,120,0.4)");
+  c.fillStyle = g2;
+  c.fillRect(0, H0 + 40, S, S - H0 - 40);
+  // the seams between the LED tiles
+  c.fillStyle = "rgba(0,8,30,0.35)";
+  for (let k = 0; k < S; k += 64) {
+    c.fillRect(k, 0, 1.5, S);
+    c.fillRect(0, k, S, 1.5);
+  }
 }
 
 // whiteboard: wiped a hundred times, never quite clean (the top 512 x 320 of the layer)

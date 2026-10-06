@@ -24,6 +24,8 @@ import { findWarp, warpNear, type WarpSpot } from "./warp";
 import { GhostRadio } from "./radio";
 import { LiveTV } from "./live";
 import { CCTV } from "./cctv";
+import { WeerCam } from "./weer";
+import { Cars } from "./cars";
 import { Bareels } from "./bareel";
 import { PLACES, Places, placeAt } from "./places";
 import { layPostcards } from "./postcards";
@@ -130,9 +132,10 @@ function surfaceAt(f: number, gx: number, gz: number): { s: Surface; wet: number
     case K.ROOM: {
       if (anomalyAt(f, gx, gz) === "flooded") return { s: "wet", wet: 0.7 };
       const t = p.rooms[p.room[i]!]!.type;
+      if (t === RT.SHOWER) return { s: "wet", wet: 0.6 };
       if (t === RT.BATH || t === RT.SERVER || t === RT.CANTEEN || t === RT.KOFFIE) return { s: "tile", wet: 0.35 };
-      if (t === RT.STORAGE || t === RT.ARCHIVE || t === RT.DOCK) return { s: "concrete", wet: 0.3 };
-      if (t === RT.STUDIO || t === RT.KETNET || t === RT.SPORZA || t === RT.SET) return { s: "wood", wet: 0.12 };
+      if (t === RT.STORAGE || t === RT.ARCHIVE || t === RT.DOCK || t === RT.BIKES) return { s: "concrete", wet: 0.3 };
+      if (t === RT.STUDIO || t === RT.KETNET || t === RT.SPORZA || t === RT.SET || t === RT.JOURNAAL || t === RT.WEER || t === RT.TIKTAK) return { s: "wood", wet: 0.12 };
       return { s: "carpet", wet: 0.15 };
     }
     case K.STAIR: return { s: "stair", wet: 0.7 };
@@ -170,6 +173,8 @@ const minimap = new Minimap(!touch);
 const worldmap = new WorldMap();
 const live = new LiveTV(mat.uniforms);
 const cctv = new CCTV(renderer, scene, mat, world, player, touch);
+const weer = new WeerCam(renderer, scene, mat, world, player, touch);
+const cars = new Cars(scene, mat, world, player, sound, seed);
 const bareels = new Bareels(scene, mat, world, player, sound);
 // plekken: the places you've found, kept across visits
 const places = new Places();
@@ -419,6 +424,7 @@ dev.add("warp", null, (args) => {
 // Teleport, and stand still until the building around you has loaded.
 let warping = false;
 function warpTo(s: WarpSpot, label: string) {
+  cars.leave(true);
   player.pos.set(s.x, s.y, s.z);
   player.viewY = s.y;
   player.yaw = s.yaw;
@@ -631,11 +637,13 @@ function frame() {
     finale.update(dt);
     if (warping && world.readyAround(player.pos.x, player.pos.z, player.floor, 1) >= 1) warping = false;
     if (finale.walking) player.update(dt, finale, active);
-    else if (!finale.active && !warping) player.update(dt, world, active && !lifts.ride?.phase.startsWith("clos") && !lifts.panelOpen);
+    else if (!finale.active && !warping && !cars.driving) player.update(dt, world, active && !lifts.ride?.phase.startsWith("clos") && !lifts.panelOpen);
     if (active) pedMeters += Math.min(player.speed * dt, 1);
     if (!finale.inHall) {
-      const used = quests.update(dt, interact && active && !finale.active);
-      lifts.update(t, dt, interact && !used && !finale.active);
+      if (finale.active) cars.leave(true);
+      const inCar = cars.update(dt, interact && !finale.active, active) || !!cars.driving;
+      const used = quests.update(dt, interact && active && !finale.active && !inCar);
+      lifts.update(t, dt, interact && !used && !inCar && !finale.active);
     }
   }
   interact = false;
@@ -655,6 +663,7 @@ function frame() {
   live.update(dt, started ? (radio.station >= 0 ? radio.station : nearStudio) : -1);
   if (ready && !finale.inHall) updateEnv(dt);
   if (ready && started && !finale.inHall) cctv.update(dt);
+  if (ready && started && !finale.inHall) weer.update(dt);
   if (ready && !finale.inHall) bareels.update(dt);
 
   if (flickNear > 0 && t - lastFlickBuzz > 0.12 && Math.random() < flickNear * 0.25) {
@@ -663,6 +672,7 @@ function frame() {
   }
 
   player.apply(camera, t);
+  cars.apply(camera);
   const fov = 72 - zoom * 42;
   if (Math.abs(camera.fov - fov) > 0.01) {
     camera.fov += (fov - camera.fov) * Math.min(1, dt * 8);
@@ -709,7 +719,7 @@ function frame() {
   if (locked || playing || api.auto) {
     $("tc").textContent = timecode(recT);
     $("rec").style.visibility = Math.floor(t * 1.4) % 2 ? "hidden" : "visible";
-    $("prompt").textContent = finale.active ? "" : quests.prompt || lifts.prompt;
+    $("prompt").textContent = finale.active ? "" : cars.prompt || quests.prompt || lifts.prompt;
     const disp = lifts.display;
     $("liftdisp").style.display = disp !== null ? "" : "none";
     if (disp !== null) $("liftnum").textContent = disp === String(FLOOR_MAX) ? "D" : disp;
@@ -767,7 +777,7 @@ $("restart").addEventListener("click", (e) => {
 });
 
 // expose for automation / debugging
-const api = { player, world, camera, lifts, bareels, sound, quests, finale, minimap, worldmap, openMap, closeMap, radio, live, cctv, places, dev, warpMenu, dash, findWarp, warpTo, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
+const api = { player, world, camera, lifts, bareels, sound, quests, finale, minimap, worldmap, openMap, closeMap, radio, live, cctv, weer, cars, places, dev, warpMenu, dash, findWarp, warpTo, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
 (window as any).__vrt = api;
 if (debug) $("debug").style.display = "block";
 frame();
