@@ -45,6 +45,7 @@ export const RT = {
   TOOTS: 24, // Studio Toots: a small Marconi
   PASSAGE: 25, // een doorgang: steps down from one corridor, steps up to another
   KOFFIE: 26, // de koffiekamer: the broodjesbar, the coffee machines, cocktail tables
+  DPC: 27, // het DPC: the computer nerds, dashboards, a Red Hat flag, a giant Tux
 } as const;
 
 export const ROOM_LABEL = [
@@ -75,6 +76,7 @@ export const ROOM_LABEL = [
   "STUDIO TOOTS",
   "DE CAMPING",
   "KOFFIEKAMER",
+  "DPC",
 ];
 
 // Side kinds
@@ -568,7 +570,7 @@ function makePlan(f: number, cx: number, cz: number): Plan {
     if (t === RT.MESS) continue; // its doors were placed above
     const openP = t === RT.STORAGE || t === RT.SERVER ? 0.45 : t === RT.BATH ? 0.9 : 0.78;
     // (rooms converted from offices, meetings and edit suites make the same draw, so the rest of the floor stays the same)
-    const glassDraw = (t === RT.OFFICE || t === RT.MEETING || t === RT.EDIT || t === RT.RADIO || t === RT.COSTUME || t === RT.DRESSING || t === RT.CEO) && rng.chance(0.35);
+    const glassDraw = (t === RT.OFFICE || t === RT.MEETING || t === RT.EDIT || t === RT.RADIO || t === RT.COSTUME || t === RT.DRESSING || t === RT.CEO || t === RT.DPC) && rng.chance(0.35);
     room.glass = glassDraw && t !== RT.DRESSING;
     const nDoors = room.cells.length >= 6 && rng.chance(0.4) ? 2 : 1;
     rng.shuffle(cands);
@@ -746,11 +748,11 @@ function brandRoom(t: number, area: number, h: number): number {
 }
 
 // The building's services: the kostuumdienst, kleedkamers, the VIP bar and
-// restaurant, the CEO (top floors only) and the loading docks (ground floor).
-// Also by hash, and only from types that keep the random stream the same.
+// restaurant, the CEO (top floors only), the loading docks (ground floor) and
+// het DPC. Also by hash, and only from types that keep the random stream the same.
 function serviceRoom(t: number, area: number, mn: number, f: number, h: number): number {
   const big = area >= 9 && mn >= 3;
-  if (t === RT.OFFICE && big) return h < 9 ? RT.COSTUME : f >= 9 && h < 20 ? RT.CEO : t;
+  if (t === RT.OFFICE && big) return h < 9 ? RT.COSTUME : f >= 9 && h < 20 ? RT.CEO : h >= 85 ? RT.DPC : t;
   if (t === RT.OFFICE && area >= 4) return h < 7 ? RT.DRESSING : f >= 9 && h < 13 ? RT.CEO : t;
   if (t === RT.MEETING && area >= 4) return h < 12 ? RT.DRESSING : t;
   if (t === RT.CANTEEN) return h < 35 ? RT.VIPRESTO : h < 62 ? RT.KOFFIE : t;
@@ -1045,7 +1047,7 @@ export function lightPass(f: number, gx: number, gz: number, d: number): boolean
 }
 
 // Human readable label for a cell (HUD).
-const ROOM_LABEL_FR = ["BUREAU", "SALLE DE RÉUNION", "SANITAIRES", "RÉSERVE", "SALLE DES SERVEURS", "STUDIO", "CANTINE", "ARCHIVES", "RÉGIE", "LOCAL VIDE", "MONTAGE", "LE MESS", "SALLE DE DÉTENTE", "STUDIO RADIO", "STUDIO", "STUDIO", "STUDIO", "COSTUMES", "LOGE", "BAR VIP", "RESTAURANT VIP", "BUREAU DU CEO", "QUAI DE CHARGEMENT", "SÉCURITÉ", "STUDIO TOOTS", "LE CAMPING", "CAFÉTÉRIA"];
+const ROOM_LABEL_FR = ["BUREAU", "SALLE DE RÉUNION", "SANITAIRES", "RÉSERVE", "SALLE DES SERVEURS", "STUDIO", "CANTINE", "ARCHIVES", "RÉGIE", "LOCAL VIDE", "MONTAGE", "LE MESS", "SALLE DE DÉTENTE", "STUDIO RADIO", "STUDIO", "STUDIO", "STUDIO", "COSTUMES", "LOGE", "BAR VIP", "RESTAURANT VIP", "BUREAU DU CEO", "QUAI DE CHARGEMENT", "SÉCURITÉ", "STUDIO TOOTS", "LE CAMPING", "CAFÉTÉRIA", "INFORMATIQUE"];
 
 export function cellLabel(f: number, gx: number, gz: number): string {
   const { p, i } = planAt(f, gx, gz);

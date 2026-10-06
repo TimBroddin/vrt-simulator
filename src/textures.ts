@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { FLOOR_MAX, FLOOR_MIN } from "./config";
 import { ART } from "./art";
-import { ART0, KOFFIE_PX, L, LABEL0, LAYER_COUNT } from "./layers";
+import { ART0, DPC_PX, KOFFIE_PX, L, LABEL0, LAYER_COUNT } from "./layers";
 import type { LogoName } from "./logoImages";
 import { Rng } from "./rng";
 
@@ -1025,6 +1025,15 @@ const painters: Record<number, (c: Ctx) => void> = {
     c.fillStyle = "#111"; c.fillRect(460, 120, 36, 140);
   },
   [L.KOFFIE]: (c) => koffieSheet(c),
+  [L.DPC]: (c) => dpcSheet(c),
+  [L.SPRINT]: (c) => {
+    sprintBoard(c);
+    dpcPosters(c, 0);
+  },
+  [L.BURNDOWN]: (c) => {
+    burndownBoard(c);
+    dpcPosters(c, 3);
+  },
   [L.ONAIR]: (c) => {
     fill(c, "#2a0303");
     aspect(c, 0.6 / 0.18, (w, h) => text(c, "ON AIR", w / 2, h / 2 + 4, h * 0.62, "#ff2a1a", "900"));
@@ -1500,6 +1509,314 @@ function koffieSheet(c: Ctx) {
     const b = box(k);
     fillRect(c, b.x, b.y, b.w, b.h, "#1b1d1f");
     text(c, t, b.x + b.w / 2, b.y + b.h / 2, 30, k === "in" ? "#5fe07c" : "#ff5a4a", "800");
+  }
+}
+
+// Het DPC, on one sheet (see DPC_PX): door signs, the Red Hat flag, and what's
+// on the screens on the desks (an editor, a terminal, a graph, a pipeline).
+function dpcSheet(c: Ctx) {
+  const K = DPC_PX;
+  const box = (k: keyof typeof K) => { const [x0, y0, x1, y1] = K[k]; return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }; };
+  // door signs, like the other services', with a red edge
+  for (const [k, t, size, edge] of [["sign", "DPC", 44, "#ee0000"], ["signFr", "INFORMATIQUE", 25, "#1a64c8"]] as const) {
+    const b = box(k);
+    fillRect(c, b.x, b.y, b.w, b.h, "#2b2d31");
+    fillRect(c, b.x, b.y, 14, b.h, edge);
+    text(c, t, b.x + 135, b.y + 60, size, "#f5f5f5", "800");
+    text(c, "</>", b.x + 135, b.y + 102, 16, "#8a8d93", "700", "center", "ui-monospace, Menlo, monospace");
+  }
+  // the Red Hat flag: the hat in white on red, the name beside it
+  {
+    const b = box("flag");
+    fillRect(c, b.x, b.y, b.w, b.h, "#e00");
+    c.save();
+    c.translate(b.x + 128, b.y + 146);
+    c.scale(84, 84);
+    const crown = () => {
+      c.beginPath();
+      c.moveTo(-0.62, 0.02);
+      c.bezierCurveTo(-0.66, -0.42, -0.5, -0.74, -0.22, -0.72);
+      c.bezierCurveTo(-0.08, -0.71, -0.04, -0.6, 0.05, -0.6);
+      c.bezierCurveTo(0.16, -0.6, 0.22, -0.76, 0.42, -0.72);
+      c.bezierCurveTo(0.62, -0.66, 0.7, -0.3, 0.66, 0.02);
+      c.closePath();
+    };
+    c.fillStyle = "#fff";
+    crown();
+    c.fill();
+    // the brim: a swoop, wider on the left
+    c.beginPath();
+    c.moveTo(-1.08, -0.06);
+    c.bezierCurveTo(-1.02, 0.34, 0.4, 0.42, 1.0, 0.04);
+    c.bezierCurveTo(1.06, 0.0, 0.98, -0.06, 0.86, -0.02);
+    c.bezierCurveTo(0.3, 0.16, -0.6, 0.14, -0.96, -0.1);
+    c.closePath();
+    c.fill();
+    // the band
+    c.save();
+    crown();
+    c.clip();
+    c.fillStyle = "#1a1a1a";
+    c.fillRect(-1, -0.2, 2, 0.17);
+    c.restore();
+    c.restore();
+    text(c, "Red Hat", b.x + 232, b.y + 132, 72, "#fff", "700", "left");
+    c.fillStyle = "rgba(0,0,0,0.12)";
+    for (let k = 0; k < 7; k++) c.fillRect(b.x + 30 + k * 72, b.y, 2, b.h); // creases
+    noise(c, 10, true, b.x, b.y, b.w, b.h);
+  }
+  // the screens, painted for a 16:10 monitor
+  const screen = (k: keyof typeof K, fn: (w: number, h: number) => void) => {
+    const b = box(k);
+    aspect(c, 1.65, fn, b.x, b.y, b.w, b.h);
+  };
+  screen("code", (w, h) => {
+    fillRect(c, 0, 0, w, h, "#1e1f24");
+    fillRect(c, 0, 0, w, 7, "#2b2d33");
+    fillRect(c, 4, 1, 26, 6, "#1e1f24");
+    fillRect(c, 0, 7, 12, h - 7, "#24262c");
+    const cols = ["#c678dd", "#61afef", "#98c379", "#e5c07b", "#abb2bf", "#abb2bf", "#56b6c2", "#5c6370"];
+    for (let y = 11, n = 0; y < h - 2; y += 4.4, n++) {
+      fillRect(c, 3, y, 5, 2, "#4b4f58");
+      let x = 16 + [0, 6, 12, 12, 6, 12, 18, 6][n % 8]!;
+      for (let t = 0; t < 1 + ((n * 7) % 4) && x < w - 8; t++) {
+        const len = 6 + ((n * 13 + t * 5) % 22);
+        fillRect(c, x, y, len, 2, cols[(n + t * 3) % cols.length]!);
+        x += len + 3;
+      }
+    }
+    fillRect(c, 46, 31, 1.2, 3, "#fff");
+  });
+  screen("term", (w, h) => {
+    fillRect(c, 0, 0, w, h, "#0b0d0c");
+    for (let y = 5, n = 0; y < h - 4; y += 5, n++) {
+      const prompt = n % 4 === 0;
+      if (prompt) fillRect(c, 4, y, 4, 2.4, "#58e06f");
+      fillRect(c, prompt ? 11 : 4, y, 14 + ((n * 37) % 70), 2.4, prompt ? "#d8f8dc" : n % 7 === 3 ? "#ff6b5e" : "#58e06f");
+    }
+    fillRect(c, 11, h - 8, 4, 3, "#d8f8dc");
+  });
+  screen("graph", (w, h) => {
+    fillRect(c, 0, 0, w, h, "#111217");
+    for (const [x0, y0, pw, ph, col] of [[3, 3, w / 2 - 4.5, h / 2 - 4.5, "#73bf69"], [w / 2 + 1.5, 3, w / 2 - 4.5, h / 2 - 4.5, "#f2cc0c"], [3, h / 2 + 1.5, w - 6, h / 2 - 4.5, "#5794f2"]] as const) {
+      fillRect(c, x0, y0, pw, ph, "#181b1f");
+      c.strokeStyle = "#262a30";
+      c.lineWidth = 0.5;
+      for (let k = 1; k < 4; k++) {
+        c.beginPath(); c.moveTo(x0, y0 + (ph * k) / 4); c.lineTo(x0 + pw, y0 + (ph * k) / 4); c.stroke();
+      }
+      c.strokeStyle = col;
+      c.lineWidth = 1.2;
+      c.beginPath();
+      for (let k = 0; k <= 30; k++) {
+        const v = 0.5 + 0.3 * Math.sin(k * 0.5 + x0) + (R() - 0.5) * 0.3;
+        c.lineTo(x0 + (pw * k) / 30, y0 + ph * (1 - Math.max(0.05, Math.min(0.95, v))));
+      }
+      c.stroke();
+    }
+  });
+  screen("deploy", (w, h) => {
+    fillRect(c, 0, 0, w, h, "#f6f7f9");
+    fillRect(c, 0, 0, w, 8, "#fc6d26");
+    for (let r = 0; r < 6; r++) {
+      const y = 13 + r * 10;
+      fillRect(c, 4, y, 22, 6, "#c9ccd1");
+      for (let k = 0; k < 4; k++) {
+        const failed = r === 1 && k === 3, running = r === 0 && k === 3;
+        c.fillStyle = failed ? "#dd2b0e" : running ? "#1f75cb" : "#108548";
+        c.beginPath(); c.arc(36 + k * 22, y + 3, 3, 0, 7); c.fill();
+        if (k < 3) fillRect(c, 39 + k * 22, y + 2.5, 16, 1, "#c9ccd1");
+      }
+    }
+  });
+}
+
+// whiteboard: wiped a hundred times, never quite clean (the top 512 x 320 of the layer)
+function boardBase(c: Ctx) {
+  fillRect(c, 0, 0, S, 320, "#f4f5f3");
+  noise(c, 5, true, 0, 0, S, 320);
+  c.save();
+  c.globalAlpha = 0.14;
+  c.fillStyle = "#556";
+  for (let i = 0; i < 18; i++) c.fillRect(R() * S, R() * 300, 50 + R() * 120, 3 + R() * 6);
+  c.restore();
+}
+
+// a post-it, a little crooked, a ticket number and a few scribbles on it
+function postit(c: Ctx, x: number, y: number, col: string, id: string, w = 44, h = 38) {
+  c.save();
+  c.translate(x + w / 2, y + h / 2);
+  c.rotate((R() - 0.5) * 0.14);
+  c.fillStyle = "rgba(0,0,0,0.12)";
+  c.fillRect(-w / 2 + 2, -h / 2 + 2, w, h);
+  c.fillStyle = col;
+  c.fillRect(-w / 2, -h / 2, w, h);
+  text(c, id, -w / 2 + 3, -h / 2 + 7, 7, "#333", "700", "left", MARKER);
+  c.strokeStyle = "#444";
+  c.lineWidth = 1.3;
+  for (let k = 0; k < 2 + ((R() * 2) | 0); k++) {
+    c.beginPath();
+    c.moveTo(-w / 2 + 4, -h / 2 + 16 + k * 6);
+    for (let x2 = -w / 2 + 4; x2 < w / 2 - 4 - R() * 12; x2 += 3) c.lineTo(x2, -h / 2 + 16 + k * 6 + (R() - 0.5) * 2.4);
+    c.stroke();
+  }
+  c.restore();
+}
+
+const POSTIT = ["#ffe066", "#ff9fbf", "#a6eb9b", "#9bd8ff", "#ffbe6b"];
+
+function sprintBoard(c: Ctx) {
+  boardBase(c);
+  const blue = "#1b3fa0", red = "#b01818";
+  text(c, "SPRINT 214 · VRT MAX", 16, 22, 24, blue, "600", "left", MARKER);
+  text(c, "doel: ondertitels nooit meer te laat", 18, 46, 15, red, "500", "left", MARKER);
+  const cols = ["TE DOEN", "BEZIG", "REVIEW", "KLAAR"];
+  const cw = (S - 20) / 4;
+  c.strokeStyle = "#222";
+  c.lineWidth = 2.5;
+  c.beginPath(); c.moveTo(10, 78); c.lineTo(S - 10, 80); c.stroke();
+  cols.forEach((t, k) => {
+    const x = 10 + k * cw;
+    text(c, t, x + cw / 2, 68, 15, "#222", "600", "center", MARKER);
+    if (k) { c.beginPath(); c.moveTo(x, 58); c.lineTo(x + (R() - 0.5) * 3, 296); c.stroke(); }
+  });
+  const n = [6, 4, 3, 8];
+  let id = 1401;
+  n.forEach((m, k) => {
+    for (let j = 0; j < m; j++) {
+      const x = 14 + k * cw + (j % 2) * 58 + (R() - 0.5) * 6, y = 88 + Math.floor(j / 2) * 50 + (R() - 0.5) * 6;
+      postit(c, x, y, POSTIT[(k * 3 + j) % POSTIT.length]!, `DPC-${id + ((j * 37 + k * 11) % 90)}`);
+      // whoever's on it
+      if (k === 1 || k === 2) {
+        c.fillStyle = ["#e33", "#36c", "#3a3", "#c6c"][j % 4]!;
+        c.beginPath(); c.arc(x + 42, y + 4, 6, 0, 7); c.fill();
+        text(c, ["TB", "JV", "SM", "KD"][j % 4]!, x + 42, y + 4, 6, "#fff", "700");
+      }
+      if (k === 3) {
+        // done: ticked off
+        c.strokeStyle = "#1a8a2a"; c.lineWidth = 2;
+        c.beginPath(); c.moveTo(x + 30, y + 26); c.lineTo(x + 35, y + 32); c.lineTo(x + 44, y + 18); c.stroke();
+        c.strokeStyle = "#222"; c.lineWidth = 2.5;
+      }
+    }
+  });
+  text(c, "!!", 10 + cw + cw / 2 + 52, 90, 20, red, "700", "center", MARKER);
+  text(c, "stand-up 9u30 · demo vrijdag", 16, 306, 14, blue, "500", "left", MARKER);
+}
+
+function burndownBoard(c: Ctx) {
+  boardBase(c);
+  const blue = "#1b3fa0", red = "#b01818", ink = "#222";
+  text(c, "BURNDOWN 214", 16, 22, 22, blue, "600", "left", MARKER);
+  // the chart
+  const x0 = 34, y0 = 270, w = 270, h = 210;
+  c.strokeStyle = ink; c.lineWidth = 2.5;
+  c.beginPath(); c.moveTo(x0, y0 - h); c.lineTo(x0, y0); c.lineTo(x0 + w, y0); c.stroke();
+  for (let d = 0; d <= 10; d++) text(c, String(d), x0 + (w * d) / 10, y0 + 12, 10, ink, "500", "center", MARKER);
+  text(c, "punten", x0 - 4, y0 - h - 8, 10, ink, "500", "left", MARKER);
+  c.setLineDash([6, 6]); c.lineWidth = 1.5;
+  c.beginPath(); c.moveTo(x0, y0 - h + 10); c.lineTo(x0 + w, y0); c.stroke();
+  c.setLineDash([]);
+  // points left per day: slow, a bump when the scope grew, today far above the line
+  const pts = [200, 196, 188, 188, 196, 171, 166, 160];
+  const py = (v: number) => y0 - (v / 200) * (h - 10);
+  c.strokeStyle = blue; c.lineWidth = 3;
+  c.beginPath();
+  pts.forEach((v, d) => c.lineTo(x0 + (w * d) / 10, py(v)));
+  c.stroke();
+  c.fillStyle = red;
+  c.beginPath(); c.arc(x0 + (w * 7) / 10, py(160), 5, 0, 7); c.fill();
+  text(c, "vandaag", x0 + (w * 7) / 10 + 8, py(160) - 10, 12, red, "500", "left", MARKER);
+  text(c, "scope creep!", x0 + 120, y0 - h + 2, 14, red, "600", "left", MARKER);
+  c.strokeStyle = red; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(x0 + 140, y0 - h + 10); c.lineTo(x0 + (w * 4) / 10 + 3, py(196) - 5); c.stroke();
+  // the retro
+  const rx = 330;
+  c.strokeStyle = ink; c.lineWidth = 2.5;
+  c.beginPath(); c.moveTo(rx - 10, 12); c.lineTo(rx - 12, 300); c.stroke();
+  text(c, "RETRO", rx, 22, 20, blue, "600", "left", MARKER);
+  [["goed", "#a6eb9b"], ["beter", "#ffbe6b"], ["acties", "#9bd8ff"]].forEach(([t, col], k) => {
+    const y = 48 + k * 80;
+    text(c, t!, rx, y, 14, ink, "600", "left", MARKER);
+    for (let j = 0; j < 3 - (k === 2 ? 1 : 0); j++) postit(c, rx + j * 54 + (R() - 0.5) * 4, y + 10, col!, "", 46, 36);
+  });
+  text(c, "velocity 34 · 41 · 29 · ?", rx, 300, 13, blue, "500", "left", MARKER);
+}
+
+// the posters on the walls of het DPC, three to a layer, under the board
+function dpcPosters(c: Ctx, first: number) {
+  const draw: ((x: number, y: number, w: number, h: number) => void)[] = [
+    (x, y, w, h) => {
+      fillRect(c, x, y, w, h, "#111");
+      text(c, "IT WORKS", x + w / 2, y + 40, 22, "#fff", "900");
+      text(c, "ON MY", x + w / 2, y + 66, 22, "#fff", "900");
+      text(c, "MACHINE", x + w / 2, y + 92, 22, "#fff", "900");
+      c.fillStyle = "#2fb84f";
+      c.beginPath(); c.arc(x + w / 2, y + 145, 28, 0, 7); c.fill();
+      c.strokeStyle = "#fff"; c.lineWidth = 6;
+      c.beginPath(); c.moveTo(x + w / 2 - 13, y + 145); c.lineTo(x + w / 2 - 3, y + 156); c.lineTo(x + w / 2 + 15, y + 133); c.stroke();
+    },
+    (x, y, w, h) => {
+      fillRect(c, x, y, w, h, "#1a4fa8");
+      c.fillStyle = "#fff";
+      c.beginPath(); c.moveTo(x + w / 2, y + 22); c.lineTo(x + w / 2 + 34, y + 52); c.lineTo(x + w / 2 - 34, y + 52); c.closePath(); c.fill();
+      c.fillRect(x + w / 2 - 24, y + 52, 48, 34);
+      fillRect(c, x + w / 2 - 6, y + 66, 12, 20, "#1a4fa8");
+      text(c, "THERE'S NO", x + w / 2, y + 110, 16, "#fff", "800");
+      text(c, "PLACE LIKE", x + w / 2, y + 130, 16, "#fff", "800");
+      text(c, "127.0.0.1", x + w / 2, y + 160, 24, "#ffd84a", "800", "center", "ui-monospace, Menlo, monospace");
+    },
+    (x, y, w, h) => {
+      fillRect(c, x, y, w, h, "#ffd200");
+      // a rocket (a deploy), crossed out
+      const rx = x + w / 2, ry = y + 62;
+      c.fillStyle = "#111";
+      c.beginPath(); c.moveTo(rx, ry - 30); c.quadraticCurveTo(rx + 13, ry - 12, rx + 10, ry + 16); c.lineTo(rx - 10, ry + 16); c.quadraticCurveTo(rx - 13, ry - 12, rx, ry - 30); c.fill();
+      c.beginPath(); c.moveTo(rx - 10, ry + 2); c.lineTo(rx - 20, ry + 22); c.lineTo(rx - 10, ry + 16); c.fill();
+      c.beginPath(); c.moveTo(rx + 10, ry + 2); c.lineTo(rx + 20, ry + 22); c.lineTo(rx + 10, ry + 16); c.fill();
+      c.fillStyle = "#e85d04";
+      c.beginPath(); c.moveTo(rx - 6, ry + 18); c.lineTo(rx, ry + 32); c.lineTo(rx + 6, ry + 18); c.fill();
+      c.strokeStyle = "#c00"; c.lineWidth = 7;
+      c.beginPath(); c.arc(rx, ry, 40, 0, 7); c.stroke();
+      c.beginPath(); c.moveTo(rx - 28, ry - 28); c.lineTo(rx + 28, ry + 28); c.stroke();
+      text(c, "NOOIT", x + w / 2, y + 124, 20, "#111", "900");
+      text(c, "DEPLOYEN", x + w / 2, y + 146, 20, "#111", "900");
+      text(c, "OP VRIJDAG", x + w / 2, y + 168, 20, "#c00", "900");
+    },
+    (x, y, w, h) => {
+      fillRect(c, x, y, w, h, "#8fd0f5");
+      c.fillStyle = "#fff";
+      for (const [ox, oy, r] of [[-26, 58, 22], [0, 46, 30], [28, 58, 22]] as const) { c.beginPath(); c.arc(x + w / 2 + ox, y + oy, r, 0, 7); c.fill(); }
+      c.fillRect(x + w / 2 - 48, y + 58, 96, 22);
+      text(c, "DE CLOUD IS", x + w / 2, y + 110, 15, "#123", "800");
+      text(c, "GEWOON DE", x + w / 2, y + 130, 15, "#123", "800");
+      text(c, "COMPUTER VAN", x + w / 2, y + 150, 15, "#123", "800");
+      text(c, "IEMAND ANDERS", x + w / 2, y + 170, 15, "#123", "800");
+    },
+    (x, y, w, h) => {
+      fillRect(c, x, y, w, h, "#eee8d8");
+      text(c, "RTFM", x + w / 2, y + 74, 58, "#c00", "900");
+      fillRect(c, x + 22, y + 108, w - 44, 3, "#222");
+      text(c, "lees eerst de", x + w / 2, y + 134, 15, "#222", "600");
+      text(c, "handleiding", x + w / 2, y + 154, 15, "#222", "600");
+    },
+    (x, y, w, h) => {
+      fillRect(c, x, y, w, h, "#222a33");
+      c.strokeStyle = "#5fe07c"; c.lineWidth = 7;
+      c.beginPath(); c.arc(x + w / 2, y + 60, 30, -1.1, 4.25); c.stroke();
+      c.beginPath(); c.moveTo(x + w / 2, y + 22); c.lineTo(x + w / 2, y + 58); c.stroke();
+      text(c, "AL GEPROBEERD", x + w / 2, y + 116, 15, "#fff", "800");
+      text(c, "UIT EN WEER", x + w / 2, y + 138, 15, "#fff", "800");
+      text(c, "AAN TE ZETTEN?", x + w / 2, y + 160, 15, "#fff", "800");
+    },
+  ];
+  for (let k = 0; k < 3; k++) {
+    const x = k * 171, y = 320, w = 170, h = 192;
+    c.save();
+    c.beginPath(); c.rect(x, y, w, h); c.clip();
+    draw[first + k]!(x, y, w, h);
+    c.restore();
+    noise(c, 8, true, x, y, w, h);
   }
 }
 

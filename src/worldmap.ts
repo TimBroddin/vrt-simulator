@@ -47,7 +47,7 @@ function enterable(p: Plan, r: Room) {
 }
 
 const TIER: Partial<Record<number, number>> = {
-  [RT.MESS]: 0, [RT.KETNET]: 1, [RT.SPORZA]: 1, [RT.SET]: 1, [RT.RADIO]: 1, [RT.COSTUME]: 1, [RT.VIPBAR]: 1, [RT.VIPRESTO]: 1, [RT.KOFFIE]: 1,
+  [RT.MESS]: 0, [RT.KETNET]: 1, [RT.SPORZA]: 1, [RT.SET]: 1, [RT.RADIO]: 1, [RT.COSTUME]: 1, [RT.VIPBAR]: 1, [RT.VIPRESTO]: 1, [RT.KOFFIE]: 1, [RT.DPC]: 1,
   [RT.CEO]: 1, [RT.DOCK]: 1, [RT.SECURITY]: 1, [RT.TOOTS]: 1, [RT.CANTEEN]: 2, [RT.STUDIO]: 2, [RT.DRESSING]: 2, [RT.LOUNGE]: 2,
 };
 
@@ -215,6 +215,7 @@ const DESTS: { group: string; items: { name: string; find: Finder }[] }[] = [
       { name: "Laadperron", find: ofType(RT.DOCK, [0]) },
       { name: "Bewaking", find: ofType(RT.SECURITY) },
       { name: "Koffiekamer", find: ofType(RT.KOFFIE) },
+      { name: "DPC", find: ofType(RT.DPC) },
       { name: "Kantine", find: ofType(RT.CANTEEN) },
     ],
   },

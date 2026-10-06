@@ -8,6 +8,8 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
       atlas: { value: atlas },
       clockTex: { value: null as THREE.Texture | null },
       clockLayer: { value: L.DIGITAL },
+      dashTex: { value: null as THREE.Texture | null },
+      dashLayer: { value: L.DASH },
       time: { value: 0 },
       fogColor: { value: new THREE.Color(0.02, 0.022, 0.024) },
       fogDensity: { value: 0.045 },
@@ -69,6 +71,8 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
       precision highp sampler2DArray;
       uniform sampler2DArray atlas;
       uniform sampler2D clockTex;
+      uniform sampler2D dashTex;
+      uniform float dashLayer;
       uniform sampler2D liveTex;
       uniform sampler2D cctvTex;
       uniform sampler2D cctvLabels;
@@ -108,7 +112,9 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
           c *= 0.5 + 0.5 * smoothstep(0.78, 0.25, length(cell - 0.5));
           vec4 lab = texture(cctvLabels, vUv);
           t = vec4(mix(c, lab.rgb, lab.a), 1.0);
-        } else t = abs(li - clockLayer) < 0.5 ? texture(clockTex, vUv) : texture(atlas, vec3(vUv, li));
+        } else if (abs(li - clockLayer) < 0.5) t = texture(clockTex, vUv);
+        else if (abs(li - dashLayer) < 0.5) t = texture(dashTex, vUv);
+        else t = texture(atlas, vec3(vUv, li));
         if (t.a < 0.5) discard;
         vec3 col = t.rgb * vLight;
         if (lampOn > 0.0) {

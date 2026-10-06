@@ -3,7 +3,7 @@ import { CylinderGeometry, ExtrudeGeometry, IcosahedronGeometry, Shape, SphereGe
 import { CEIL, CELL, DOOR_H } from "./config";
 import { Builder, Frame, UP, fbox, type RGB, type Spec, type V3 } from "./builder";
 import type { Light, Prop } from "./furnish";
-import { ART0, KOFFIE_UV, L, LABEL0 } from "./layers";
+import { ART0, BOARD_UV, DPC_UV, KOFFIE_UV, L, LABEL0, POSTER_UV } from "./layers";
 import { ART } from "./art";
 import { Rng } from "./rng";
 
@@ -22,6 +22,7 @@ const CYL6 = new CylinderGeometry(1, 1, 1, 6, 1);
 const BLOB = new IcosahedronGeometry(1, 1);
 const CONE = new CylinderGeometry(0, 1, 1, 8, 1);
 const DISH = new SphereGeometry(1, 14, 5, 0, Math.PI * 2, 0, Math.PI * 0.28);
+const BALL = new SphereGeometry(1, 16, 12);
 
 const sp = (layer: number, tint?: RGB, emit?: RGB): Spec => ({ layer, tint, emit });
 const WHITE = sp(L.WHITE, [0.9, 0.9, 0.88]);
@@ -1587,6 +1588,140 @@ export function buildProp(b: Builder, pr: Prop) {
     case "ledclock":
       // the red LED clock on the wall
       fbox(b, fr, 0, 0, 0.05, 0.5, 0.17, 0.1, { all: DARK, pz: LED });
+      break;
+    // --- het DPC
+    case "devdesk": {
+      // two desks facing each other, two screens each (code, a terminal, a graph, a
+      // pipeline), a keyboard that glows; an energy drink, a rubber duck, a hoodie on the chair
+      for (const side of [1, -1]) {
+        const f = new Frame(pr.x, pr.y, pr.z, pr.rot + (side < 0 ? Math.PI : 0));
+        const stand = rng.chance(0.25); // a standing desk, all the way up
+        const top = stand ? 1.08 : 0.74;
+        fbox(b, f, 0, top - 0.03, 0.4, 1.6, 0.03, 0.8, sp(L.WHITE, [0.8, 0.8, 0.78]));
+        if (stand) {
+          for (const x of [-0.65, 0.65]) {
+            fbox(b, f, x, 0, 0.4, 0.07, top - 0.03, 0.07, GREY);
+            fbox(b, f, x, 0, 0.4, 0.07, 0.04, 0.7, DARK);
+          }
+        } else {
+          for (const x of [-0.77, 0.77]) fbox(b, f, x, 0, 0.4, 0.04, top - 0.03, 0.72, GREY);
+          fbox(b, f, 0, 0.3, 0.03, 1.5, 0.4, 0.02, GREY);
+        }
+        const screens = ["code", "term", "graph", "deploy", "code"] as const;
+        for (const x of [-0.34, 0.34]) {
+          const m = new Frame(...f.p(x, 0, 0.17), f.rot + (x < 0 ? 0.18 : -0.18));
+          fbox(b, m, 0, top, -0.04, 0.2, 0.02, 0.16, DARK);
+          fbox(b, m, 0, top, -0.04, 0.05, 0.2, 0.04, DARK);
+          const on = rng.chance(0.85);
+          fbox(b, m, 0, top + 0.12, 0, 0.6, 0.36, 0.025, { all: DARK, pz: on ? { layer: L.DPC, emit: [0.85, 0.87, 0.9], uv: DPC_UV[rng.pick([...screens])] } : { layer: L.SCREEN } });
+        }
+        // the keyboard, now and then with a glow underneath
+        if (rng.chance(0.6)) fbox(b, f, -0.05, top, 0.55, 0.46, 0.01, 0.16, { layer: L.WHITE, emit: rng.pick([[0.9, 0.2, 0.9], [0.2, 0.8, 1.0], [0.3, 1.0, 0.4], [1.0, 0.4, 0.1]] as RGB[]) });
+        fbox(b, f, -0.05, top + 0.01, 0.55, 0.44, 0.025, 0.14, DARK);
+        fbox(b, f, 0.3, top, 0.56, 0.06, 0.03, 0.1, DARK);
+        if (rng.chance(0.7)) cyl(b, f, rng.range(0.45, 0.7), top, rng.range(0.3, 0.6), 0.033, 0.13, sp(L.WHITE, rng.pick([[0.1, 0.1, 0.12], [0.2, 0.75, 0.25], [0.15, 0.35, 0.8], [0.95, 0.95, 0.95]] as RGB[])));
+        if (rng.chance(0.3)) {
+          // the rubber duck you explain your bug to
+          const q = f.p(-0.62, top + 0.05, 0.45);
+          b.geom(BALL, q[0], q[1], q[2], 0, 0.06, 0.05, 0.07, sp(L.WHITE, [1.0, 0.85, 0.1]));
+          const h = f.p(-0.62, top + 0.12, 0.49);
+          b.geom(BALL, h[0], h[1], h[2], 0, 0.035, 0.035, 0.035, sp(L.WHITE, [1.0, 0.85, 0.1]));
+          const k = f.p(-0.62, top + 0.115, 0.53);
+          b.geom(BALL, k[0], k[1], k[2], 0, 0.018, 0.01, 0.022, sp(L.WHITE, [1.0, 0.45, 0.05]));
+        }
+        if (rng.chance(0.25)) fbox(b, f, 0.65, top, 0.25, 0.3, 0.12, 0.22, { all: GREY, py: sp(L.WHITE, [0.15, 0.15, 0.17]) }); // a laptop, closed, covered in stickers
+        if (!stand && rng.chance(0.85)) {
+          const x = rng.range(-0.1, 0.1), z = 1.1 + rng.range(0, 0.2), r = rng.range(-0.5, 0.5);
+          chair(b, f, x, z, r);
+          if (rng.chance(0.4)) {
+            // a hoodie over the back
+            const cf = new Frame(...f.p(x, 0, z), f.rot + r);
+            fbox(b, cf, 0, 0.6, 0.255, 0.5, 0.42, 0.07, sp(L.FABRIC, rng.pick([[0.08, 0.08, 0.1], [0.3, 0.32, 0.36], [0.5, 0.05, 0.06], [0.1, 0.18, 0.4]] as RGB[])));
+          }
+        }
+      }
+      solidRect(b, fr, 0, 0, 1.6, 1.6);
+      break;
+    }
+    case "tux": {
+      // Tux, the Linux penguin, as a plush toy, 1.5 m tall (pr.a: height in cm, 100 = 1.55 m)
+      const k = (pr.a || 100) / 100;
+      const blk = sp(L.FABRIC, [0.07, 0.07, 0.08]), wht = sp(L.FABRIC, [0.95, 0.95, 0.92]), org = sp(L.FABRIC, [1.0, 0.62, 0.08]);
+      const ball = (x: number, y: number, z: number, rx: number, ry: number, rz: number, s: Spec) => {
+        const q = fr.p(x * k, y * k, z * k);
+        b.geom(BALL, q[0], q[1], q[2], fr.rot, rx * k, ry * k, rz * k, s);
+      };
+      for (const x of [-0.2, 0.2]) ball(x, 0.05, 0.22, 0.17, 0.06, 0.24, org);
+      ball(0, 0.62, 0, 0.5, 0.6, 0.44, blk);
+      ball(0, 0.58, 0.12, 0.4, 0.5, 0.36, wht);
+      for (const x of [-0.5, 0.5]) ball(x, 0.6, 0.02, 0.1, 0.36, 0.2, blk);
+      ball(0, 1.22, 0.02, 0.36, 0.33, 0.33, blk);
+      for (const x of [-0.11, 0.11]) {
+        ball(x, 1.24, 0.24, 0.13, 0.17, 0.12, wht);
+        ball(x * 0.9, 1.27, 0.35, 0.04, 0.055, 0.03, blk);
+      }
+      ball(0, 1.14, 0.33, 0.15, 0.06, 0.12, org);
+      ball(0, 1.09, 0.31, 0.11, 0.04, 0.09, org);
+      solidRect(b, fr, 0, 0, 1.0 * k, 0.9 * k);
+      break;
+    }
+    case "redhat": {
+      // the Red Hat flag on the wall, hung from a rod, in four folds
+      const [u0, v0, u1, v1] = DPC_UV.flag;
+      const w = 2.6 / 4;
+      for (let n = 0; n < 4; n++) {
+        const f = new Frame(...fr.p(-1.3 + (n + 0.5) * w, 0, 0.07), fr.rot + (n % 2 ? 0.07 : -0.07));
+        const uv: [number, number, number, number] = [u0 + ((u1 - u0) * n) / 4, v0, u0 + ((u1 - u0) * (n + 1)) / 4, v1];
+        fbox(b, f, 0, 0, 0, w, 1.3, 0.006, { all: sp(L.FABRIC, [0.75, 0.02, 0.02]), pz: { layer: L.DPC, uv } });
+      }
+      fbox(b, fr, 0, 1.31, 0.07, 2.76, 0.03, 0.03, STEEL);
+      for (const x of [-1.32, 1.32]) fbox(b, fr, x, 1.29, 0.035, 0.03, 0.07, 0.07, STEEL);
+      break;
+    }
+    case "dashwall": {
+      // two big screens on the wall with the live ticket dashboards (pr.a, pr.b: which panel)
+      for (const [x, k] of [[-0.69, pr.a], [0.69, pr.b]] as const) {
+        fbox(b, fr, x, 1.5, 0.04, 1.32, 0.77, 0.06, { all: DARK, pz: { layer: L.DASH, emit: [1.0, 1.0, 1.0], uv: cellUV(k % 4, 2, 2) } });
+        fbox(b, fr, x, 1.8, 0.005, 0.3, 0.2, 0.02, GREY);
+      }
+      break;
+    }
+    case "dashstand": {
+      // a dashboard on a rolling stand (pr.a: which panel)
+      fbox(b, fr, 0, 0.05, 0, 0.75, 0.04, 0.5, DARK);
+      for (const [x, z] of [[-0.33, -0.2], [0.33, -0.2], [-0.33, 0.2], [0.33, 0.2]]) cyl(b, fr, x!, 0, z!, 0.04, 0.05, GREY);
+      fbox(b, fr, 0, 0.09, -0.05, 0.08, 1.15, 0.08, GREY);
+      fbox(b, fr, 0, 1.2, 0, 1.24, 0.72, 0.06, { all: DARK, pz: { layer: L.DASH, emit: [1.0, 1.0, 1.0], uv: cellUV(pr.a % 4, 2, 2) } });
+      solidRect(b, fr, 0, 0, 0.8, 0.55);
+      break;
+    }
+    case "kanban": {
+      // a whiteboard on wheels: the sprint on one side, the burndown and the retro on the other
+      const board: Spec = { layer: L.SPRINT, uv: BOARD_UV }, back: Spec = { layer: L.BURNDOWN, uv: BOARD_UV };
+      fbox(b, fr, 0, 0.78, 0, 1.8, 1.12, 0.03, { all: GREY, pz: pr.a % 2 ? back : board, nz: pr.a % 2 ? board : back });
+      fbox(b, fr, 0, 0.74, 0, 1.86, 0.04, 0.05, GREY);
+      fbox(b, fr, 0, 1.9, 0, 1.86, 0.04, 0.05, GREY);
+      for (const x of [-0.95, 0.95]) {
+        fbox(b, fr, x, 0.06, 0, 0.04, 1.9, 0.04, STEEL);
+        fbox(b, fr, x, 0.04, 0, 0.05, 0.03, 0.6, STEEL);
+        for (const z of [-0.27, 0.27]) cyl(b, fr, x, 0, z, 0.035, 0.05, DARK);
+      }
+      fbox(b, fr, 0.4, 0.76, 0.05, 0.5, 0.025, 0.06, GREY);
+      for (const [x, col] of [[0.24, [0.1, 0.2, 0.6]], [0.3, [0.7, 0.1, 0.1]], [0.36, [0.1, 0.1, 0.1]], [0.42, [0.1, 0.5, 0.2]]] as const) fbox(b, fr, x, 0.785, 0.06, 0.13, 0.02, 0.02, sp(L.WHITE, col as unknown as RGB));
+      solidRect(b, fr, 0, 0, 1.95, 0.62);
+      break;
+    }
+    case "dpcboard":
+      // the same boards, on the wall (pr.a: 0 the sprint, 1 the burndown)
+      fbox(b, fr, 0, -0.6, 0.02, 2.0, 1.24, 0.03, { all: GREY, pz: { layer: pr.a ? L.BURNDOWN : L.SPRINT, uv: BOARD_UV } });
+      fbox(b, fr, 0, -0.64, 0.06, 1.9, 0.03, 0.08, GREY);
+      break;
+    case "dpcposter":
+      // pr.a 0-2 under the sprint board, 3-5 under the burndown
+      fbox(b, fr, 0, -0.45, 0.01, 0.62, 0.7, 0.01, { all: WHITE, pz: { layer: pr.a >= 3 ? L.BURNDOWN : L.SPRINT, uv: POSTER_UV(pr.a % 3) } });
+      break;
+    case "dpcsign":
+      fbox(b, fr, 0, 0, 0.01, 0.34, 0.17, 0.012, { all: GREY, pz: { layer: L.DPC, uv: pr.b ? DPC_UV.signFr : DPC_UV.sign } });
       break;
     case "hightable": {
       cyl(b, fr, 0, 0, 0, 0.3, 0.03, DARK);
