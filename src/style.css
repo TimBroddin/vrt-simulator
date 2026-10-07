@@ -442,3 +442,17 @@ body.has-save #overlay.ready #enter .cont { display: inline; }
   #overlay.ready #badge { animation: none; }
   #binnen.some::before, #overlay.paused .resume { animation: none; }
 }
+
+/* the tutorial: your first day, five cards on the left */
+#tut { position: absolute; left: 52px; top: 42%; width: 300px; padding: 10px 14px 9px; background: rgba(8, 8, 10, 0.78); border-left: 3px solid var(--pink); font-size: 14px; line-height: 1.45; letter-spacing: 0.02em; opacity: 0; transform: translateX(-10px); transition: opacity 0.4s, transform 0.4s; pointer-events: none; }
+#tut.show { opacity: 1; transform: none; }
+#tut .t-head { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 10px; letter-spacing: 0.24em; }
+#tut .t-head b { color: var(--pink); }
+#tut .t-head span { opacity: 0.6; }
+#tut kbd { font-size: 11px; color: #fff; }
+#tut .t-skip { margin-top: 8px; font-size: 10px; letter-spacing: 0.12em; opacity: 0.5; text-transform: uppercase; }
+body.touch #tut { left: 50%; top: 186px; transform: translateX(-50%); width: min(340px, 80vw); pointer-events: auto; }
+body.touch #tut.show { transform: translateX(-50%); }
+@media (max-width: 900px), (max-height: 520px) { #tut { left: 26px; top: 170px; width: 250px; font-size: 12px; } }
+body.finale #tut { display: none; }
+@media (prefers-reduced-motion: reduce) { #tut { transition: none; } }

@@ -2,7 +2,9 @@
 // drawn once into an offscreen canvas, then rotated every frame.
 import { CELL, CH, CHUNK, DX, DZ } from "./config";
 import { K, SK, getPlan, sideAt } from "./layout";
-import { dot, liftIcon, phoneIcon, stairIcon } from "./mapicons";
+import { dot, foodIcon, liftIcon, phoneIcon, stairIcon, toiletIcon } from "./mapicons";
+import { getFurnished } from "./furnish";
+import { PROP_FOOD } from "./food";
 
 const PX = 15; // pixels per cell in the offscreen map (sharp enough for a retina minimap)
 
@@ -84,6 +86,37 @@ export function waysIn(f: number, cx: number, cz: number): Way[] {
   return out;
 }
 
+// Where there's food on a chunk-floor: one per counter, cooler or machine.
+export interface FoodPlace {
+  x: number;
+  z: number;
+  food: string;
+}
+const foodCache = new Map<string, FoodPlace[]>();
+export function foodIn(f: number, cx: number, cz: number): FoodPlace[] {
+  const key = `${f}:${cx},${cz}`;
+  let out = foodCache.get(key);
+  if (!out) {
+    // (a counter is a row of pieces, a canteen has a few: the same food close together is one icon, in their middle)
+    const groups: (FoodPlace & { n: number })[] = [];
+    for (const pr of getFurnished(f, cx, cz).props) {
+      const food = PROP_FOOD[pr.t];
+      if (!food) continue;
+      const gr = groups.find((o) => o.food === food && Math.hypot(o.x - pr.x, o.z - pr.z) < 12);
+      if (!gr) groups.push({ x: pr.x, z: pr.z, food, n: 1 });
+      else {
+        gr.x = (gr.x * gr.n + pr.x) / (gr.n + 1);
+        gr.z = (gr.z * gr.n + pr.z) / (gr.n + 1);
+        gr.n++;
+      }
+    }
+    out = groups.map(({ x, z, food }) => ({ x, z, food }));
+    foodCache.set(key, out);
+    if (foodCache.size > 3000) foodCache.delete(foodCache.keys().next().value!);
+  }
+  return out;
+}
+
 export interface MapTarget {
   x: number;
   z: number;
@@ -91,7 +124,7 @@ export interface MapTarget {
   col: string;
   r?: number; // dot size (default 5)
   near?: boolean; // only when it's on your floor and on the map (the others), not pinned to the edge
-  icon?: "phone";
+  icon?: "phone" | "toilet";
 }
 
 const RANGE = 33; // m from you to the rim
@@ -103,6 +136,7 @@ export class Minimap {
   og: CanvasRenderingContext2D;
   key = "";
   ways: Way[] = [];
+  food: FoodPlace[] = [];
   ox = 0;
   oz = 0;
   constructor(public visible = true) {
@@ -125,7 +159,12 @@ export class Minimap {
     this.oz = (pcz - 1) * CHUNK;
     paintCells(g, f, (pcx - 1) * CH, (pcz - 1) * CH, CH * 3, PX);
     this.ways = [];
-    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) this.ways.push(...waysIn(f, pcx + dx, pcz + dz));
+    this.food = [];
+    for (let dz = -1; dz <= 1; dz++)
+      for (let dx = -1; dx <= 1; dx++) {
+        this.ways.push(...waysIn(f, pcx + dx, pcz + dz));
+        this.food.push(...foodIn(f, pcx + dx, pcz + dz));
+      }
   }
 
   draw(f: number, x: number, z: number, yaw: number, targets: MapTarget[]) {
@@ -183,6 +222,13 @@ export class Minimap {
       if (Math.hypot(mx, my) > R - 8) continue;
       (w.kind === "stair" ? stairIcon : liftIcon)(g, R + mx, R + my, 5.5);
     }
+    // and the food
+    for (const p of this.food) {
+      const dx = (p.x - x) * s, dz = (p.z - z) * s;
+      const mx = dx * c0 - dz * s0, my = dx * s0 + dz * c0;
+      if (Math.hypot(mx, my) > R - 8) continue;
+      foodIcon(g, R + mx, R + my, 6, p.food);
+    }
     g.restore();
 
     // the bezel: a ring, ticks every 30 degrees (turning with you), north on the rim
@@ -226,6 +272,7 @@ export class Minimap {
       }
       const X = R + mx, Y = R + my;
       if (tg.icon === "phone") phoneIcon(g, X, Y, out ? 6 : 7.5, tg.col, t, !out);
+      else if (tg.icon === "toilet") toiletIcon(g, X, Y, out ? 6 : 7.5, tg.col);
       else dot(g, X, Y, (tg.r ?? 5) * (out ? 0.85 : 1), tg.col);
       if (tg.f !== f) {
         g.font = "700 9px ui-monospace, Menlo, monospace";

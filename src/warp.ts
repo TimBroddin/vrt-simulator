@@ -164,7 +164,7 @@ function locate(id: string, px: number, pz: number, pf: number): Cand | null {
         return [{ f: Math.floor((y + 0.7) / H), x: t.x + 3.1, z: t.z, yaw: facing(1, 0), exact: y }];
       });
   }
-  const halls: Record<string, string> = { sporthal: "hall", rekwisieten: "props", decorstraat: "decor", marconi: "marconi", toren: "tower", bos: "bos", bareel: "bareel" };
+  const halls: Record<string, string> = { sporthal: "hall", rekwisieten: "props", decorstraat: "decor", marconi: "marconi", toren: "tower", bos: "bos", bareel: "bareel", meiser: "meiser" };
   if (halls[id]) return atrium([halls[id]!], hallDoors);
   // everything else is a kind of room
   return search(px, pz, pf, 6, (cx, cz) => {

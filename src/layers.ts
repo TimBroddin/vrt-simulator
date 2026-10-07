@@ -94,10 +94,24 @@ export const L = {
   WPANEL: 89, // het vossenhol: white wall panels
   R3: 90, // de perszaal, het creative lab, het Tiktak-huis: door signs, the roll-up banner, sheep, the clock (see R3_UV)
   WEERLIVE: 91, // the return monitors in de weerstudio: the studio camera, keyed over the weather map (see src/weer.ts)
+  MEISER: 92, // station Meiser: the graffiti, the train mural, the name board (see MEISER_UV)
+  MTILES: 93, // station Meiser: the orange, yellow and grey tiles on the station building, grey at the top
 } as const;
 
 // artworks and their museum labels (8 labels per layer) follow the painted layers
-export const ART0 = 92;
+export const ART0 = 94;
+
+// where things are on the MEISER layer, in pixels of the 512 x 512 drawing (x0, y0, x1, y1)
+export const MEISER_PX = {
+  wild: [0, 0, 512, 192], // a wildstyle piece, 8:3
+  mural: [0, 192, 512, 384], // the orange train on the evening sky, 8:3
+  hut: [0, 384, 256, 512], // throw-ups for the cabin, 2:1
+  sign: [256, 384, 512, 448], // MEISER, 4:1
+  plein: [256, 448, 512, 512], // the door at the top of the stairs, 4:1
+} as const;
+export const MEISER_UV = Object.fromEntries(
+  Object.entries(MEISER_PX).map(([k, [x0, y0, x1, y1]]) => [k, [x0 / 512, 1 - y1 / 512, x1 / 512, 1 - y0 / 512]]),
+) as Record<keyof typeof MEISER_PX, [number, number, number, number]>;
 
 // where things are on the KOFFIE layer, in pixels of the 512 x 512 drawing (x0, y0, x1, y1)
 export const KOFFIE_PX = {
@@ -169,6 +183,7 @@ SCALE[L.WOOD_FLOOR] = 2.0;
 SCALE[L.BLACK] = 2.0;
 SCALE[L.STEEL] = 1.2;
 SCALE[L.GRASS] = 3.0;
+SCALE[L.MTILES] = 4.8;
 SCALE[L.ROOF] = 5.0;
 SCALE[L.FABRIC] = 1.0;
 SCALE[L.WHITE] = 1.0;

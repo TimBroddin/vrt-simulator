@@ -1029,6 +1029,8 @@ const painters: Record<number, (c: Ctx) => void> = {
   [L.NWS]: (c) => nwsSheet(c),
   [L.SKYLINE]: (c) => skyline(c),
   [L.R3]: (c) => r3Sheet(c),
+  [L.MEISER]: (c) => meiserSheet(c),
+  [L.MTILES]: (c) => meiserTiles(c),
   [L.WPANEL]: (c) => {
     // het vossenhol: white panels, 1.2 m each, the seams a shade darker
     fill(c, "#efefeb");
@@ -1876,6 +1878,234 @@ function r3Sheet(c: Ctx) {
 
 // The LED wall of de journaalstudio: Brussels at dusk in blue, plain blue below.
 // Tiles across: the skyline wraps.
+// --- station Meiser ----------------------------------------------------------
+
+// A wildstyle piece in a box: blue and grey letters, orange and yellow fills,
+// black outlines, a 3D shadow, arrows, a tag; black drips run down over it.
+function wildstyle(c: Ctx, x: number, y: number, w: number, h: number, bg: string) {
+  c.save();
+  c.beginPath();
+  c.rect(x, y, w, h);
+  c.clip();
+  c.fillStyle = bg;
+  c.fillRect(x, y, w, h);
+  // a soft fade behind
+  const gr = c.createLinearGradient(x, y, x + w, y + h);
+  gr.addColorStop(0, "rgba(255,255,255,0.12)");
+  gr.addColorStop(1, "rgba(0,0,0,0.12)");
+  c.fillStyle = gr;
+  c.fillRect(x, y, w, h);
+  const n = 5, lw = w / (n + 0.6);
+  // jagged letter shapes: a few sharp polygons per letter
+  const shapes: { pts: [number, number][]; fill: string }[] = [];
+  for (let k = 0; k < n; k++) {
+    const lx = x + lw * (0.3 + k), ly = y + h * 0.16, lh = h * 0.66;
+    const parts = 3 + ((R() * 3) | 0);
+    for (let j = 0; j < parts; j++) {
+      const cx = lx + R() * lw, cy = ly + R() * lh, r = lw * (0.25 + R() * 0.35);
+      const m = 3 + ((R() * 2) | 0), pts: [number, number][] = [];
+      const a0 = R() * 6.28;
+      for (let q = 0; q < m; q++) {
+        const a = a0 + (q / m) * 6.28 + (R() - 0.5) * 0.6, rr = r * (0.6 + R() * 0.7);
+        pts.push([cx + Math.cos(a) * rr * 1.3, cy + Math.sin(a) * rr]);
+      }
+      shapes.push({ pts, fill: ["#3d6fb3", "#5b8ccc", "#9cb6d6", "#2c4f8a", "#c9d6e6"][(R() * 5) | 0]! });
+    }
+  }
+  const path = (pts: [number, number][], dx = 0, dy = 0) => {
+    c.beginPath();
+    pts.forEach(([px, py], q) => (q ? c.lineTo(px + dx, py + dy) : c.moveTo(px + dx, py + dy)));
+    c.closePath();
+  };
+  // the 3D shadow, the outlines, the fills, the shine
+  c.fillStyle = "#16233d";
+  for (const sh of shapes) { path(sh.pts, h * 0.035, h * 0.045); c.fill(); }
+  c.lineJoin = "miter";
+  c.strokeStyle = "#0b0d12";
+  c.lineWidth = h * 0.05;
+  for (const sh of shapes) { path(sh.pts); c.stroke(); }
+  for (const sh of shapes) { path(sh.pts); c.fillStyle = sh.fill; c.fill(); }
+  // orange and yellow cut into the letters
+  for (const sh of shapes)
+    if (R() < 0.55) {
+      const [a, b] = [sh.pts[0]!, sh.pts[1]!];
+      const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+      c.beginPath();
+      c.moveTo(a[0], a[1]);
+      c.lineTo(mx + (R() - 0.5) * h * 0.2, my + (R() - 0.5) * h * 0.2);
+      c.lineTo(b[0], b[1]);
+      c.closePath();
+      c.fillStyle = R() < 0.5 ? "#f39a1e" : "#f6c62f";
+      c.fill();
+    }
+  // white highlights along the edges
+  c.strokeStyle = "rgba(255,255,255,0.85)";
+  c.lineWidth = h * 0.012;
+  for (const sh of shapes) {
+    const [a, b] = [sh.pts[0]!, sh.pts[1]!];
+    c.beginPath();
+    c.moveTo(a[0] + (b[0] - a[0]) * 0.15, a[1] + (b[1] - a[1]) * 0.15 + h * 0.012);
+    c.lineTo(a[0] + (b[0] - a[0]) * 0.6, a[1] + (b[1] - a[1]) * 0.6 + h * 0.012);
+    c.stroke();
+  }
+  // arrows flying out
+  for (let k = 0; k < 4; k++) {
+    const ax = x + w * (0.1 + R() * 0.8), ay = y + h * (R() < 0.5 ? 0.12 : 0.86), dir = R() < 0.5 ? -1 : 1, len = w * 0.08;
+    c.beginPath();
+    c.moveTo(ax, ay);
+    c.lineTo(ax + dir * len, ay - h * 0.05);
+    c.lineTo(ax + dir * len * 0.85, ay + h * 0.03);
+    c.closePath();
+    c.fillStyle = "#f6c62f";
+    c.fill();
+    c.lineWidth = h * 0.02;
+    c.strokeStyle = "#0b0d12";
+    c.stroke();
+  }
+  // a tag in the corner, and drips
+  text(c, "reyers26", x + w * 0.72, y + h * 0.9, h * 0.1, "#f39a1e", "700", "center", MARKER);
+  c.strokeStyle = "rgba(10,10,12,0.75)";
+  for (let k = 0; k < 3; k++) {
+    const dx = x + w * (0.2 + R() * 0.6);
+    c.lineWidth = 3 + R() * 4;
+    c.beginPath();
+    c.moveTo(dx, y);
+    for (let yy = y; yy < y + h; yy += 8) c.lineTo(dx + (R() - 0.5) * 3, yy);
+    c.stroke();
+  }
+  c.restore();
+}
+
+// The mural: an orange locomotive coming at you under an evening sky, the rails
+// running away behind it, blue graffiti shards at the end.
+function trainMural(c: Ctx, x: number, y: number, w: number, h: number) {
+  c.save();
+  c.beginPath();
+  c.rect(x, y, w, h);
+  c.clip();
+  const sky = c.createLinearGradient(x, y, x, y + h);
+  sky.addColorStop(0, "#7fb2d8");
+  sky.addColorStop(0.45, "#f3c35a");
+  sky.addColorStop(1, "#f08a24");
+  c.fillStyle = sky;
+  c.fillRect(x, y, w, h);
+  c.fillStyle = "rgba(255,240,180,0.9)";
+  c.beginPath();
+  c.arc(x + w * 0.62, y + h * 0.48, h * 0.16, 0, 7);
+  c.fill();
+  // the rails, to a vanishing point on the right
+  const vx = x + w * 0.86, vy = y + h * 0.56;
+  c.fillStyle = "#6c6a6a";
+  c.beginPath();
+  c.moveTo(x + w * 0.05, y + h);
+  c.lineTo(x + w * 0.5, y + h);
+  c.lineTo(vx, vy);
+  c.closePath();
+  c.fill();
+  c.strokeStyle = "#d9d4cc";
+  c.lineWidth = 3;
+  for (const sx of [0.14, 0.4]) {
+    c.beginPath();
+    c.moveTo(x + w * sx, y + h);
+    c.lineTo(vx, vy);
+    c.stroke();
+  }
+  // the loco: the side going away, the front facing you
+  const fx0 = x + w * 0.2, fx1 = x + w * 0.36, fy0 = y + h * 0.22, fy1 = y + h * 0.86;
+  c.fillStyle = "#e8761c";
+  c.beginPath();
+  c.moveTo(fx1, fy0 + h * 0.04);
+  c.lineTo(vx - w * 0.04, vy - h * 0.13);
+  c.lineTo(vx - w * 0.04, vy + h * 0.02);
+  c.lineTo(fx1, fy1 - h * 0.06);
+  c.closePath();
+  c.fill();
+  c.fillStyle = "#33302e";
+  for (let k = 0; k < 6; k++) {
+    const t0 = 0.06 + k * 0.14, t1 = t0 + 0.09;
+    const p = (t: number, top: number, bot: number) => [fx1 + (vx - w * 0.04 - fx1) * t, top + (bot - top) * t] as const;
+    const [ax, ay] = p(t0, fy0 + h * 0.12, vy - h * 0.1), [bx, by] = p(t1, fy0 + h * 0.12, vy - h * 0.1);
+    c.fillRect(ax, ay, bx - ax, (by - ay) + h * 0.06 * (1 - t0));
+  }
+  c.fillStyle = "#f39a1e";
+  c.beginPath();
+  c.moveTo(fx0, fy0 + h * 0.08);
+  c.lineTo(fx1, fy0);
+  c.lineTo(fx1, fy1);
+  c.lineTo(fx0, fy1 + h * 0.03);
+  c.closePath();
+  c.fill();
+  c.fillStyle = "#1d2228";
+  c.beginPath();
+  c.moveTo(fx0 + w * 0.012, fy0 + h * 0.13);
+  c.lineTo(fx1 - w * 0.01, fy0 + h * 0.07);
+  c.lineTo(fx1 - w * 0.01, fy0 + h * 0.3);
+  c.lineTo(fx0 + w * 0.012, fy0 + h * 0.35);
+  c.closePath();
+  c.fill();
+  c.fillStyle = "#fff6d0";
+  for (const lx of [fx0 + w * 0.025, fx1 - w * 0.03]) c.fillRect(lx, fy1 - h * 0.17, w * 0.018, h * 0.05);
+  c.fillStyle = "#3a3a3a";
+  for (let k = 0; k < 5; k++) c.fillRect(fx0 + w * 0.012, fy1 - h * 0.07 + k * 4, fx1 - fx0 - w * 0.024, 2);
+  // shards of blue piece at the right
+  for (let k = 0; k < 7; k++) {
+    const sx = x + w * (0.82 + R() * 0.16), sy = y + h * (0.55 + R() * 0.42), r = h * (0.08 + R() * 0.12);
+    c.beginPath();
+    c.moveTo(sx, sy - r);
+    c.lineTo(sx + r * 0.9, sy + r * 0.3);
+    c.lineTo(sx - r * 0.5, sy + r * 0.6);
+    c.closePath();
+    c.fillStyle = ["#3d6fb3", "#9cb6d6", "#5b8ccc"][k % 3]!;
+    c.fill();
+    c.lineWidth = 3;
+    c.strokeStyle = "#0b0d12";
+    c.stroke();
+  }
+  c.restore();
+}
+
+function meiserSheet(c: Ctx) {
+  fill(c, "#7d8794");
+  wildstyle(c, 0, 0, 512, 192, "#8e9aa8");
+  trainMural(c, 0, 192, 512, 192);
+  // the cabin: grey-blue, throw-ups and characters
+  wildstyle(c, 0, 384, 256, 128, "#5d6b7c");
+  // MEISER: white on dark grey, the sign on the platform
+  c.fillStyle = "#26292e";
+  c.fillRect(256, 384, 256, 64);
+  c.fillStyle = "#e8e8e4";
+  c.fillRect(256, 384, 256, 3);
+  c.fillRect(256, 445, 256, 3);
+  text(c, "MEISER", 384, 417, 40, "#f4f4f0", "800");
+  // the door at the top of the stairs
+  c.fillStyle = "#1c4f9c";
+  c.fillRect(256, 448, 256, 64);
+  text(c, "MEISERPLEIN", 384, 470, 22, "#fff", "900");
+  text(c, "UITGANG · SORTIE", 384, 496, 14, "#dfe8f5", "700");
+}
+
+// The tiles on the station building: squares in orange, yellow and beige, grey
+// creeping in towards the top (v = 1 is the top of the wall).
+function meiserTiles(c: Ctx) {
+  const n = 16, t = S / n;
+  for (let j = 0; j < n; j++)
+    for (let i = 0; i < n; i++) {
+      const up = 1 - j / n; // (canvas y runs down: the top rows are the top of the wall)
+      const r = R();
+      let col: string;
+      if (r < up * up * 0.75) col = ["#8a929b", "#9aa3ad", "#6f7883", "#b6bcc3"][(R() * 4) | 0]!;
+      else col = ["#f2c12e", "#f2c12e", "#f08a24", "#e8d9a8", "#f5d35c", "#d9661a"][(R() * 6) | 0]!;
+      c.fillStyle = col;
+      c.fillRect(i * t, j * t, t, t);
+    }
+  c.fillStyle = "rgba(240,236,226,0.7)";
+  for (let k = 0; k <= n; k++) {
+    c.fillRect(k * t - 1, 0, 2, S);
+    c.fillRect(0, k * t - 1, S, 2);
+  }
+  noise(c, 8);
+}
+
 function skyline(c: Ctx) {
   const g = c.createLinearGradient(0, 0, 0, S);
   g.addColorStop(0, "#0d2f86");

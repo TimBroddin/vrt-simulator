@@ -1,6 +1,6 @@
 // Phase 2: lights and props. Only reads phase-1 plans (own + neighbours).
 import { CEIL, CELL, CH, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, MID_CZ, SNAKE_HALF, T, isRtbf } from "./config";
-import { K, PASS_DROP, RT, SK, TALL, gardenStair, getPlan, idx, mazeAt, radioStation, roomAnomaly, setIsThuis, sideAt, stairFrame, tallTop, towerSpec, bosSpec, BAREEL, bareelLamps, bareelCanopyLamps, vosHill, isParkLane, PARK_Z0, PARK_Z1, type Plan, type Room } from "./layout";
+import { K, PASS_DROP, RT, SK, TALL, gardenStair, getPlan, idx, mazeAt, radioStation, roomAnomaly, setIsThuis, sideAt, stairFrame, tallTop, towerSpec, bosSpec, BAREEL, MEISER, bareelLamps, bareelCanopyLamps, vosHill, isParkLane, PARK_Z0, PARK_Z1, type Plan, type Room } from "./layout";
 import { Rng, hash } from "./rng";
 import { ART, pickArt } from "./art";
 import { Builder, LightCtx } from "./builder";
@@ -2087,6 +2087,7 @@ function furnishTall(p: Plan, rng: Rng, c: Ctx) {
 
   if (a.kind === "bos") return furnishBos(p, rng, c);
   if (a.kind === "bareel") return furnishBareel(p, rng, c);
+  if (a.kind === "meiser") return furnishMeiser(p, rng, c);
 
   // De Toren: the model in the middle, a park round it, a sun on the wall, film lights
   const t = towerSpec(p.st, H, CEIL)!;
@@ -2252,6 +2253,57 @@ function furnishBareel(p: Plan, rng: Rng, c: Ctx) {
     const q = g(4.0, lz + rng.range(-0.6, 0.6));
     prop("bostree", q.x, y0, q.z, 0, q.gx, q.gz, rng.int(0, 999), 10);
   }
+}
+
+// Station Meiser: daylight from the painted sky, lampposts along the platform
+// edges, lamps under the roof and in the passage; benches, bins, a vending
+// machine on each platform, a camera on the building. Nobody waiting.
+function furnishMeiser(p: Plan, rng: Rng, c: Ctx) {
+  const { light, prop, y0 } = c;
+  const a = p.st.atrium!, M = MEISER, top = tallTop(a, H, CEIL);
+  const ox = p.cx * CH * CELL, oz = p.cz * CH * CELL;
+  const g = (lx: number, lz: number) => {
+    const x = ox + lx, z = oz + lz;
+    return { x, z, gx: Math.floor(x / CELL), gz: Math.floor(z / CELL) };
+  };
+  // daylight: high up under the sky, and lower over the platforms and the tracks
+  for (let k = 0; k < 4; k++)
+    for (let m = 0; m < 4; m++) {
+      const q = g(9 + k * 6.4, 6 + m * 7.2);
+      light(q.x, y0 + top - 2.3, q.z, [1.0, 0.98, 0.94], 2.0, 15, q.gx, q.gz, null);
+    }
+  for (const [lx, lz] of [[10, 8], [18, 8], [26, 8], [10, 16.5], [22, 16.5], [11, 24.5], [19, 24.5], [26, 24.5]] as const) {
+    const q = g(lx, lz);
+    light(q.x, y0 + 5.5, q.z, [1.0, 0.97, 0.9], 1.3, 10, q.gx, q.gz, null);
+  }
+  // lampposts at the platform edges
+  for (const [lx, lz] of [[8.6, 9.8], [23.8, 9.8], [12.8, 22.6], [24.0, 22.6]] as const) {
+    const q = g(lx, lz);
+    prop("lamppost", q.x, y0, q.z, 0, q.gx, q.gz);
+    light(q.x, y0 + 3.3, q.z, [1.0, 0.86, 0.62], 0.7, 5, q.gx, q.gz, null);
+  }
+  // under the roof, and in the passage (a tube that flickers now and then)
+  for (let lx = 9; lx < M.portal[1] - 1; lx += 4) {
+    const q = g(lx, 25.4);
+    light(q.x, y0 + M.bh - 0.2, q.z, [1.0, 0.94, 0.82], 1.0, 6, q.gx, q.gz, "tube", { rot: 0, dead: false, flick: false });
+  }
+  const ps = g((M.passage[0] + M.passage[1]) / 2, 30);
+  light(ps.x, y0 + 2.55, ps.z, [0.9, 0.97, 1.0], 1.1, 5, ps.gx, ps.gz, "tube", { rot: Math.PI / 2, dead: false, flick: rng.chance(0.5) });
+  // benches facing the tracks, bins, a vending machine on each platform
+  for (const [lx, lz, rot] of [[14.0, 7.2, 0], [22.4, 7.8, 0], [11.0, 25.8, Math.PI], [24.6, 25.8, Math.PI]] as const) {
+    const q = g(lx, lz);
+    prop("parkbench", q.x, y0, q.z, rot, q.gx, q.gz);
+  }
+  for (const [lx, lz] of [[18.4, 7.0], [13.6, 26.4]] as const) {
+    const q = g(lx, lz);
+    prop("bin", q.x, y0, q.z, 0, q.gx, q.gz);
+  }
+  const v1 = g(13.4, 3.5), v2 = g(19.6, 26.5);
+  prop("vending", v1.x, y0, v1.z, 0, v1.gx, v1.gz, 0);
+  prop("vending", v2.x, y0, v2.z, Math.PI, v2.gx, v2.gz, 1);
+  // a camera on the building, watching the platform
+  const cm = g(8.2, M.build - 0.15);
+  prop("cctv", cm.x, y0 + 3.2, cm.z, Math.atan2(10, -6), cm.gx, cm.gz, 22, 0);
 }
 
 // Studio Toots: a small Marconi, one storey

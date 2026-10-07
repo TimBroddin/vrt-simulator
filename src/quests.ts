@@ -757,7 +757,7 @@ export class Quests {
       },
     };
     l.objs.push(obj);
-    if (!first && this.mine?.j === l.job.j) this.toast("JAN BECAUS IS WEER OP WANDEL", `Gezien: ${s.label}, ${floorName(s.f).toLowerCase()}`);
+    if (!first && this.mine?.j === l.job.j) this.toast("JAN BECAUS IS WEER OP WANDEL", `Laatst gezien: ${s.label}, ${floorName(s.f).toLowerCase()}`);
   }
 
   private buildToilets(l: Live, s: Spot, seats: { x: number; y: number; z: number }[]) {
@@ -1038,7 +1038,8 @@ export class Quests {
   // what goes on the plattegrond: your job, or the phones
   pins() {
     const t = this.activeTarget();
-    if (t) return [{ ...t, col: QUEST_COL, label: "OPDRACHT" }];
+    // (Jan doesn't stay put: where he is is only where he was last seen)
+    if (t) return [{ ...t, col: QUEST_COL, label: this.live.get(this.mine!.j)?.job.q === "jan" ? "LAATST GEZIEN" : "OPDRACHT" }];
     return this.ringing().map((r) => ({ ...r, col: PHONE_COL, label: "", icon: "phone" as const }));
   }
 

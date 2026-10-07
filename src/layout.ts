@@ -150,24 +150,24 @@ export interface Structure {
   park?: "w" | "e"; // de parkeertoren takes two blocks: its west half and its east half
 }
 
-export type Special = "sport" | "mess" | "park" | "props" | "decor" | "marconi" | "tower" | "bos" | "bareel";
-export type AtriumKind = "lobby" | "garden" | "hall" | "props" | "decor" | "marconi" | "tower" | "bos" | "bareel";
+export type Special = "sport" | "mess" | "park" | "props" | "decor" | "marconi" | "tower" | "bos" | "bareel" | "meiser";
+export type AtriumKind = "lobby" | "garden" | "hall" | "props" | "decor" | "marconi" | "tower" | "bos" | "bareel" | "meiser";
 // the tall spaces: one volume from the floor of f0 to the ceiling of f1
-export const TALL = new Set<AtriumKind>(["hall", "decor", "marconi", "tower", "bos", "bareel"]);
+export const TALL = new Set<AtriumKind>(["hall", "decor", "marconi", "tower", "bos", "bareel", "meiser"]);
 // height of a tall space, from its floor to its ceiling
 export const tallTop = (a: { f0: number; f1: number }, H: number, CEIL: number) => (a.f1 - a.f0) * H + CEIL;
 // Studio Marconi: the gallery runs along its west side, from this row on
 export const marconiGallery = (a: { x0: number; z0: number }, x: number, z: number) => x === a.x0 - 1 && z >= a.z0 + 4;
 
 // Where the big places are: one of each near the start, then scattered around.
-const FIXED: Record<string, Special> = { "-2,1": "sport", "2,0": "mess", "0,2": "park", "2,2": "props", "-2,3": "decor", "3,1": "marconi", "0,4": "tower", "3,3": "bos", "1,1": "bareel" };
+const FIXED: Record<string, Special> = { "-2,1": "sport", "2,0": "mess", "0,2": "park", "2,2": "props", "-2,3": "decor", "3,1": "marconi", "0,4": "tower", "3,3": "bos", "1,1": "bareel", "1,3": "meiser" };
 function rawSpecial(cx: number, cz: number): Special | null {
   if (cz <= MID_CZ) return null;
   const f = FIXED[`${cx},${cz}`];
   if (f) return f;
   if (Math.max(Math.abs(cx), Math.abs(cz)) <= 1) return null;
   const h = hash(71, cx, cz) % 1000;
-  return h < 55 ? "sport" : h < 110 ? "mess" : h < 135 ? "park" : h < 165 ? "props" : h < 185 ? "decor" : h < 205 ? "marconi" : h < 215 ? "tower" : h < 227 ? "bos" : h < 236 ? "bareel" : null;
+  return h < 55 ? "sport" : h < 110 ? "mess" : h < 135 ? "park" : h < 165 ? "props" : h < 185 ? "decor" : h < 205 ? "marconi" : h < 215 ? "tower" : h < 227 ? "bos" : h < 236 ? "bareel" : h < 245 ? "meiser" : null;
 }
 // De parkeertoren takes two blocks: the one it falls on, and the one east of it.
 function specialFor(cx: number, cz: number): Special | null {
@@ -1177,6 +1177,7 @@ export function cellLabel(f: number, gx: number, gz: number): string {
     }
     if (ta.kind === "bos") return fr ? "LE BOIS" : "VRT-BOS";
     if (ta.kind === "bareel") return fr ? "LA BARRIÈRE" : "DE BAREEL";
+    if (ta.kind === "meiser") return fr ? "GARE DE MEISER" : "STATION MEISER";
     return ta.kind === "marconi" ? "STUDIO MARCONI" : fr ? "LA TOUR" : "DE TOREN";
   }
   if (p.cz < MID_CZ) {
@@ -1437,6 +1438,11 @@ function makeSpecialStructure(cx: number, cz: number, kind: Special): Structure 
     const f0 = fixed ? 0 : [0, 0, 3][hash(78, cx, cz) % 3]!;
     base.atrium = { x0: 2, z0: 2, x1: 9, z1: 9, f0, f1: f0 + 3, kind: "bareel" };
   }
+  if (kind === "meiser") {
+    // station Meiser: line 26 in its cutting, indoors, four storeys high
+    const f0 = fixed ? 0 : [0, 0, 2][hash(79, cx, cz) % 3]!;
+    base.atrium = { x0: 2, z0: 2, x1: 9, z1: 9, f0, f1: f0 + 3, kind: "meiser" };
+  }
   if (kind === "props") {
     // two storeys: racks on the floor, a gallery all around upstairs
     const f0 = FIXED[`${cx},${cz}`] ? 2 : [1, 3, 5, 7][hash(74, cx, cz) % 4]!;
@@ -1510,6 +1516,53 @@ export const bareelCanopyLamps = () => {
   for (let lx = 5.5; lx < BAREEL.canopy.x1; lx += 4) for (const lz of [15.2, 20.8]) out.push([lx, lz]);
   return out;
 };
+
+// Station Meiser: in metres from the corner of its chunk. Line 26 runs east-west
+// through the middle in a cutting: two tracks below two platforms, into a brick
+// tunnel at each end. You come in on the north platform (the north door) or
+// through the station building on the south side (the south door). Stairs climb
+// the north wall to a landing by the east portal, and a door that stays shut.
+export const MEISER = {
+  portal: [7, 29] as const, // x: the two portal walls, the tunnels behind them
+  arch: [12.4, 20.6] as const, // z: the tunnel mouths
+  trench: [12, 21] as const, // z: the track bed (whole cells: rows 4 to 6)
+  tracks: [14.25, 18.75] as const, // z: the two tracks
+  depth: 0.85, // the track bed below the platforms
+  wall: 6.0, // the retaining wall along the north platform (higher than your eyes at the top of the stairs)
+  build: 27, // z: the front of the station building (to the south wall)
+  passage: [15.2, 17.8] as const, // x: the way through it, from the south door
+  bh: 7.2, // the station building's height
+  roof: 23.6, // z: how far its roof reaches out over the platform
+  stair: { x0: 19.6, x1: 27.4, z0: 3.2, z1: 5.4, rise: 4.2 }, // along the north wall, up to the east
+  hut: { x0: 8.4, x1: 12.6, z0: 3.4, z1: 6.0, h: 2.8 }, // the graffiti cabin on the north platform
+  masts: [10.5, 20.5, 27.0] as const, // x: the catenary masts, on both platforms (clear of the doors)
+};
+// is this cell (in the chunk) part of the track bed?
+export const meiserTrack = (lx: number, lz: number) => lz >= MEISER.trench[0] / CELL && lz < MEISER.trench[1] / CELL && lx >= 1 && lx <= 10;
+
+// Where you can stand in station Meiser (world x, z; feet at y): the stairs and
+// the landing, nothing on the tracks or behind the portals or in the building.
+// undefined: not in the station (the normal floor goes).
+export function meiserGround(st: Structure, x: number, z: number, y: number): number | null | undefined {
+  const a = st.atrium;
+  if (!a || a.kind !== "meiser") return undefined;
+  const ox = st.cx * CH * CELL, oz = st.cz * CH * CELL, lx = x - ox, lz = z - oz, y0 = a.f0 * FLOOR_H;
+  const M = MEISER, S = M.stair;
+  if (lx < (a.x0 - 1) * CELL || lx > (a.x1 + 2) * CELL || lz < (a.z0 - 1) * CELL || lz > (a.z1 + 2) * CELL) return undefined;
+  if (y < y0 - 1 || y > y0 + S.rise + 1) return undefined;
+  // the stairs, and the landing at the top
+  if (lx >= S.x0 && lx <= M.portal[1] && lz <= S.z1 + 0.3) {
+    const h = y0 + S.rise * Math.min(1, Math.max(0, (lx - S.x0) / (S.x1 - S.x0)));
+    if (lz <= S.z1) return Math.abs(h - y) < 0.5 ? h : null;
+    // (alongside: the handrail up there, and no leaning into the side of the stairs down here)
+    if (y > y0 + 0.6 || h - y > 0.5) return null;
+  }
+  if (y > y0 + 0.6) return undefined;
+  if (lx < M.portal[0] || lx > M.portal[1]) return null;
+  if (lz > M.trench[0] && lz < M.trench[1]) return null;
+  if (lz > M.build && (lx < M.passage[0] || lx > M.passage[1])) return null;
+  return undefined;
+}
 
 // ---------------------------------------------------------------------------
 // De Toren: the Reyers tower indoors. The shaft is hollow: a door at its foot,

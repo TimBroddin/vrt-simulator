@@ -3,8 +3,8 @@
 // set a waypoint, or pick a place from the list and it finds the nearest one in sight.
 import { CELL, CH, CHUNK, FLOOR_MAX, FLOOR_MIN, MID_CZ, MID_FLOOR, floorName, isRtbf } from "./config";
 import { K, RT, SK, cellLabel, getPlan, getStructure, mazeAt, messFloors, radioStation, roomLabel, setIsThuis, type Plan, type Room, type Structure } from "./layout";
-import { paintCells, waysIn } from "./minimap";
-import { liftIcon, phoneIcon, stairIcon } from "./mapicons";
+import { foodIn, paintCells, waysIn } from "./minimap";
+import { foodIcon, liftIcon, phoneIcon, stairIcon } from "./mapicons";
 import { STATIONS } from "./stations";
 
 const PX = 8; // tile pixels per cell
@@ -76,6 +76,7 @@ function atriumName(a: NonNullable<Structure["atrium"]>, fr: boolean) {
   if (a.kind === "tower") return fr ? "LA TOUR" : "DE TOREN";
   if (a.kind === "bos") return fr ? "LE BOIS" : "VRT-BOS";
   if (a.kind === "bareel") return fr ? "LA BARRIÈRE" : "DE BAREEL";
+  if (a.kind === "meiser") return fr ? "GARE DE MEISER" : "STATION MEISER";
   return a.kind === "hall" ? (fr ? "SALLE DE SPORT" : "SPORTHAL") : a.kind === "props" ? (fr ? "ACCESSOIRES" : "REKWISIETEN") : a.kind === "garden" ? (fr ? "JARDIN INTÉRIEUR" : "PLANTENTUIN") : "ATRIUM";
 }
 
@@ -180,6 +181,7 @@ const DESTS: { group: string; items: { name: string; find: Finder }[] }[] = [
       { name: "De Toren", find: atriumOf("tower") },
       { name: "Het VRT-bos", find: atriumOf("bos") },
       { name: "De bareel", find: atriumOf("bareel") },
+      { name: "Station Meiser", find: atriumOf("meiser") },
       { name: "Decorstraat", find: atriumOf("decor") },
       { name: "Studio Marconi", find: atriumOf("marconi") },
       { name: "De Mess", find: structFinder((st, pf) => {
@@ -540,7 +542,7 @@ export class WorldMap {
         g.drawImage(this.tile(f, cx, cz), (cx * CHUNK - this.vx) * s, (cz * CHUNK - this.vz) * s, CHUNK * s + 0.5, CHUNK * s + 0.5);
       }
     g.restore();
-    // the stairs and the lifts, upright, a little bigger as you zoom in
+    // the stairs, the lifts and the food, upright, a little bigger as you zoom in
     const ir = Math.max(8, Math.min(13, s * 2.4));
     for (let cz = cz0; cz <= cz1; cz++)
       for (let cx = cx0; cx <= cx1; cx++) {
@@ -549,6 +551,11 @@ export class WorldMap {
           if (Math.hypot(w.x - P.x, w.z - P.z) > SIGHT) continue;
           const [X, Y] = scr(w.x, w.z);
           (w.kind === "stair" ? stairIcon : liftIcon)(g, X, Y, ir);
+        }
+        for (const p of foodIn(f, cx, cz)) {
+          if (Math.hypot(p.x - P.x, p.z - P.z) > SIGHT) continue;
+          const [X, Y] = scr(p.x, p.z);
+          foodIcon(g, X, Y, ir, p.food);
         }
       }
     // landmarks: the big places always, the rest when zoomed in, never on top of each other

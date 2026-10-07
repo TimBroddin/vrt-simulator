@@ -3,9 +3,9 @@
 import { CEIL, CELL, CH, CHUNK, DOOR_H, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, MID_FLOOR, SNAKE_HALF, ST_HALF, ST_U1, ST_U2, ST_VM, T, isRtbf } from "./config";
 import { Builder, Frame, LightCtx, UP, fbox, type Built, type RGB, type Spec, type V3 } from "./builder";
 import { getFurnished } from "./furnish";
-import { K, isOpen, PASS_DROP, PASS_RUN, RT, SK, TALL, gardenStair, getStructure, kindAt, mazeAt, marconiGallery, roomAnomaly, sideAt, stairFrame, tallTop, towerSpec, bosSpec, BAREEL, bareelBooms, bareelLamps, bareelCanopyLamps, vosHill, parkLane, parkRise, isParkLane, PARK_Z0, PARK_Z1, type GardenStair, type Plan, type Room } from "./layout";
+import { K, isOpen, PASS_DROP, PASS_RUN, RT, SK, TALL, gardenStair, getStructure, kindAt, mazeAt, marconiGallery, roomAnomaly, sideAt, stairFrame, tallTop, towerSpec, bosSpec, BAREEL, MEISER, meiserTrack, bareelBooms, bareelLamps, bareelCanopyLamps, vosHill, parkLane, parkRise, isParkLane, PARK_Z0, PARK_Z1, type GardenStair, type Plan, type Room } from "./layout";
 import { hash } from "./rng";
-import { L } from "./layers";
+import { L, MEISER_UV } from "./layers";
 import { buildFixture, buildProp } from "./props";
 import { BufferGeometry, CylinderGeometry, RingGeometry } from "three";
 
@@ -62,6 +62,8 @@ function surf(p: Plan, i: number): Surf {
           // the painted sky is lit by itself, like a cyclorama
           if (a.kind === "bareel") return { floor: sp(L.GRASS, [1.0, 1.2, 0.8]), ceil: null, wall: { layer: L.CYC, emit: [1.35, 1.38, 1.36] }, h: top, base: false };
           if (a.kind === "bos") return { floor: sp(L.GRASS, [0.9, 1.1, 0.72]), ceil: null, wall: { layer: L.CYC, emit: [1.0, 1.04, 1.02] }, h: top, base: false };
+          // station Meiser: the platforms, grey pavers
+          if (a.kind === "meiser") return { floor: sp(L.TILEDARK, [1.7, 1.7, 1.66]), ceil: null, wall: { layer: L.CYC, emit: [1.25, 1.28, 1.27] }, h: top, base: false };
           return { floor: sp(L.GRASS, [1.1, 1.25, 0.95]), ceil: null, wall: { layer: L.CYC, emit: [0.82, 0.84, 0.86] }, h: top, base: false };
         }
       }
@@ -205,7 +207,9 @@ function emitCell(b: Builder, p: Plan, i: number, gx: number, gz: number, y0: nu
       // a doorgang: the floor a few steps down
       const pr = k === K.ROOM ? p.rooms[p.room[i]!]! : null;
       if (pr?.type === RT.VOS) buildHillCell(b, p, pr, x0, z0, y0, s.floor);
-      else b.hrect(x0, z0, x1, z1, y0 - (pr?.pass ? PASS_DROP : 0), true, s.floor);
+      else if (p.st.atrium?.kind === "meiser" && f === p.st.atrium.f0 && p.zone[i] === 2 && meiserTrack(i % CH, (i / CH) | 0)) {
+        // (station Meiser: the tracks are lower, see buildMeiser)
+      } else b.hrect(x0, z0, x1, z1, y0 - (pr?.pass ? PASS_DROP : 0), true, s.floor);
       if (pr?.pass) buildPassageCell(b, p, pr, i, gx, gz, y0, s);
     }
     if (s.ceil && !(k === K.CORR && p.zone[i] === 2)) b.hrect(x0, z0, x1, z1, y0 + s.h, false, s.ceil);
@@ -879,6 +883,7 @@ function buildTall(b: Builder, p: Plan) {
   }
   if (a.kind === "bos") return buildBos(b, p, at, ceiling);
   if (a.kind === "bareel") return buildBareel(b, p, at, ceiling);
+  if (a.kind === "meiser") return buildMeiser(b, p, at, ceiling);
   // De Toren: a painted sky overhead, a grid of lights, the tower, its stair, its deck
   ceiling({ layer: L.WHITE, emit: [0.3, 0.46, 0.72] }, 0);
   const t = towerSpec(p.st, H, CEIL)!;
@@ -1168,6 +1173,193 @@ function buildBareel(b: Builder, p: Plan, at: (x: number, z: number) => void, ce
   const px_ = X(B.walk[0] - 0.4), pz_ = Z(11.5);
   box(px_ - 0.04, y0, pz_ - 0.04, px_ + 0.04, y0 + 1.5, pz_ + 0.04, sp(L.WHITE, [0.55, 0.56, 0.58]), true);
   box(px_ - 0.35, y0 + 1.5, pz_ - 0.07, px_ + 0.35, y0 + 2.2, pz_ - 0.04, { all: sp(L.WHITE, [0.12, 0.3, 0.6]), nz: { layer: L.BAREEL, uv: [0.5, 0, 1, 0.5] } });
+}
+
+// Station Meiser: the tracks down in their cutting, a brick tunnel mouth at each
+// end, the retaining wall and the cabin covered in graffiti, the station building
+// with its tiles and its mural, the catenary, the stairs, the name boards. The
+// train is built and run on the main thread (trains.ts). See MEISER in layout.ts.
+function buildMeiser(b: Builder, p: Plan, at: (x: number, z: number) => void, ceiling: (spec: Spec, sub?: number) => void) {
+  const a = p.st.atrium!, M = MEISER, S = M.stair;
+  const ox = p.cx * CH * CELL, oz = p.cz * CH * CELL, y0 = a.f0 * H;
+  const X0 = ox + (a.x0 - 1) * CELL + T, X1 = ox + (a.x1 + 2) * CELL - T;
+  const Z0 = oz + (a.z0 - 1) * CELL + T, Z1 = oz + (a.z1 + 2) * CELL - T;
+  const X = (v: number) => ox + v, Z = (v: number) => oz + v;
+  const box = (x0: number, ya: number, z0: number, x1: number, yb_: number, z1: number, s: Parameters<Builder["aabox"]>[6], solid = false) => {
+    at((x0 + x1) / 2, (z0 + z1) / 2);
+    b.aabox(x0, ya, z0, x1, yb_, z1, s, 0);
+    if (solid) b.solid(x0, z0, x1, z1);
+  };
+  // along x, a cell at a time (each piece lit where it is)
+  const alongX = (x0: number, x1: number, fn: (xa: number, xb: number) => void) => {
+    for (let x = x0; x < x1 - 1e-3; x = Math.min(x1, (Math.floor(x / CELL + 1e-6) + 1) * CELL)) fn(x, Math.min(x1, (Math.floor(x / CELL + 1e-6) + 1) * CELL));
+  };
+  const gfx = (k: keyof typeof MEISER_UV, flip = false): Spec => {
+    const [u0, v0, u1, v1] = MEISER_UV[k];
+    return { layer: L.MEISER, uv: flip ? [u1, v0, u0, v1] : [u0, v0, u1, v1] };
+  };
+  ceiling({ layer: L.WHITE, emit: [1.1, 1.25, 1.45] }, 0);
+  const yb = y0 - M.depth; // the track bed
+  const px0 = X(M.portal[0]), px1 = X(M.portal[1]);
+  const tz0 = Z(M.trench[0]), tz1 = Z(M.trench[1]);
+  const concrete = sp(L.CONCRETE, [0.7, 0.69, 0.66]);
+  const steel = sp(L.STEEL, [0.62, 0.64, 0.67]);
+
+  // --- the track bed, the platform edges
+  flat(b, at, X0, tz0, X1, tz1, yb, sp(L.CONCRETE, [0.34, 0.32, 0.3]));
+  for (const [ze, n] of [[tz0, 1], [tz1, -1]] as const) {
+    alongX(px0, px1, (xa, xb) => {
+      at((xa + xb) / 2, ze + n * 0.5);
+      b.vrect(false, ze, xa, xb, yb, y0, n, sp(L.CONCRETE, [0.62, 0.61, 0.58]), 1.5, yb);
+    });
+    // the light edge and the white tactile strip
+    flat(b, at, px0, n > 0 ? ze - 0.3 : ze, px1, n > 0 ? ze : ze + 0.3, y0 + 0.004, sp(L.CONCRETE, [1.1, 1.1, 1.06]));
+    flat(b, at, px0, n > 0 ? ze - 1.05 : ze + 0.65, px1, n > 0 ? ze - 0.65 : ze + 1.05, y0 + 0.005, sp(L.WHITE, [0.82, 0.82, 0.78]));
+  }
+  // two tracks: a ballast bed, concrete sleepers, the rails
+  const ballast = { all: sp(L.CONCRETE, [0.5, 0.47, 0.43]), ny: null };
+  for (const tz of M.tracks) {
+    const zc = Z(tz);
+    alongX(X0, X1, (xa, xb) => box(xa, yb, zc - 1.7, xb, yb + 0.14, zc + 1.7, ballast));
+    for (let x = X0 + 0.3; x < X1 - 0.2; x += 0.6) box(x - 0.12, yb + 0.14, zc - 1.25, x + 0.12, yb + 0.26, zc + 1.25, sp(L.CONCRETE, [0.66, 0.65, 0.62]));
+    for (const r of [-0.72, 0.72])
+      alongX(X0, X1, (xa, xb) => box(xa, yb + 0.26, zc + r - 0.035, xb, yb + 0.41, zc + r + 0.035, { all: sp(L.STEEL, [0.36, 0.3, 0.26]), py: sp(L.STEEL, [1.1, 1.1, 1.12]) }));
+  }
+
+  // --- the tunnels: brick portal walls across the whole width, an arch over the tracks, black behind
+  const brick = sp(L.BRICK, [0.82, 0.52, 0.42]), ring = sp(L.BRICK, [0.62, 0.38, 0.3]);
+  const az0 = Z(M.arch[0]), az1 = Z(M.arch[1]), r = (az1 - az0) / 2, zm = (az0 + az1) / 2, ys = yb + 1.2;
+  const wallTop = y0 + 6.6;
+  const black = sp(L.BLACK, [0.12, 0.12, 0.13]);
+  for (const [pw, side] of [[px0, -1], [px1, 1]] as const) {
+    // the wall: side = which way is out (into the tunnel)
+    const wa = side < 0 ? pw - 0.6 : pw, wb = side < 0 ? pw : pw + 0.6;
+    box(wa, y0, Z0, wb, wallTop, tz0, brick, true);
+    box(wa, yb, tz0, wb, wallTop, az0, brick);
+    box(wa, yb, az1, wb, wallTop, tz1, brick);
+    box(wa, y0, tz1, wb, wallTop, Z1, brick, true);
+    // over the arch, in strips, and the ring of the arch standing out a little
+    const n = 72;
+    for (let k = 0; k < n; k++) {
+      const za = az0 + ((az1 - az0) * k) / n, zb = az0 + ((az1 - az0) * (k + 1)) / n, zc = (za + zb) / 2;
+      const yc = ys + Math.sqrt(Math.max(0, r * r - (zc - zm) * (zc - zm)));
+      box(wa, yc, za, wb, wallTop, zb, brick);
+      box(side < 0 ? wb - 0.02 : wa - 0.08, yc, za, side < 0 ? wb + 0.08 : wa + 0.02, yc + 0.45, zb, ring);
+    }
+    // the coping, and the green growing over the top
+    box(wa - 0.1, wallTop, Z0, wb + 0.1, wallTop + 0.15, Z1, concrete);
+    for (let z = Z0; z < Z1 - 0.01; z += 1.5) box(wa, wallTop + 0.15, z, wb, wallTop + 0.6 + ((Math.sin(z * 1.7 + pw) + 1) * 0.35), Math.min(Z1, z + 1.5), { all: sp(L.FOLIAGE, [0.4, 0.6, 0.32]), ny: null });
+    // the tunnel behind: black walls, a black roof, a black end
+    const ta = side < 0 ? X0 : wb, tb = side < 0 ? wa : X1;
+    at((ta + tb) / 2, zm);
+    b.vrect(false, az0 + 0.01, ta, tb, yb, ys + r, 1, black, 0);
+    b.vrect(false, az1 - 0.01, ta, tb, yb, ys + r, -1, black, 0);
+    b.hrect(ta, az0, tb, az1, ys + r, false, black, 0);
+    b.vrect(true, side < 0 ? X0 + 0.02 : X1 - 0.02, az0, az1, yb, ys + r, side < 0 ? 1 : -1, black, 0);
+  }
+
+  // --- the north side: the retaining wall, covered in graffiti, with a door into it from the corridor
+  const door = [X(15.6), X(17.4)] as const, wz = Z0 + 0.03, wtop = y0 + M.wall;
+  for (const [xa, xb] of [[px0, door[0]], [door[1], px1]] as const) {
+    at((xa + xb) / 2, wz + 1);
+    b.vrect(false, wz, xa, xb, y0, y0 + 3.4, 1, gfx("wild"), 0);
+    b.vrect(false, wz, xa, xb, y0 + 3.4, wtop, 1, sp(L.CONCRETE, [0.62, 0.62, 0.6]), 0, y0);
+  }
+  at((door[0] + door[1]) / 2, wz + 1);
+  b.vrect(false, wz, door[0], door[1], y0 + 2.35, wtop, 1, concrete, 0);
+  box(px0, wtop, Z0, px1, wtop + 0.15, Z0 + 0.9, concrete);
+  for (let x = px0; x < px1 - 0.01; x += 1.4) box(x, wtop + 0.15, Z0, Math.min(px1, x + 1.4), wtop + 0.5 + ((Math.sin(x * 2.3) + 1) * 0.4), Z0 + 0.8, { all: sp(L.FOLIAGE, [0.38, 0.58, 0.3]), ny: null });
+
+  // the cabin on the north platform: graffiti all round
+  const hu = M.hut;
+  box(X(hu.x0), y0, Z(hu.z0), X(hu.x1), y0 + hu.h, Z(hu.z1), { px: gfx("hut"), nx: gfx("hut"), pz: gfx("hut", true), nz: gfx("hut"), py: sp(L.CONCRETE, [0.45, 0.45, 0.46]), ny: null }, true);
+  box(X(hu.x0) - 0.08, y0 + hu.h, Z(hu.z0) - 0.08, X(hu.x1) + 0.08, y0 + hu.h + 0.1, Z(hu.z1) + 0.08, sp(L.CONCRETE, [0.5, 0.5, 0.5]));
+
+  // --- the stairs up along the north wall, the landing, the door that stays shut
+  const n = 25, run = (S.x1 - S.x0) / n, sz0 = Z0, sz1 = Z(S.z1);
+  for (let k = 0; k < n; k++) {
+    const xa = X(S.x0) + k * run;
+    box(xa, y0, sz0, xa + run, y0 + ((k + 1) * S.rise) / n, sz1, { all: concrete, py: sp(L.CONCRETE, [0.85, 0.84, 0.8]), nz: null });
+  }
+  // (not solid: where you can stand on them is meiserGround's business)
+  box(X(S.x1), y0, sz0, px1, y0 + S.rise, sz1, { all: concrete, py: sp(L.CONCRETE, [0.85, 0.84, 0.8]) });
+  // (the open side of the stairs, in one piece)
+  alongX(X(S.x0), px1, (xa, xb) => {
+    at((xa + xb) / 2, sz1 + 0.5);
+    const h = (x: number) => y0 + S.rise * Math.min(1, Math.max(0, (x - X(S.x0)) / (S.x1 - S.x0)));
+    b.quad4([[xa, y0, sz1], [xb, y0, sz1], [xb, h(xb), sz1], [xa, h(xa), sz1]], [[0, 0], [(xb - xa) / 4, 0], [(xb - xa) / 4, (h(xb) - y0) / 4], [0, (h(xa) - y0) / 4]], [0, 0, 1], concrete);
+  });
+  // the handrail: posts, a rail along the slope and the landing
+  const rail = sp(L.STEEL, [0.75, 0.77, 0.8]);
+  for (let x = X(S.x0) + 0.2; x < px1 - 0.1; x += 1.3) {
+    const h = y0 + S.rise * Math.min(1, Math.max(0, (x - X(S.x0)) / (S.x1 - S.x0)));
+    box(x - 0.025, h, sz1 - 0.08, x + 0.025, h + 1.0, sz1 - 0.03, rail);
+  }
+  at(X((S.x0 + S.x1) / 2), sz1);
+  rod(b, [X(S.x0), y0 + 1.0, sz1 - 0.055], [X(S.x1), y0 + S.rise + 1.0, sz1 - 0.055], 0.045, rail);
+  rod(b, [X(S.x1), y0 + S.rise + 1.0, sz1 - 0.055], [px1, y0 + S.rise + 1.0, sz1 - 0.055], 0.045, rail);
+  const dy = y0 + S.rise;
+  box(px1 - 0.06, dy, Z(3.7), px1, dy + 2.1, Z(5.0), { nx: sp(L.DOOR_STEEL, [0.35, 0.45, 0.6]), all: sp(L.STEEL, [0.3, 0.3, 0.32]) });
+  box(px1 - 0.08, dy + 1.0, Z(4.75), px1 - 0.06, dy + 1.1, Z(4.9), rail);
+  box(px1 - 0.07, dy + 2.2, Z(3.45), px1 - 0.03, dy + 2.6, Z(5.25), { all: sp(L.WHITE, [0.2, 0.3, 0.5]), nx: gfx("plein", true) });
+
+  // --- the station building on the south side: a mural at the bottom, tiles above, a roof reaching out
+  const bz = Z(M.build), pa = X(M.passage[0]), pb = X(M.passage[1]), band = y0 + 2.6, roofY = y0 + M.bh;
+  at((px0 + pa) / 2, bz - 1);
+  b.vrect(false, bz, px0, pa, y0, band, -1, gfx("mural", true), 0);
+  for (const [xa, xb] of [[pb, (pb + px1) / 2], [(pb + px1) / 2, px1]] as const) {
+    at((xa + xb) / 2, bz - 1);
+    b.vrect(false, bz, xa, xb, y0, band, -1, gfx("wild", true), 0);
+  }
+  alongX(px0, px1, (xa, xb) => {
+    at((xa + xb) / 2, bz - 1);
+    b.vrect(false, bz, xa, xb, band, roofY, -1, { layer: L.MTILES }, 0, band);
+  });
+  b.solid(px0, bz, pa, Z1);
+  b.solid(pb, bz, px1, Z1);
+  // the passage through it: graffiti on the walls, a low ceiling
+  for (const [xw, nn] of [[pa, 1], [pb, -1]] as const) {
+    at(xw + nn, (bz + Z1) / 2);
+    b.vrect(true, xw, bz, Z1, y0, band, nn, gfx("hut", nn < 0), 0);
+  }
+  flat(b, at, pa, bz, pb, Z1, band, sp(L.CONCRETE, [0.4, 0.4, 0.42]));
+  for (let z = bz; z < Z1 - 0.01; z += CELL) {
+    at((pa + pb) / 2, z + 1);
+    b.hrect(pa, z, pb, Math.min(Z1, z + CELL), band - 0.001, false, sp(L.CONCRETE, [0.4, 0.4, 0.42]), 0);
+  }
+  // the roof: white edges, brown wood underneath
+  alongX(px0, px1, (xa, xb) => {
+    for (let z = Z(M.roof); z < Z1 - 0.01; z += CELL) {
+      const ze = Math.min(Z1, z + CELL);
+      box(xa, roofY, z, xb, roofY + 0.4, ze, { all: sp(L.WHITE, [0.86, 0.86, 0.84]), ny: sp(L.WOODSLAT, [0.62, 0.42, 0.28]) });
+    }
+  });
+  // the name board on the building, by the passage
+  box(pb + 0.6, y0 + 2.0, bz - 0.06, pb + 2.6, y0 + 2.5, bz, { all: sp(L.WHITE, [0.15, 0.16, 0.18]), nz: gfx("sign") });
+
+  // --- name boards on posts, on both platforms
+  for (const [sx, sz] of [[X(13.6), Z(9.4)], [X(23.0), Z(24.2)]] as const) {
+    for (const dx of [-0.9, 0.9]) box(sx + dx - 0.035, y0, sz - 0.035, sx + dx + 0.035, y0 + 2.75, sz + 0.035, steel, true);
+    box(sx - 1.0, y0 + 2.2, sz - 0.04, sx + 1.0, y0 + 2.7, sz + 0.04, { all: sp(L.WHITE, [0.15, 0.16, 0.18]), nz: gfx("sign"), pz: gfx("sign", true) });
+  }
+
+  // --- the catenary: masts on both platforms, arms out over the tracks, the wires
+  const wireY = yb + 0.41 + 5.0, msgY = wireY + 0.9;
+  for (const mx of M.masts)
+    for (const [mz, tz] of [[tz0 - 1.4, M.tracks[0]], [tz1 + 1.4, M.tracks[1]]] as const) {
+      const x = X(mx), zt = Z(tz);
+      box(x - 0.11, y0, mz - 0.11, x + 0.11, msgY + 0.4, mz + 0.11, steel, true);
+      at(x, (mz + zt) / 2);
+      rod(b, [x, msgY, mz], [x, msgY, zt], 0.07, steel);
+      rod(b, [x, msgY - 0.7, mz], [x, wireY + 0.15, zt], 0.05, steel);
+      box(x - 0.03, wireY, zt - 0.03, x + 0.03, msgY, zt + 0.03, steel);
+    }
+  for (const tz of M.tracks) {
+    const zt = Z(tz);
+    at((px0 + px1) / 2, zt);
+    rod(b, [px0, wireY, zt], [px1, wireY, zt], 0.018, sp(L.STEEL, [0.45, 0.35, 0.25]));
+    rod(b, [px0, msgY, zt], [px1, msgY, zt], 0.022, sp(L.STEEL, [0.4, 0.4, 0.42]));
+  }
 }
 
 // Het VRT-bos: a painted sky, a gravel path through the trees, a clay tennis

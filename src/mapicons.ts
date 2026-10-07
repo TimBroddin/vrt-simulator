@@ -93,3 +93,42 @@ export function liftIcon(g: CanvasRenderingContext2D, x: number, y: number, r: n
   g.closePath();
   g.fill();
 }
+
+// Food: an orange disc with what's sold there (24 x 24 glyphs)
+export const FOOD_COL = "#ff8a3d";
+const FOOD_GLYPH: Record<string, Path2D> = {
+  water: new Path2D("M12 3c-3 4.5-6.5 8-6.5 11.5a6.5 6.5 0 0 0 13 0C18.5 11 15 7.5 12 3z"),
+  koffie: new Path2D("M4.5 8h12v5.5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5zM16.5 9.5h1.3a3 3 0 0 1 0 6h-1.6v-2h1.6a1 1 0 0 0 0-2h-1.3z"),
+  snoep: new Path2D("M8 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0zM8.6 12L3 8.2v7.6zM15.4 12L21 8.2v7.6z"),
+  broodje: new Path2D("M3.5 12.5C3.5 8.8 7.3 6.5 12 6.5s8.5 2.3 8.5 6zM3.5 14h17v1.8h-17zM4.5 17.2h15a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2z"),
+  dagschotel: new Path2D("M6 3h1.2v5h1V3h1.2v5h1V3h1.2v6a2.4 2.4 0 0 1-1.8 2.3V21H8.4v-9.7A2.4 2.4 0 0 1 6 9zM15 3c2.4.8 3.6 3.8 3.6 8H17v10h-2z"),
+};
+export function foodIcon(g: CanvasRenderingContext2D, x: number, y: number, r: number, food: string) {
+  g.fillStyle = FOOD_COL;
+  g.strokeStyle = "#0b0c0e";
+  g.lineWidth = Math.max(1.2, r * 0.16);
+  g.beginPath();
+  g.arc(x, y, r, 0, 7);
+  g.fill();
+  g.stroke();
+  const glyph = FOOD_GLYPH[food];
+  if (!glyph) return;
+  g.save();
+  g.translate(x, y);
+  const k = (r * 1.3) / 24;
+  g.scale(k, k);
+  g.translate(-12, -12);
+  g.fillStyle = "#0b0c0e";
+  g.fill(glyph, "evenodd");
+  g.restore();
+}
+
+// A toilet (when you need one): a brown square with WC on it.
+export function toiletIcon(g: CanvasRenderingContext2D, x: number, y: number, r: number, col: string) {
+  badge(g, x, y, r, col);
+  g.fillStyle = "#0b0c0e";
+  g.font = `800 ${Math.round(r * 0.95)}px ui-monospace, Menlo, monospace`;
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText("WC", x, y + r * 0.06);
+}

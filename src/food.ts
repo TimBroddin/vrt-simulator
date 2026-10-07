@@ -30,6 +30,9 @@ interface Spot {
   z: number;
 }
 
+// what's sold at which prop (for the icons on the maps)
+export const PROP_FOOD: Record<string, string> = { cooler: "water", vending: "snoep", koffiebar: "koffie", kcounter: "broodje", counter: "dagschotel" };
+
 // where you buy what, in front of each prop (local: x along it, y up, z out from it)
 function spotsOf(pr: Prop, f: number): Spot[] {
   const fr = new Frame(pr.x, pr.y, pr.z, pr.rot);

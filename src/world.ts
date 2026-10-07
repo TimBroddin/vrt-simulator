@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { CEIL, CELL, CH, FLOOR_MAX, FLOOR_MIN, H, ST_HALF, ST_U1, ST_U2, ST_VM } from "./config";
 import type { Built } from "./builder";
 import type { ElevOut } from "./chunk";
-import { K, openDoor, gardenRampY, gardenStair, getStructure, kindAt, parkGround, passageOffset, stairFrame, towerGround, towerSpec } from "./layout";
+import { K, openDoor, meiserGround, gardenRampY, gardenStair, getStructure, kindAt, parkGround, passageOffset, stairFrame, towerGround, towerSpec } from "./layout";
 import { floorDiv } from "./rng";
 
 export interface ElevRT {
@@ -346,6 +346,9 @@ export class World {
       const tg = towerGround(ts, x, z, y);
       if (tg !== undefined) return tg;
     }
+    // station Meiser: the stairs, and no walking on the tracks
+    const mg = meiserGround(getStructure(cx, cz), x, z, y);
+    if (mg !== undefined) return mg;
     // the ramps of the parkeertoren
     const pg = parkGround(f, x, z, y);
     if (pg !== undefined) return pg;

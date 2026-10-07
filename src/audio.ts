@@ -285,6 +285,22 @@ export class Sound {
     this.burst(0.08, "lowpass", 400, 1, 0.12 * vol, 2.0, 0, 0.5);
   }
 
+  // a train coming through station Meiser: the horn now, then (after `delay`) the
+  // rumble swelling and fading, the wheels clacking over the joints
+  train(vol: number, pan: number, delay: number) {
+    if (!this.ctx || this.muted || vol < 0.02) return;
+    for (const [w, d] of [[0, 0.9], [1.15, 0.6]] as const) {
+      this.tone(311, d, 0.05 * vol, w, "sawtooth", pan, 0.8);
+      this.tone(370, d, 0.04 * vol, w, "sawtooth", pan, 0.8);
+    }
+    const env = (k: number, n: number) => Math.sin((Math.PI * (k + 0.5)) / n);
+    for (let k = 0; k < 10; k++) this.burst(1.4, "lowpass", 150, 0.8, 0.22 * vol * env(k, 10), delay + k * 0.75, pan, 0.6);
+    for (let k = 0; k < 28; k++) {
+      const t = delay + 0.6 + k * 0.27 + (k % 2) * 0.08, e = env(k, 28);
+      this.burst(0.06, "bandpass", 2200, 3, 0.06 * vol * e, t, pan, 0.5);
+    }
+  }
+
   // the floor giving way: a long low rumble, then the crack
   rumble() {
     if (!this.ctx || this.muted) return;

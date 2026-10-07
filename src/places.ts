@@ -27,6 +27,7 @@ export const PLACES: { id: string; name: string }[] = [
   { id: "torentop", name: "Boven op De Toren" },
   { id: "bos", name: "Het VRT-bos" },
   { id: "bareel", name: "De bareel" },
+  { id: "meiser", name: "Station Meiser" },
   { id: "nieuwsstudio", name: "Een nieuwsstudio" },
   { id: "journaal", name: "De journaalstudio" },
   { id: "weer", name: "De weerstudio" },
@@ -90,7 +91,7 @@ export function placeAt(f: number, x: number, z: number, y: number): string | nu
       const lx = i % CH;
       return lx <= 4 ? "studio5" : lx >= 7 ? "studio3" : "decorstraat";
     }
-    const m: Record<string, string> = { hall: "sporthal", props: "rekwisieten", marconi: "marconi", tower: "toren", bos: "bos", bareel: "bareel", garden: "plantentuin", lobby: "atrium" };
+    const m: Record<string, string> = { hall: "sporthal", props: "rekwisieten", marconi: "marconi", tower: "toren", bos: "bos", bareel: "bareel", meiser: "meiser", garden: "plantentuin", lobby: "atrium" };
     return m[a.kind] ?? null;
   }
   if (k === K.ROOM) {

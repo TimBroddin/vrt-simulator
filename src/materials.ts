@@ -29,6 +29,9 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
       weerLayer: { value: L.WEERLIVE },
       weerMap: { value: new THREE.Vector4(...NWS_UV.weer) },
       nwsLayer: { value: L.NWS },
+      // only what's inside this box is drawn (the trains at Meiser come out of their tunnels)
+      clipMin: { value: new THREE.Vector3(-1e9, -1e9, -1e9) },
+      clipMax: { value: new THREE.Vector3(1e9, 1e9, 1e9) },
     },
     vertexShader: /* glsl */ `
       in float layer;
@@ -96,12 +99,15 @@ export function makeWorldMaterial(atlas: THREE.DataArrayTexture) {
       uniform vec3 lampDir;
       uniform float lampOn;
       uniform float exposure;
+      uniform vec3 clipMin;
+      uniform vec3 clipMax;
       in vec2 vUv;
       in float vLayer;
       in vec3 vLight;
       in vec3 vWorld;
       out vec4 fragColor;
       void main() {
+        if (any(lessThan(vWorld, clipMin)) || any(greaterThan(vWorld, clipMax))) discard;
         float li = floor(vLayer + 0.5);
         vec4 t;
         if (vLive > 0.5) {

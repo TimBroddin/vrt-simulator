@@ -27,6 +27,8 @@ import { CCTV } from "./cctv";
 import { WeerCam } from "./weer";
 import { Cars } from "./cars";
 import { Bareels } from "./bareel";
+import { Trains } from "./trains";
+import { Tutorial } from "./tutorial";
 import { PLACES, Places, placeAt } from "./places";
 import { layPostcards } from "./postcards";
 import { track, trackOnce } from "./analytics";
@@ -213,6 +215,9 @@ const cctv = new CCTV(renderer, scene, mat, world, player, touch);
 const weer = new WeerCam(renderer, scene, mat, world, player, touch);
 const cars = new Cars(scene, mat, world, player, sound, seed);
 const bareels = new Bareels(scene, mat, world, player, sound);
+const trains = new Trains(scene, world, player, sound);
+// your first day: a few cards to get you going
+const tutorial = new Tutorial(touch);
 // the others walking round
 const visitors = new Visitors(world, seed, `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
 scene.add(visitors.root);
@@ -423,6 +428,7 @@ document.addEventListener("keydown", (e) => {
     if (minimap.visible) track("minimap_opened", { device: "desktop" });
   }
   if (letter(e, "p")) photoRequested = true;
+  if (letter(e, "x")) tutorial.skip();
   if (letter(e, "c")) {
     e.preventDefault();
     openChat();
@@ -529,6 +535,10 @@ dev.add("fps", "fps en chunks aan/uit", () => {
 dev.add("wie", "wie er nog rondloopt", () => {
   const n = visitors.count;
   return n ? `${n} ${n === 1 ? "ander" : "anderen"} in deze wereld` : "niemand anders in deze wereld";
+});
+dev.add("uitleg", "de uitleg van de eerste dag, opnieuw", () => {
+  tutorial.start(true);
+  return "de uitleg begint opnieuw";
 });
 dev.add("plekken", "welke plekken nog te vinden zijn", () => {
   const left = PLACES.filter((p) => !places.found.has(p.id)).map((p) => p.name);
@@ -682,6 +692,7 @@ function begin() {
     playing = true;
     $("overlay").classList.add("hidden");
   } else canvas.requestPointerLock?.();
+  if (!started) tutorial.start();
   started = true;
 }
 $("seed").textContent = String(seed);
@@ -741,7 +752,7 @@ function updateEnv(dt: number) {
     trackOnce(`floor${f}`, "floor_visited", { floor: f });
     const area = onRoof ? "roof" : f === FLOOR_MIN ? "parking" : /PLANTENTUIN|JARDIN/.test(label) ? "plantentuin" : label === "MIDDENGANG" ? "middengang"
       : label === "ATRIUM" ? "atrium" : STATIONS.some((st) => st.label === label) ? "radio" : /^STUDIO/.test(label) ? "studio" : /REGIE|RÉGIE/.test(label) ? "regie" : /ARCHIEF|ARCHIVES/.test(label) ? "archive"
-      : /KANTINE|CANTINE/.test(label) ? "canteen" : /KOFFIEKAMER|CAFÉTÉRIA/.test(label) ? "koffiekamer" : /^DPC$|INFORMATIQUE/.test(label) ? "dpc" : /^KETNET/.test(label) ? "ketnet" : /^SPORZA/.test(label) ? "sporza" : /^DECOR/.test(label) ? "tvset" : /BEWAKING|SÉCURITÉ/.test(label) ? "security" : /DECORSTRAAT|RUE DES/.test(label) ? "decorstraat" : /MARCONI/.test(label) ? "marconi" : /TOOTS/.test(label) ? "toots" : /TOREN|LA TOUR/.test(label) ? "tower" : /VRT-BOS|LE BOIS/.test(label) ? "bos" : /BAREEL|BARRIÈRE/.test(label) ? "bareel" : "";
+      : /KANTINE|CANTINE/.test(label) ? "canteen" : /KOFFIEKAMER|CAFÉTÉRIA/.test(label) ? "koffiekamer" : /^DPC$|INFORMATIQUE/.test(label) ? "dpc" : /^KETNET/.test(label) ? "ketnet" : /^SPORZA/.test(label) ? "sporza" : /^DECOR/.test(label) ? "tvset" : /BEWAKING|SÉCURITÉ/.test(label) ? "security" : /DECORSTRAAT|RUE DES/.test(label) ? "decorstraat" : /MARCONI/.test(label) ? "marconi" : /TOOTS/.test(label) ? "toots" : /TOREN|LA TOUR/.test(label) ? "tower" : /VRT-BOS|LE BOIS/.test(label) ? "bos" : /BAREEL|BARRIÈRE/.test(label) ? "bareel" : /MEISER/.test(label) ? "meiser" : "";
     if (area) trackOnce(`area:${area}`, "area_discovered", { area });
     if (fr) trackOnce("area:rtbf", "area_discovered", { area: "rtbf" });
   }
@@ -837,7 +848,9 @@ function frame() {
   if (ready && started && !finale.inHall) cctv.update(dt);
   if (ready && started && !finale.inHall) weer.update(dt);
   if (ready && !finale.inHall) bareels.update(dt);
+  if (ready && !finale.inHall) trains.update(dt);
   showOthers();
+  tutorial.update(dt, { meters: pedMeters, onCall: !!quests.mine, mapOpen: worldmap.open, active: started && ready && (locked || playing || api.auto || worldmap.open) && !finale.active });
   showCard();
   quests.online = visitors.online;
   visitors.update(dt, started && ready && !finale.inHall ? { s: seed, x: player.pos.x, y: player.pos.y, z: player.pos.z, a: player.yaw } : null);
@@ -872,7 +885,7 @@ function frame() {
     minimap.draw(player.floor, player.pos.x, player.pos.z, player.yaw, [
       ...ppl.map((o) => ({ ...o, col: PERSON_COL, r: 5, near: true })),
       ...quests.marks(),
-      ...(food.toilet() ? [{ ...food.toilet()!, col: TOILET_COL }] : []),
+      ...(food.toilet() ? [{ ...food.toilet()!, col: TOILET_COL, icon: "toilet" as const }] : []),
       ...(wp ? [{ ...wp, col: "#35d6ff" }] : []),
     ]);
     worldmap.people = ppl;
@@ -961,7 +974,7 @@ $("restart").addEventListener("click", (e) => {
 });
 
 // expose for automation / debugging
-const api = { player, world, visitors, chat, openChat, doors, camera, lifts, bareels, sound, quests, food, finale, minimap, worldmap, openMap, closeMap, radio, live, cctv, weer, cars, places, dev, warpMenu, dash, findWarp, warpTo, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
+const api = { player, world, visitors, chat, openChat, doors, camera, lifts, bareels, trains, tutorial, sound, quests, food, finale, minimap, worldmap, openMap, closeMap, radio, live, cctv, weer, cars, places, dev, warpMenu, dash, findWarp, warpTo, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
 (window as any).__vrt = api;
 if (debug) $("debug").style.display = "block";
 frame();
