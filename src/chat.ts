@@ -3,7 +3,7 @@
 // yourself (Enter sends, Esc closes).
 import { CHAT_MAX } from "./protocol";
 
-export type FeedKind = "join" | "leave" | "chat" | "me" | "note" | "job";
+export type FeedKind = "join" | "leave" | "chat" | "me" | "note" | "job" | "talk";
 
 export class Chat {
   open = false;

@@ -86,6 +86,7 @@ export class Visitors {
   onLeave: (name: string) => void = () => {};
   onChat: (name: string, text: string) => void = () => {};
   onJob: (m: FromRoom) => void = () => {}; // what the room says about the jobs and the money
+  onVoice: (id: string, name: string, ulaw: Uint8Array) => void = () => {}; // someone on the intercom
   private key = playerKey();
   private ws: WebSocket | null = null;
   private retry = 1;
@@ -144,6 +145,16 @@ export class Visitors {
     return true;
   }
 
+  // a bit of your voice for the intercom (μ-law); false if there's no line
+  sendVoice(ulaw: Uint8Array) {
+    if (!this.name || this.ws?.readyState !== WebSocket.OPEN) return false;
+    const b = new Uint8Array(1 + ulaw.length);
+    b[0] = 1;
+    b.set(ulaw, 1);
+    this.ws.send(b);
+    return true;
+  }
+
   get online() {
     return this.ws?.readyState === WebSocket.OPEN;
   }
@@ -151,6 +162,7 @@ export class Visitors {
   private connect() {
     const ws = new WebSocket(this.url);
     this.ws = ws;
+    ws.binaryType = "arraybuffer";
     ws.onopen = () => {
       this.retry = 1;
       this.sent = null;
@@ -158,6 +170,7 @@ export class Visitors {
       if (this.name) this.hello();
     };
     ws.onmessage = (e) => {
+      if (e.data instanceof ArrayBuffer) return this.voice(new Uint8Array(e.data));
       if (typeof e.data !== "string" || e.data === "pong") return;
       try {
         this.receive(JSON.parse(e.data) as FromRoom);
@@ -236,6 +249,14 @@ export class Visitors {
         this.onJob(m);
         break;
     }
+  }
+
+  // [1, id × 8, ...μ-law]: only from the ones in your world
+  private voice(b: Uint8Array) {
+    if (b.length < 10 || b[0] !== 1) return;
+    const id = String.fromCharCode(...b.subarray(1, 9)).trim();
+    const o = this.others.get(id);
+    if (o?.n && o.s === this.seed) this.onVoice(id, o.n, b.subarray(9));
   }
 
   private add(w: Who) {

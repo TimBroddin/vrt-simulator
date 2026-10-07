@@ -319,6 +319,16 @@ body.touch #waypoint { bottom: 12px; }
 #feed .fl.job b { color: #3ddc84; }
 #feed .leave::before { content: "← "; }
 body.chatting #feed .fl.out { opacity: 1; }
+#t-mic { display: none; }
+body.atmic #t-mic { display: grid; }
+#intercom { margin-bottom: 8px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #ffd84a; }
+#intercom:empty { display: none; }
+#intercom::before { content: "🔊 "; }
+#intercom.me { color: var(--pink); }
+#intercom.me::before { content: "● "; animation: blink 1s steps(1) infinite; }
+#feed .talk { font-size: 11px; letter-spacing: 0.08em; opacity: 0.85; }
+#feed .talk::before { content: "🔊 "; }
+#feed .fl.talk b { color: #ffd84a; }
 #chat { display: none; align-items: center; gap: 10px; margin-bottom: 12px; padding: 6px 10px; width: min(460px, 70vw); background: rgba(8, 8, 10, 0.72); border-left: 3px solid var(--pink); pointer-events: auto; }
 #chat.show { display: flex; }
 #chat span { font-size: 11px; letter-spacing: 0.2em; color: var(--pink); }

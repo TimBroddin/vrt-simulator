@@ -17,7 +17,7 @@
       <div id="top-right"><span class="drop" id="logo">vrt</span> <span id="addr">REYERSLAAN 52</span></div>
       <div id="station"><img id="stationlogo" alt="" /><div><span class="lbl">ERGENS SPEELT EEN RADIO</span><span id="stationname"></span></div></div>
       <canvas id="minimap" width="200" height="200"></canvas>
-      <div id="bottom-left"><div id="feed"></div><div id="chat"><span>ZEG</span><input id="chat-in" autocomplete="off" spellcheck="false" placeholder="iets tegen de anderen" enterkeyhint="send" /></div><div id="floor"></div><div id="loc"></div><div id="plekken"></div><div id="stappen">0 STAPPEN · 0,00 KM</div><div id="anderen"></div></div>
+      <div id="bottom-left"><div id="intercom"></div><div id="feed"></div><div id="chat"><span>ZEG</span><input id="chat-in" autocomplete="off" spellcheck="false" placeholder="iets tegen de anderen" enterkeyhint="send" /></div><div id="floor"></div><div id="loc"></div><div id="plekken"></div><div id="stappen">0 STAPPEN · 0,00 KM</div><div id="anderen"></div></div>
       <div id="bottom-right"><span id="zoom"></span><span id="lamp">LAMP</span><span class="bat"><b></b><b></b><b></b><b class="low"></b></span></div>
       <div id="prompt"></div>
       <div id="liftpanel" style="display:none">
@@ -50,6 +50,7 @@
       <div id="t-photo" class="tbtn small foto">FOTO</div>
       <div id="t-map" class="tbtn small kaart">KAART</div>
       <div class="tbtns">
+        <div id="t-mic" class="tbtn">MIC</div>
         <div id="t-lamp" class="tbtn">LAMP</div>
         <div id="t-use" class="tbtn big">E</div>
       </div>
@@ -123,6 +124,7 @@
           <span>rechterduim kijken</span>
           <span><kbd>E</kbd> gebruiken, telefoon opnemen</span>
           <span><kbd>KAART</kbd> plattegrond &amp; bestemming</span>
+          <span><kbd>MIC</kbd> intercom (in een radiostudio)</span>
           <span class="rot">liggend spelen werkt het best</span>
         </div>
         <div class="keys desk">
@@ -137,6 +139,7 @@
           <span><kbd>H</kbd> beeld</span>
           <span><kbd>P</kbd> foto</span>
           <span><kbd>C</kbd> chat</span>
+          <span><kbd>V</kbd> intercom (ingedrukt, in een radiostudio)</span>
         </div>
         <p class="credits">Door <a href="https://broddin.be" target="_blank" rel="noopener" onclick="event.stopPropagation()">Tim Broddin</a> &amp; Claude Opus<br />Met dank aan Vincent Schroeven en Matti Meurisse voor hun input op het scenario<br /><span class="lic">Logo's via Wikimedia Commons · foto's De Kampioenen: Ferran Cornellà (CC BY-SA 3.0), Druyts.t (CC BY-SA 4.0) · muurschildering Hec Leemans</span></p>
         <p class="seed">geluid aan voor de beste ervaring</p>

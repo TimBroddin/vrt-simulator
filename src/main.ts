@@ -22,6 +22,7 @@ import { Dashboard } from "./dashboard";
 import { DevConsole, WarpMenu, isConsoleKey } from "./devconsole";
 import { findWarp, warpNear, type WarpSpot } from "./warp";
 import { GhostRadio } from "./radio";
+import { Intercom } from "./intercom";
 import { LiveTV } from "./live";
 import { CCTV } from "./cctv";
 import { WeerCam } from "./weer";
@@ -235,6 +236,12 @@ quests.nameOf = (id) => visitors.nameOf(id);
 quests.onFeed = (who, text) => chat.line("job", text, who);
 // on the phone: the radio goes off while the caller talks
 quests.onCall = (secs) => radio.hush(secs);
+// the intercom (hold V): your voice over the speakers, for everyone in your world
+const intercom = new Intercom(sound);
+intercom.send = (b) => visitors.sendVoice(b);
+intercom.onNote = (m) => chat.line("note", m);
+intercom.onStart = (n) => chat.line("talk", " op de intercom", n);
+visitors.onVoice = (id, n, b) => intercom.hear(id, n, b);
 chat.onSend = (m) => {
   if (visitors.say(m)) chat.line("me", m, visitors.name!);
   else chat.line("note", visitors.online ? "Niets verstuurd" : "Niet verbonden: niemand hoort je");
@@ -297,6 +304,7 @@ places.render($("places"));
 layPostcards($("postcards"));
 // the radio studio you're standing near (checked a few times a second)
 let nearStudio = -1, nearT = 0;
+const MIC_REACH = 2; // m from the middle of the desk
 function studioNear(): number {
   const f = player.floor, cx = Math.floor(player.pos.x / (CH * CELL)), cz = Math.floor(player.pos.z / (CH * CELL));
   let best = -1, bd = 14;
@@ -308,6 +316,15 @@ function studioNear(): number {
         if (d < bd) { bd = d; best = p.b - 1; }
       }
   return best;
+}
+// at a radio studio's desk, close enough to its microphones for the intercom
+function micNear(): boolean {
+  const f = player.floor, cx = Math.floor(player.pos.x / (CH * CELL)), cz = Math.floor(player.pos.z / (CH * CELL));
+  for (let dz = -1; dz <= 1; dz++)
+    for (let dx = -1; dx <= 1; dx++)
+      for (const p of getFurnished(f, cx + dx, cz + dz).props)
+        if (p.t === "radiodesk" && Math.hypot(p.x - player.pos.x, p.z - player.pos.z) < MIC_REACH) return true;
+  return false;
 }
 // a ticket dashboard in sight: they only run while someone can see them
 function dashNear(): boolean {
@@ -433,6 +450,7 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     openChat();
   }
+  if (letter(e, "v") && !e.repeat && !finale.inHall) intercom.press();
   if (letter(e, "h")) {
     hudOn = !hudOn;
     $("hud").style.display = hudOn ? "" : "none";
@@ -440,9 +458,13 @@ document.addEventListener("keydown", (e) => {
 });
 document.addEventListener("keyup", (e) => {
   player.keys.delete(e.code);
+  if (letter(e, "v")) intercom.release();
   if (locked && lifts.panelOpen) e.preventDefault();
 });
-window.addEventListener("blur", () => player.keys.clear());
+window.addEventListener("blur", () => {
+  player.keys.clear();
+  intercom.release();
+});
 document.addEventListener("mousemove", (e) => {
   if (locked) player.look(e.movementX, e.movementY);
 });
@@ -459,6 +481,7 @@ document.addEventListener("pointerlockchange", () => {
     places.render($("places"));
     $("overlay").classList.add("paused");
     player.keys.clear();
+    intercom.release();
   }
 });
 // the lock can be refused right after leaving it (Esc): fall back to the pause card
@@ -659,6 +682,7 @@ const touchUi = touch
       lamp: () => (lampTarget = lampTarget ? 0 : 1),
       photo: () => (photoRequested = true),
       map: () => (worldmap.open ? closeMap() : openMap()),
+      talk: (on) => (on && !finale.inHall ? intercom.press() : intercom.release()),
       pause: () => {
         places.render($("places"));
         playing = false;
@@ -831,6 +855,7 @@ function frame() {
   }
   interact = false;
   sound.update(dt);
+  intercom.update(dt);
   if (started && (locked || playing)) {
     playSecs += dt;
     walked += Math.min(player.speed * dt, 1);
@@ -841,6 +866,8 @@ function frame() {
   if (ready && !finale.inHall && (nearT -= dt) <= 0) {
     nearT = 0.4;
     nearStudio = studioNear();
+    intercom.near = started && !cars.driving && micNear();
+    document.body.classList.toggle("atmic", intercom.near);
     dash.active = dashNear();
   }
   live.update(dt, started ? (radio.station >= 0 ? radio.station : nearStudio) : -1);
@@ -916,7 +943,7 @@ function frame() {
     $("tc").textContent = timecode(recT);
     $("rec").style.visibility = Math.floor(t * 1.4) % 2 ? "hidden" : "visible";
     const eatPrompt = food.sick ? food.prompt || quests.prompt : quests.prompt || food.prompt;
-    $("prompt").textContent = finale.active || food.dead ? "" : cars.prompt || eatPrompt || lifts.prompt || doors.prompt;
+    $("prompt").textContent = finale.active || food.dead ? "" : cars.prompt || eatPrompt || lifts.prompt || doors.prompt || intercom.prompt(touch);
     const disp = lifts.display;
     $("liftdisp").style.display = disp !== null ? "" : "none";
     if (disp !== null) $("liftnum").textContent = disp === String(FLOOR_MAX) ? "D" : disp;
@@ -974,7 +1001,7 @@ $("restart").addEventListener("click", (e) => {
 });
 
 // expose for automation / debugging
-const api = { player, world, visitors, chat, openChat, doors, camera, lifts, bareels, trains, tutorial, sound, quests, food, finale, minimap, worldmap, openMap, closeMap, radio, live, cctv, weer, cars, places, dev, warpMenu, dash, findWarp, warpTo, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
+const api = { player, world, visitors, chat, openChat, intercom, doors, camera, lifts, bareels, trains, tutorial, sound, quests, food, finale, minimap, worldmap, openMap, closeMap, radio, live, cctv, weer, cars, places, dev, warpMenu, dash, findWarp, warpTo, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
 (window as any).__vrt = api;
 if (debug) $("debug").style.display = "block";
 frame();

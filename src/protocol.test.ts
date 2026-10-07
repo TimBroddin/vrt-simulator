@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { FOOD, JOB_TTL_MS, OPEN_JOBS, RING_AFTER_MS, START_MONEY, payOf } from "./jobs";
-import { fresh, freshWorld, handle, parseToRoom, route, type FromRoom, type Parsed, type Send, type State, type WorldState } from "./protocol";
+import { VOICE_MAX, VOICE_RATE, fresh, freshWorld, handle, parseToRoom, peersOf, route, voice, type FromRoom, type Parsed, type Send, type State, type WorldState } from "./protocol";
+import { ulawDec, ulawEnc } from "./intercom";
 
 // a fixed sequence of "random" numbers, so the deals are the same every run
 const seq = () => {
@@ -251,5 +252,47 @@ describe("routing", () => {
     expect(got.get(a)).toEqual(["gone", "ring"]);
     expect(got.get(b)).toEqual(["gone", "up", "x"]);
     expect(got.get(c)).toEqual(["x"]);
+  });
+});
+
+describe("the intercom", () => {
+  const frame = (n: number) => new Uint8Array([1, ...new Array(n).fill(0x7f)]);
+  const inWorld = (s = 1953) => Object.assign(fresh(), { n: "Bode 12", s });
+
+  test("a frame goes on with the sender's id in front", () => {
+    const a = inWorld();
+    const out = voice(a, frame(800), 1000)!;
+    expect(out[0]).toBe(1);
+    expect(new TextDecoder().decode(out.subarray(1, 9))).toBe(a.id);
+    expect(out.length).toBe(9 + 800);
+    expect(out[9]).toBe(0x7f);
+  });
+
+  test("not before you've come in, and nothing that isn't a frame", () => {
+    expect(voice(fresh(), frame(10), 0)).toBeNull();
+    const a = inWorld();
+    expect(voice(a, new Uint8Array([2, 1, 2]), 0)).toBeNull();
+    expect(voice(a, new Uint8Array([1]), 0)).toBeNull();
+    expect(voice(a, frame(VOICE_MAX + 1), 0)).toBeNull();
+  });
+
+  test("no faster than anyone talks", () => {
+    const a = inWorld();
+    let sent = 0;
+    for (let i = 0; i < 100; i++) if (voice(a, frame(800), 1000)) sent++; // (all at once)
+    expect(sent).toBe(VOICE_RATE / 800);
+    // in real time, it all goes through
+    let ok = 0;
+    for (let t = 1; t <= 50; t++) if (voice(a, frame(800), 1000 + t * 100)) ok++;
+    expect(ok).toBe(50);
+  });
+
+  test("only the others in the sender's world hear it", () => {
+    const a = inWorld(), b = inWorld(), c = inWorld(7), d = fresh();
+    expect([...peersOf(a, [a, b, c, d], (x) => x)]).toEqual([b]);
+  });
+
+  test("μ-law gets there and back", () => {
+    for (const x of [0, 0.01, -0.2, 0.5, -0.99]) expect(Math.abs(ulawDec(ulawEnc(x)) - x)).toBeLessThan(Math.max(0.002, Math.abs(x) * 0.07));
   });
 });

@@ -9,6 +9,7 @@ export interface TouchActions {
   pause: () => void;
   photo: () => void;
   map: () => void;
+  talk: (on: boolean) => void; // (held down)
 }
 
 export function setupTouch(player: Player, actions: TouchActions) {
@@ -102,6 +103,23 @@ export function setupTouch(player: Player, actions: TouchActions) {
   btn("t-pause", actions.pause);
   btn("t-photo", actions.photo);
   btn("t-map", actions.map);
+  // the intercom: on while the thumb's on it
+  const mic = document.getElementById("t-mic")!;
+  mic.addEventListener(
+    "touchstart",
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      mic.classList.add("down");
+      actions.talk(true);
+    },
+    { passive: false },
+  );
+  for (const ev of ["touchend", "touchcancel"])
+    mic.addEventListener(ev, () => {
+      mic.classList.remove("down");
+      actions.talk(false);
+    });
 
   return {
     reset() {

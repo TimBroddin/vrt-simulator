@@ -382,6 +382,13 @@ export class Sound {
     [659, 523, 392].forEach((f, k) => this.tone(f, 1.6, 0.08, k * 0.45, "sine", 0, 1.5));
   }
 
+  // the intercom coming on
+  bingBong() {
+    if (!this.ctx) return;
+    this.tone(784, 0.5, 0.06, 0, "triangle", 0, 0.8);
+    this.tone(622, 0.7, 0.06, 0.28, "triangle", 0, 0.8);
+  }
+
   success() {
     if (!this.ctx) return;
     [523, 659, 784, 1046].forEach((f, k) => this.tone(f, 0.9, 0.07, k * 0.11, "triangle", 0, 0.8));

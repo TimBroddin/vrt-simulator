@@ -1,7 +1,7 @@
 // Dev server: serves the HTML app, a separately bundled generation worker, and
 // /ws, the room everyone is in (in production that's a Durable Object, see server/index.ts).
 import index from "./src/index.html";
-import { MAX_PLAYERS, fresh, freshWorld, handle, parseToRoom, route, who, type FromRoom, type State, type WorldState } from "./src/protocol";
+import { MAX_PLAYERS, fresh, freshWorld, handle, parseToRoom, peersOf, route, voice, who, type FromRoom, type State, type WorldState } from "./src/protocol";
 
 async function buildWorker() {
   const r = await Bun.build({ entrypoints: ["./src/worker.ts"], target: "browser", format: "esm", minify: true });
@@ -38,7 +38,13 @@ const server = Bun.serve<State>({
     },
     message(ws, raw) {
       if (raw === "ping") return void ws.send("pong");
-      const m = parseToRoom(typeof raw === "string" ? raw : "");
+      if (typeof raw !== "string") {
+        // (the intercom)
+        const out = voice(ws.data, raw, Date.now());
+        if (out) for (const x of peersOf(ws, room, (o) => o.data)) x.send(out);
+        return;
+      }
+      const m = parseToRoom(raw);
       if (!m) return;
       const s = m.t === "n" ? m.s : ws.data.s;
       const out = handle(ws.data, m, Date.now(), s === null ? null : worldOf(s));
