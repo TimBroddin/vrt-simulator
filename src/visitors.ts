@@ -10,6 +10,7 @@ import { L } from "./layers";
 import { floorDiv, hash } from "./rng";
 import { CHAT_MAX, NAME_MAX, clean, type FromRoom, type Pos, type ToRoom, type Who } from "./protocol";
 import type { World } from "./world";
+import { OVER_KEY } from "./save";
 
 const SEND_EVERY = 0.2;
 const SIGHT = 60; // m (the fog has them long before that)
@@ -66,13 +67,26 @@ function leg(b: Builder) {
   b.aabox(-0.075, -HIP, -0.09, 0.075, -HIP + 0.08, 0.16, { layer: L.WHITE, tint: [0.04, 0.04, 0.045] });
 }
 
+// who you are to the room, across visits (your score is kept under it)
+function playerKey() {
+  let k = localStorage.getItem("vrt-key");
+  if (!k || !/^[a-z0-9]{8,40}$/i.test(k)) {
+    k = crypto.randomUUID().replace(/-/g, "");
+    localStorage.setItem("vrt-key", k);
+  }
+  return k;
+}
+
 export class Visitors {
   root = new THREE.Group();
   others = new Map<string, Other>();
+  id: string | null = null; // (yours, on this connection)
   name: string | null = null; // (set when you start)
   onJoin: (name: string) => void = () => {};
   onLeave: (name: string) => void = () => {};
   onChat: (name: string, text: string) => void = () => {};
+  onJob: (m: FromRoom) => void = () => {}; // what the room says about the jobs and the money
+  private key = playerKey();
   private ws: WebSocket | null = null;
   private retry = 1;
   private sendT = 0;
@@ -103,7 +117,23 @@ export class Visitors {
   // you come in, under this name
   join(name: string) {
     this.name = clean(name, NAME_MAX) || "Bezoeker";
-    this.send({ t: "n", n: this.name, s: this.seed });
+    this.hello();
+  }
+
+  // who you are (and, the first time after starting over, that the money goes back to the start)
+  private hello() {
+    this.send({ t: "n", n: this.name!, s: this.seed, k: this.key, ...(localStorage.getItem(OVER_KEY) ? { r: 1 as const } : {}) });
+  }
+
+  // a job message for the room; false if there's no line
+  sendJob(m: ToRoom) {
+    if (!this.name || this.ws?.readyState !== WebSocket.OPEN) return false;
+    this.send(m);
+    return true;
+  }
+
+  nameOf(id: string) {
+    return this.others.get(id)?.n ?? "Iemand";
   }
 
   // say something to everyone in your world; false if there's nobody to hear it
@@ -125,7 +155,7 @@ export class Visitors {
       this.retry = 1;
       this.sent = null;
       this.sentGone = false;
-      if (this.name) this.send({ t: "n", n: this.name, s: this.seed });
+      if (this.name) this.hello();
     };
     ws.onmessage = (e) => {
       if (typeof e.data !== "string" || e.data === "pong") return;
@@ -149,6 +179,7 @@ export class Visitors {
   private receive(m: FromRoom) {
     switch (m.t) {
       case "hi":
+        this.id = m.id;
         // (everyone already here: no "came in" for them)
         for (const id of [...this.others.keys()]) this.drop(id);
         for (const w of m.all) this.add(w);
@@ -188,6 +219,22 @@ export class Visitors {
         this.drop(m.id);
         break;
       }
+      case "jobs":
+        localStorage.removeItem(OVER_KEY); // (the room has it)
+        this.onJob(m);
+        break;
+      case "ring":
+      case "gone":
+      case "up":
+      case "st":
+      case "won":
+      case "paid":
+      case "broke":
+      case "dood":
+      case "rip":
+      case "top":
+        this.onJob(m);
+        break;
     }
   }
 

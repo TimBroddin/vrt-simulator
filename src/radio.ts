@@ -129,6 +129,12 @@ export class GhostRadio {
     }, now ? 100 : 3800);
   }
 
+  // quiet for a while (you're on the phone): off now, and no new station until it's over
+  hush(secs: number) {
+    this.stop(true);
+    this.next = Math.max(this.next, secs + 5);
+  }
+
   update(dt: number, onRoof: boolean) {
     if (!this.el || !this.enabled) return;
     this.t += dt;

@@ -268,6 +268,18 @@ export function buildProp(b: Builder, pr: Prop) {
       fbox(b, fr, 0, 1.6, 0.01, 0.2, 0.2, 0.01, RED);
       break;
     }
+    case "wallphone": {
+      // an old internal phone on the wall: the beige set, the handset in its cradle, the keypad, the coiled cord, the extension on a label
+      const beige = sp(L.WHITE, [0.78, 0.72, 0.6]), hand = sp(L.WHITE, [0.72, 0.66, 0.54]);
+      fbox(b, fr, 0, -0.16, 0.035, 0.2, 0.28, 0.07, beige);
+      fbox(b, fr, -0.055, -0.15, 0.085, 0.06, 0.26, 0.035, hand);
+      for (const y of [-0.15, 0.06]) fbox(b, fr, -0.055, y, 0.1, 0.07, 0.05, 0.03, hand);
+      for (let r = 0; r < 4; r++) for (let k = 0; k < 3; k++) fbox(b, fr, 0.025 + k * 0.022, -0.06 - r * 0.026, 0.071, 0.016, 0.016, 0.004, OFFWHITE);
+      for (let k = 0; k < 6; k++) fbox(b, fr, -0.055 + Math.sin(k * 1.9) * 0.008, -0.19 - k * 0.025, 0.09, 0.014, 0.02, 0.014, hand);
+      fbox(b, fr, 0, 0.16, 0.005, 0.16, 0.05, 0.01, WHITE);
+      fbox(b, fr, 0, 0.17, 0.011, 0.11, 0.025, 0.002, RED);
+      break;
+    }
     case "hosebox":
       fbox(b, fr, 0, 0.9, 0.13, 0.7, 0.8, 0.26, { all: RED, pz: sp(L.WHITE, [0.78, 0.08, 0.06]) }, true);
       fbox(b, fr, 0, 1.25, 0.265, 0.3, 0.06, 0.01, sp(L.WHITE, [0.95, 0.95, 0.9]));

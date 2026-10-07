@@ -51,7 +51,7 @@ const RED: [number, number, number] = [1.0, 0.15, 0.1];
 const cache = new Map<string, Furnished>();
 
 // things hung on (or stood against) corridor walls
-const WALL_DECOR = new Set(["poster", "tv", "notice", "clock", "art", "extinguisher", "hosebox", "bench", "plant", "cooler", "bin", "vending", "fakedoor", "tinydoor", "blackwindow"]);
+const WALL_DECOR = new Set(["wallphone", "poster", "tv", "notice", "clock", "art", "extinguisher", "hosebox", "bench", "plant", "cooler", "bin", "vending", "fakedoor", "tinydoor", "blackwindow"]);
 
 export function getFurnished(f: number, cx: number, cz: number): Furnished {
   const key = f + ":" + cx + "," + cz;
@@ -356,6 +356,21 @@ function furnish(p: Plan): Furnished {
         const wp = wallPoint(i, d, 0.7);
         light(wp.wx, y0 + 1.7, wp.wz, DAY, 1.0, 7, c.gx, c.gz, null);
       }
+  }
+  // the internal phones (the jobs ring on them): now and then on a bare stretch of
+  // corridor wall, by hash and after the rest, so nothing else moves
+  for (let i = 0; i < CH * CH; i++) {
+    if (p.kind[i] !== K.CORR || p.zone[i]) continue;
+    const c = center(i);
+    if (hash(83, f, c.gx, c.gz) % 100 >= 18) continue;
+    const sd = sides(i);
+    for (let d = 0; d < 4; d++) {
+      if (sd[d]!.sk !== SK.WALL) continue;
+      const wp = wallPoint(i, d);
+      if (props.some((q) => Math.abs(q.x - wp.wx) + Math.abs(q.z - wp.wz) < 1.2)) continue;
+      prop("wallphone", wp.wx, y0 + 1.25, wp.wz, faceRot(d), c.gx, c.gz);
+      break;
+    }
   }
 
   // De sporthal: the court, the goals, the lonely ball, the lights high up.

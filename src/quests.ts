@@ -1,5 +1,8 @@
-// Quests: find the right thing for the right person. Everything exists in the
-// building from the start, but only the active quest's object counts.
+// Quests, GTA style: the phones in the corridors ring, you pick one up (E), the
+// caller tells you what they've lost, and the clock starts. Everyone in the
+// world races for the same jobs; the room (protocol.ts) decides who was first.
+// A job's thing is placed from the world, the job and its number, so it's in
+// the same spot for everyone.
 import * as THREE from "three";
 import { IcosahedronGeometry } from "three";
 import { CELL, CH, DX, DZ, FLOOR_MAX, FLOOR_MIN, H, floorName } from "./config";
@@ -9,11 +12,13 @@ import { K, RT, cellLabel, getPlan, idx, radioStation, roomAnomaly, roomLabel, t
 import { MNM } from "./stations";
 import { L } from "./layers";
 import { chair } from "./props";
-import { Rng, getSeed, hash } from "./rng";
+import { Rng, hash } from "./rng";
 import type { Sound } from "./audio";
 import type { Player } from "./player";
 import type { World } from "./world";
 import { track } from "./analytics";
+import { JAN_EVERY_MS, TARGET } from "./jobs";
+import type { FromRoom, Job, ToRoom, Top } from "./protocol";
 
 type QId = string;
 
@@ -26,19 +31,6 @@ interface Spot {
   gz: number;
   rot: number;
   label: string;
-}
-
-interface Quest {
-  id: QId;
-  title: string;
-  goal: string;
-  item: string;
-  doneText: string;
-  launchAt: number;
-  launched: boolean;
-  done: boolean;
-  hint: () => string;
-  target: () => { x: number; z: number; f: number } | null;
 }
 
 interface Obj {
@@ -125,13 +117,23 @@ export function person(b: Builder, fr: Frame, suit: RGB, hair: RGB, tie: RGB, gl
 }
 
 
-interface ItemDef {
+// who's on the phone, and what they say (the browser reads it out)
+interface Call {
+  caller: string;
+  call: string;
+  voice: [number, number]; // pitch, rate
+}
+
+interface Def extends Call {
   id: string;
   title: string;
   goal: string;
-  item: string; // "telt niet" wording
-  short: string; // prompt label
+  item: string;
   done: string;
+}
+
+interface ItemDef extends Def {
+  short: string; // prompt label
   hint: (where: string) => string;
   place: "rooms" | "garage" | "roof" | "corridor";
   types?: number[];
@@ -148,6 +150,8 @@ const glow = (c: RGB): Spec => ({ layer: L.WHITE, emit: c });
 const ITEMS: ItemDef[] = [
   {
     id: "ben", title: "Ben Crabbé is zijn brooddoos vergeten", goal: "Zoek de brooddoos van Ben", item: "de brooddoos van Ben Crabbé", short: "Brooddoos",
+    caller: "Ben Crabbé", voice: [1.0, 1.05],
+    call: "Met Ben Crabbé. Ik heb mijn brooddoos laten liggen, ergens in een kantine. Mijn boterhammen met choco! Kunt ge die rap gaan halen?",
     done: "Ben Crabbé heeft zijn brooddoos terug. Smakelijk!", hint: (w) => `Hij at in een ${w}`,
     place: "rooms", types: [RT.CANTEEN], fallback: [RT.MEETING], surface: "table",
     model: (b, fr) => {
@@ -158,6 +162,8 @@ const ITEMS: ItemDef[] = [
   },
   {
     id: "tom", title: "Tom Waes geraakt niet thuis: zijn veter is los", goal: "Zoek een nieuwe veter voor Tom", item: "de veter van Tom Waes", short: "Veter",
+    caller: "Tom Waes", voice: [0.8, 1.1],
+    call: "Ja, Tom Waes hier. Mijn veter is los en hij is kapot, en zo geraak ik niet thuis. Er moet er nog eentje liggen in een berging.",
     done: "Tom Waes strikt zijn veter en vertrekt. Eindelijk naar huis.", hint: (w) => `Er zou een veter liggen in een ${w}`,
     place: "rooms", types: [RT.STORAGE], fallback: [RT.ARCHIVE, RT.SERVER], surface: "floor",
     model: (b, fr) => {
@@ -176,6 +182,8 @@ const ITEMS: ItemDef[] = [
   },
   {
     id: "frank", title: "Frank Deboosere voorspelt regen en is zijn paraplu kwijt", goal: "Zoek de paraplu van Frank Deboosere", item: "de paraplu van Frank Deboosere", short: "Paraplu",
+    caller: "Frank Deboosere", voice: [0.85, 0.9],
+    call: "Frank Deboosere. Ik voorspel regen, en mijn paraplu staat nog op het dak. Haast u: de eerste druppels vallen binnen het uur.",
     done: "Frank Deboosere heeft zijn paraplu. Morgen: zwaarbewolkt, af en toe liminaal.", hint: () => "Hij stond het weer te bekijken. Op het dak, natuurlijk.",
     place: "roof",
     model: (b, fr) => {
@@ -187,6 +195,8 @@ const ITEMS: ItemDef[] = [
   },
   {
     id: "thuis", title: "Frank uit Thuis vindt zijn garagesleutels niet", goal: "Zoek de sleutels van de garage", item: "de garagesleutels van Frank", short: "Sleutelbos",
+    caller: "Frank uit Thuis", voice: [0.7, 0.95],
+    call: "Frank hier, van Thuis. Ik vind mijn garagesleutels niet meer. Ze moeten ergens in de parking liggen, op min één.",
     done: "Frank kan zijn garage weer open doen. Volgende week in Thuis: nog meer drama.", hint: () => "Ergens in de parking, op -1",
     place: "garage",
     model: (b, fr) => {
@@ -201,6 +211,8 @@ const ITEMS: ItemDef[] = [
   },
   {
     id: "pano", title: "Een Pano-tape uit 1987 is verkeerd gearchiveerd", goal: "Zoek de cassette 'PANO 1987'", item: "de Pano-tape uit 1987", short: "Cassette PANO 1987",
+    caller: "Het archief", voice: [0.6, 0.85],
+    call: "Hier het archief. Er is een Pano-tape uit 1987 verkeerd opgeborgen. Niemand mag weten wat erop staat. Vind hem, en stel geen vragen.",
     done: "De tape staat terug op zijn plaats. Niemand zal ooit weten wat erop stond.", hint: (w) => `Ergens tussen de rekken, ${w}`,
     place: "rooms", types: [RT.ARCHIVE], fallback: [RT.STORAGE], surface: "floor",
     model: (b, fr) => {
@@ -211,6 +223,8 @@ const ITEMS: ItemDef[] = [
   },
   {
     id: "peter", title: "Peter Van de Veire presenteert op blote voeten: zijn sokken zijn weg", goal: "Zoek de sokken van Peter", item: "de sokken van Peter Van de Veire", short: "Sokken",
+    caller: "Peter Van de Veire", voice: [1.25, 1.2],
+    call: "Hey hey, Peter Van de Veire! Ik presenteer op blote voeten: mijn sokken liggen nog ergens in een MNM-studio. Help!",
     done: "Peter heeft zijn sokken terug. De MNM-studio ruikt al een stuk beter.", hint: (w) => `Hij trok ze uit tijdens de uitzending: ${w}`,
     place: "rooms", types: [RT.RADIO], only: (p, r) => radioStation(p, r) === MNM, fallback: [RT.EDIT, RT.OFFICE], surface: "floor",
     model: (b, fr) => {
@@ -224,6 +238,8 @@ const ITEMS: ItemDef[] = [
   },
   {
     id: "michel", title: "Michel Wuyts is zijn koersboekje kwijt", goal: "Zoek het koersboekje van Michel", item: "het koersboekje van Michel Wuyts", short: "Koersboekje",
+    caller: "Michel Wuyts", voice: [0.9, 1.15],
+    call: "Michel Wuyts. Mijn koersboekje! Zonder mijn boekje weet ik niet wie er in de aanval zit. Het ligt aan een Sporza-desk.",
     done: "Michel Wuyts heeft zijn boekje terug. Wat een koers, wat een koers!", hint: (w) => `Hij zat aan de desk in ${w}`,
     place: "rooms", types: [RT.SPORZA], fallback: [RT.STUDIO, RT.REGIE], surface: "table",
     model: (b, fr) => {
@@ -233,6 +249,8 @@ const ITEMS: ItemDef[] = [
   },
   {
     id: "boma", title: "Boma zoekt zijn worst", goal: "Zoek de Boma-worst", item: "de Boma-worst", short: "Boma-worst",
+    caller: "Boma", voice: [0.6, 0.9],
+    call: "Hier Boma. Mijne worst is weg! Allez, die moet ergens in de mess liggen, of in een kantine. Rap!",
     done: "Boma heeft zijn worst terug. Allez, allez, Boma is content!", hint: (w) => `Iemand heeft hem laten liggen in ${w}`,
     place: "rooms", types: [RT.MESS, RT.CANTEEN], fallback: [RT.MEETING], surface: "table",
     model: (b, fr) => {
@@ -249,6 +267,8 @@ const ITEMS: ItemDef[] = [
   },
   {
     id: "ceo", title: "De CEO is zijn ruggengraat kwijt", goal: "Zoek de ruggengraat van de CEO", item: "de ruggengraat van de CEO", short: "Ruggengraat",
+    caller: "De CEO", voice: [0.75, 0.85],
+    call: "Hier de CEO. Ik ben mijn ruggengraat kwijt, op een vergadering. Vind hem voor de raad van bestuur het merkt.",
     done: "De CEO heeft zijn ruggengraat terug. Voorlopig.", hint: (w) => `Bij het begin van de vergadering met de EBU over Eurosong had hij hem nog: ${w}`,
     place: "rooms", types: [RT.MEETING], fallback: [RT.OFFICE], surface: "table",
     model: (b, fr) => {
@@ -265,6 +285,8 @@ const ITEMS: ItemDef[] = [
   },
   {
     id: "karen", title: "Karen François is haar badge weer kwijt", goal: "Zoek de badge van Karen François", item: "de badge van Karen François", short: "Badge van Karen",
+    caller: "Karen François", voice: [1.3, 1.1],
+    call: "Hoi, met Karen. Ik ben mijn badge weer kwijt, haha. Waar zou ze nu weer liggen? Waarschijnlijk in de VIP-bar.",
     done: "Karen heeft haar badge terug. Tot de volgende keer, Karen.", hint: (w) => `"Kben mijn badge weer kwijt, haha waar zou ze nu weer liggen" · ${w}`,
     place: "rooms", types: [RT.VIPBAR], fallback: [RT.CANTEEN, RT.LOUNGE], surface: "table",
     model: (b, fr) => {
@@ -280,6 +302,8 @@ const ITEMS: ItemDef[] = [
   },
   {
     id: "koffie", title: "De stagiair zoekt al sinds 2019 de koffiemachine", goal: "Zoek de koffiebeker van de stagiair", item: "de koffiebeker van de stagiair", short: "Koffiebeker",
+    caller: "De stagiair", voice: [1.2, 1.0],
+    call: "Euh, hallo? Met de stagiair. Ik zoek al sinds 2019 de koffiemachine, en nu ben ik ook mijn beker kwijt.",
     done: "De stagiair heeft zijn beker terug. Hij stond naast de koffiemachine. Nu nog een contract.", hint: (w) => `Hij zette hem neer om de weg te vragen, in ${w}`,
     place: "rooms", types: [RT.KOFFIE], fallback: [RT.MEETING, RT.OFFICE], surface: "table",
     model: (b, fr) => {
@@ -291,88 +315,169 @@ const ITEMS: ItemDef[] = [
   },
 ];
 
+// the three that aren't a thing on a table
+const SPECIAL: Def[] = [
+  {
+    id: "jan", title: "Jan Becaus is weer kwijt", goal: "Vind Jan Becaus", item: "Jan Becaus",
+    caller: "De nieuwsdienst", voice: [0.9, 1.0],
+    call: "Hier de nieuwsdienst. Jan Becaus is weer op wandel in het gebouw. Vind hem voor het journaal begint. Hij blijft nooit lang op één plek.",
+    done: "Jan Becaus is terecht. Hij wou gewoon nog eens langs de nieuwsdienst.",
+  },
+  {
+    id: "felice", title: "Het spook van Felice dwaalt weer rond", goal: "Schuif alle stoelen onder de tafel", item: "de stoelen van Felice",
+    caller: "Felice", voice: [1.4, 0.75],
+    call: "Hoe-oe-oe. Hier Felice. De stoelen staan niet onder de tafel. Schuif ze aan, allemaal, of ik blijf rondspoken.",
+    done: "Alle stoelen staan netjes. Felice kan weer rusten.",
+  },
+  {
+    id: "kak", title: "Geen kak in de toiletten", goal: "Trek alle toiletten door", item: "de vuile toiletten",
+    caller: "De poetsdienst", voice: [0.95, 1.15],
+    call: "Poetsdienst hier. Er heeft weer iemand niet doorgetrokken. Trek alle toiletten door, en rap, voor er bezoek komt.",
+    done: "Alles doorgetrokken. Het sanitair is weer presentabel.",
+  },
+];
+const DEFS = new Map<string, Def>([...ITEMS, ...SPECIAL].map((d) => [d.id, d]));
+
+// the jobs are placed around where the world starts (the same for everyone in it)
+const ANCHOR_F = 0;
+const EARSHOT = 45; // m: how far you hear a phone ring
+export const PHONE_COL = "#3ddc84";
+const QUEST_COL = "#ff2e7e";
+
+const esc = (t: string) => t.replace(/[&<>"]/g, (c) => `&${({ "&": "amp", "<": "lt", ">": "gt", '"': "quot" } as Record<string, string>)[c]};`);
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+interface Phone {
+  f: number;
+  x: number;
+  y: number;
+  z: number;
+  gx: number;
+  gz: number;
+  rot: number;
+  label: string;
+}
+
+interface Toilet {
+  mesh: THREE.Mesh;
+  x: number;
+  y: number;
+  z: number;
+  flushed: boolean;
+  k: number;
+}
+
+// a job in this world, as built here
+interface Live {
+  job: Job;
+  def: Def;
+  spot: Spot | null; // where the thing is (Jan: where he is now; the chairs, the toilets: their room)
+  hint: () => string;
+  // a job rings on one phone on every floor (the ones within a chunk of the start), each with its call light
+  // (built when you come to that floor)
+  rings: Map<number, { phone: Phone; lamp: THREE.Mesh } | null>;
+  meshes: THREE.Mesh[]; // the rest of what it built (the table, the chairs)
+  objs: Obj[];
+  chairs: Chair[];
+  toilets: Toilet[];
+  ghost: THREE.Mesh | null;
+  box: { f: number; box: [number, number, number, number] } | null;
+  slot: number; // Jan: which of his walks he's on
+}
+
+// you, on a job: until when (on the quests' clock), and when you finished it (waiting for the room), 0 if not yet
+interface Mine {
+  j: number;
+  until: number;
+  limit: number;
+  pending: number;
+}
+
 export class Quests {
-  quests: Quest[] = [];
-  objs: Obj[] = [];
-  active: QId | null = null;
+  live = new Map<number, Live>();
+  mine: Mine | null = null;
+  pts = 0; // your money (it's your score: the room keeps it)
+  wins = 0; // (this visit)
+  top: Top[] = [];
+  online = false;
   t = 0;
   running = false;
   prompt = "";
   root = new THREE.Group();
-  chairs: Chair[] = [];
-  chairSpot: Spot | null = null;
-  toiletSpot: Spot | null = null;
-  toilets: { mesh: THREE.Mesh; x: number; y: number; z: number; nx: number; nz: number; flushed: boolean; k: number }[] = [];
-  flyT = 0;
-  ghost: THREE.Mesh | null = null;
-  ghostMat = new THREE.MeshBasicMaterial({ color: 0xd8ecff, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending });
-  ghostTimer = 35;
-  ghostPulls = 0;
-  jan: { spot: Spot; obj: Obj | null; timer: number } | null = null;
-  beepT = 0;
   toasts: HTMLElement;
   startedAt = 0;
   finished = false;
   onFinish: (secs: number) => void = () => {};
-  private store: string;
+  // the room: send a job message (false if there's no line), who you are, what the others are called, a line in the feed
+  send: (m: ToRoom) => boolean = () => false;
+  me: () => string | null = () => null;
+  nameOf: (id: string) => string = () => "Iemand";
+  onFeed: (who: string, text: string) => void = () => {};
+  onCall: (secs: number) => void = () => {}; // (you picked up: someone's talking for this long)
+  private clock = 0; // the room's clock minus ours (ms)
+  private cx0: number;
+  private cz0: number;
+  private phones = new Map<number, Phone[]>(); // the wall phones near the start, by floor
+  private ghostMat = new THREE.MeshBasicMaterial({ color: 0xd8ecff, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending });
+  private beepT = 0;
+  private flyT = 0;
+  private ringT = 0;
+  private bigEl = document.getElementById("big")!;
+  private subEl = document.getElementById("sub")!;
+  private bigTimer = 0;
+  private subTimer = 0;
 
-  constructor(private world: World, private player: Player, private sound: Sound, private startFloor: number) {
+  constructor(private world: World, private player: Player, private sound: Sound, anchor: { x: number; z: number }) {
     this.toasts = document.getElementById("toasts")!;
-    this.store = `vrt-quests-${getSeed()}`;
-    const saved = new Set<string>(JSON.parse(localStorage.getItem(this.store) ?? "[]"));
-    const cx0 = Math.floor(player.pos.x / (CH * CELL)), cz0 = Math.floor(player.pos.z / (CH * CELL));
+    this.cx0 = Math.floor(anchor.x / (CH * CELL));
+    this.cz0 = Math.floor(anchor.z / (CH * CELL));
+    // (the ground floor now, while loading; the others when you get there)
+    this.phonesOn(ANCHOR_F);
+  }
 
-    const chairs = this.placeChairs(cx0, cz0);
-    this.chairSpot = chairs;
-    const loos = this.placeToilets(cx0, cz0);
-    this.toiletSpot = loos?.spot ?? null;
-    const janSpot = this.pickJanSpot(cx0, cz0, startFloor, new Rng(hash(901, 1)));
-    this.jan = { spot: janSpot, obj: null, timer: 150 };
+  // the wall phones on floor f, within a chunk of the start
+  private phonesOn(f: number) {
+    let out = this.phones.get(f);
+    if (out) return out;
+    out = [];
+    if (f >= 0 && f < FLOOR_MAX)
+      for (let cz = this.cz0 - 1; cz <= this.cz0 + 1; cz++)
+        for (let cx = this.cx0 - 1; cx <= this.cx0 + 1; cx++)
+          for (const pr of getFurnished(f, cx, cz).props)
+            if (pr.t === "wallphone") out.push({ f, x: pr.x, y: pr.y, z: pr.z, gx: pr.gx, gz: pr.gz, rot: pr.rot, label: lc(cellLabel(f, pr.gx, pr.gz)) });
+    this.phones.set(f, out);
+    return out;
+  }
 
-    const where = (s: Spot | null) => (s ? `${s.label}, ${floorName(s.f).toLowerCase()}` : "ergens in het gebouw");
-    const items = ITEMS.map((d) => ({ d, spot: this.placeItem(d, cx0, cz0) }));
-    const launch = [2, 25, 55, 85, 120, 160, 200, 240, 285, 330, 375];
-    const special: Quest[] = [
-      {
-        id: "jan", title: "Jan Becaus is weer kwijt", goal: "Vind Jan Becaus", item: "Jan Becaus",
-        doneText: "Jan Becaus is terecht. Hij wou gewoon nog eens langs de nieuwsdienst.", launchAt: 0, launched: false, done: false,
-        hint: () => `Laatst gezien: ${where(this.jan!.spot)}. Hij blijft niet lang op één plek.`,
-        target: () => this.jan!.spot,
-      },
-      {
-        id: "felice", title: "Het spook van Felice dwaalt weer rond", goal: "Schuif alle stoelen onder de tafel", item: "de stoelen van Felice",
-        doneText: "Alle stoelen staan netjes. Felice kan weer rusten.", launchAt: 0, launched: false, done: false,
-        hint: () => `${where(chairs)} · ${this.chairs.filter((c) => c.target === 1).length}/${this.chairs.length} stoelen`,
-        target: () => chairs,
-      },
-      {
-        id: "kak", title: "Geen kak in de toiletten", goal: "Trek alle toiletten door", item: "de vuile toiletten",
-        doneText: "Alles doorgetrokken. Het sanitair is weer presentabel.", launchAt: 0, launched: false, done: false,
-        hint: () => `Iemand heeft niet doorgetrokken. ${where(this.toiletSpot)} · ${this.toilets.filter((t) => t.flushed).length}/${this.toilets.length}`,
-        target: () => this.toiletSpot,
-      },
-    ];
-    const itemQuests: Quest[] = items.map(({ d, spot }) => ({
-      id: d.id, title: d.title, goal: d.goal, item: d.item, doneText: d.done, launchAt: 0, launched: false, done: false,
-      hint: () => d.hint(where(spot)), target: () => spot,
-    }));
-    // order: Ben, the CEO, Karen, Tom, Jan, Felice, the toilets, then the rest
-    const ceo = itemQuests.find((q) => q.id === "ceo")!, karen = itemQuests.find((q) => q.id === "karen")!;
-    const rest = itemQuests.slice(2).filter((q) => q !== ceo && q !== karen);
-    this.quests = [itemQuests[0]!, ceo, karen, itemQuests[1]!, special[0]!, special[1]!, ...(loos ? [special[2]!] : []), ...rest];
-    this.quests.forEach((q, k) => (q.launchAt = launch[k] ?? 375 + (k - 10) * 45));
-    for (const q of this.quests) if (saved.has(q.id)) q.done = true;
-    for (const { d, spot } of items) if (spot) this.addItem(d.id, spot, d.short, d.model);
-    if (chairs) this.buildChairs(chairs);
-    if (loos) this.buildToilets(loos.spot, loos.seats);
-    this.spawnJan();
+  // a job's phone on floor f (the same one for everyone), with its light; null if there's none there
+  // (two jobs can share a phone: picking up takes the oldest)
+  private ringOn(l: Live, f: number) {
+    if (!l.spot) return null;
+    let r = l.rings.get(f);
+    if (r !== undefined) return r;
+    const list = this.phonesOn(f);
+    r = null;
+    if (list.length) {
+      const phone = list[(l.job.ph + f * 7919) % list.length]!;
+      const lamp = this.build(phone, (b, fr) => fbox(b, fr, 0.075, 0.06, 0.074, 0.035, 0.035, 0.012, glow([2.2, 0.15, 0.08])));
+      lamp.visible = false;
+      r = { phone, lamp };
+    }
+    l.rings.set(f, r);
+    return r;
+  }
+
+  private now() {
+    return Date.now() + this.clock;
   }
 
   // --- placement ------------------------------------------------------------
 
-  private placeItem(d: ItemDef, cx0: number, cz0: number): Spot | null {
-    const rng = new Rng(hash(920, ...[...d.id].map((c) => c.charCodeAt(0))));
-    const floors = floorsNear(this.startFloor);
+  // the job's number is its variant: every time the job comes back, the thing is somewhere else
+  private placeItem(d: ItemDef, v: number): Spot | null {
+    const { cx0, cz0 } = this;
+    const rng = new Rng(hash(920, v, ...[...d.id].map((c) => c.charCodeAt(0))));
+    const floors = floorsNear(ANCHOR_F);
     const cellSpot = (f: number, gx: number, gz: number, label: string): Spot => ({
       f, x: (gx + 0.5) * CELL + rng.range(-0.5, 0.5), z: (gz + 0.5) * CELL + rng.range(-0.5, 0.5), y: f * H, gx, gz, rot: rng.range(0, 6.28), label,
     });
@@ -492,22 +597,22 @@ export class Quests {
     return s!;
   }
 
-  private placeToilets(cx0: number, cz0: number) {
-    const rng = new Rng(hash(915, 1));
-    const floors = floorsNear(this.startFloor);
+  private placeToilets(v: number) {
+    const rng = new Rng(hash(915, v));
+    const floors = floorsNear(ANCHOR_F);
     const withStalls = (p: Plan, r: Room) =>
       getFurnished(p.f, p.cx, p.cz).props.some((pr) => pr.t === "stalls" && p.room[idx(pr.gx - p.cx * CH, pr.gz - p.cz * CH)] === r.id);
-    let c = findRooms([RT.BATH], floors, cx0, cz0, 2, withStalls);
-    if (!c.length) c = findRooms([RT.BATH], floors, cx0, cz0, 3, withStalls);
+    let c = findRooms([RT.BATH], floors, this.cx0, this.cz0, 2, withStalls);
+    if (!c.length) c = findRooms([RT.BATH], floors, this.cx0, this.cz0, 3, withStalls);
     if (!c.length) return null;
     const { p, r } = rng.pick(c);
-    const seats: { x: number; y: number; z: number; nx: number; nz: number }[] = [];
+    const seats: { x: number; y: number; z: number }[] = [];
     for (const pr of getFurnished(p.f, p.cx, p.cz).props) {
       if (pr.t !== "stalls" || p.room[idx(pr.gx - p.cx * CH, pr.gz - p.cz * CH)] !== r.id) continue;
       const fr = new Frame(pr.x, pr.y, pr.z, pr.rot);
       for (const x of [-0.475, 0.475]) {
         const w = fr.p(x, 0.462, 0.28);
-        seats.push({ x: w[0], y: w[1], z: w[2], nx: fr.s, nz: fr.c });
+        seats.push({ x: w[0], y: w[1], z: w[2] });
       }
     }
     const m = roomCenter(p, r);
@@ -515,36 +620,16 @@ export class Quests {
     return { spot, seats };
   }
 
-  private buildToilets(s: Spot, seats: { x: number; y: number; z: number; nx: number; nz: number }[]) {
-    const done = this.quests.find((q) => q.id === "kak")?.done;
-    if (done) return;
-    const rng = new Rng(hash(916, 1));
-    for (const seat of seats) {
-      const spot: Spot = { ...s, x: seat.x, y: seat.y, z: seat.z, rot: rng.range(0, 6.28) };
-      const mesh = this.build(spot, (b) => {
-        // the water, and what floats in it
-        b.hrect(-0.14, -0.17, 0.14, 0.17, 0.002, true, sp(L.PUDDLE, [0.55, 0.45, 0.25]), 0);
-        const brown = sp(L.WHITE, [0.34, 0.2, 0.08]);
-        const n = rng.int(2, 4);
-        for (let k = 0; k < n; k++) {
-          const r = 0.06 - k * 0.012;
-          b.geom(BLOB, rng.range(-0.03, 0.03), 0.02 + k * 0.035, rng.range(-0.03, 0.03), rng.range(0, 6), r * 1.2, r * 0.7, r, brown);
-        }
-      });
-      this.toilets.push({ mesh, x: seat.x, y: seat.y, z: seat.z, nx: seat.nx, nz: seat.nz, flushed: false, k: 0 });
-    }
-  }
-
-  private placeChairs(cx0: number, cz0: number): Spot | null {
-    const rng = new Rng(hash(913, 1));
-    const floors = floorsNear(this.startFloor);
+  private placeChairs(v: number): Spot | null {
+    const rng = new Rng(hash(913, v));
+    const floors = floorsNear(ANCHOR_F);
     const noChair = (p: Plan, r: Room) => {
       if (r.x1 - r.x0 < 1 || r.z1 - r.z0 < 1 || roomAnomaly(p, r)) return false;
       const fur = getFurnished(p.f, p.cx, p.cz);
       return !fur.props.some((pr) => pr.t === "chair" && p.room[idx(pr.gx - p.cx * CH, pr.gz - p.cz * CH)] === r.id);
     };
-    let c = findRooms([RT.EMPTY], floors, cx0, cz0, 2, noChair);
-    if (!c.length) c = findRooms([RT.EMPTY], floors, cx0, cz0, 3, noChair);
+    let c = findRooms([RT.EMPTY], floors, this.cx0, this.cz0, 2, noChair);
+    if (!c.length) c = findRooms([RT.EMPTY], floors, this.cx0, this.cz0, 3, noChair);
     if (!c.length) return null;
     const { p, r } = rng.pick(c);
     const m = roomCenter(p, r);
@@ -552,10 +637,11 @@ export class Quests {
     return { f: p.f, x: m.x, z: m.z, y: p.f * H, gx: Math.floor(m.x / CELL), gz: Math.floor(m.z / CELL), rot: w >= d ? 0 : Math.PI / 2, label: "leeg lokaal" };
   }
 
-  private pickJanSpot(cx0: number, cz0: number, fNear: number, rng: Rng): Spot {
+  // where Jan is on one of his walks (everyone works it out the same way, from the job and the room's clock)
+  private pickJanSpot(rng: Rng): Spot {
     for (let tries = 0; tries < 60; tries++) {
-      const f = Math.max(0, Math.min(FLOOR_MAX - 1, fNear + rng.int(-3, 3)));
-      const cx = cx0 + rng.int(-2, 2), cz = cz0 + rng.int(-2, 2);
+      const f = Math.max(0, Math.min(FLOOR_MAX - 1, ANCHOR_F + 1 + rng.int(-3, 3)));
+      const cx = this.cx0 + rng.int(-2, 2), cz = this.cz0 + rng.int(-2, 2);
       const p = getPlan(f, cx, cz);
       const cells: number[] = [];
       for (let i = 0; i < CH * CH; i++) if (p.kind[i] === K.CORR && !p.zone[i]) cells.push(i);
@@ -571,13 +657,14 @@ export class Quests {
       const gx = cx * CH + (i % CH), gz = cz * CH + ((i / CH) | 0);
       return { f, x: (gx + 0.5) * CELL + rng.range(-0.4, 0.4), z: (gz + 0.5) * CELL + rng.range(-0.4, 0.4), y: f * H, gx, gz, rot: rng.range(0, 6.28), label: lc(cellLabel(f, gx, gz)) };
     }
-    return { f: fNear, x: this.player.pos.x, z: this.player.pos.z, y: fNear * H, gx: 0, gz: 0, rot: 0, label: "gang" };
+    const gx = this.cx0 * CH + CH / 2, gz = this.cz0 * CH + CH / 2;
+    return { f: ANCHOR_F, x: (gx + 0.5) * CELL, z: (gz + 0.5) * CELL, y: ANCHOR_F * H, gx, gz, rot: 0, label: "gang" };
   }
 
   // --- objects ----------------------------------------------------------------
 
   // Geometry built around a local origin, lit as if it stood at the spot.
-  private build(s: Spot, fn: (b: Builder, fr: Frame) => void) {
+  private build(s: { f: number; x: number; y: number; z: number; gx: number; gz: number; rot: number }, fn: (b: Builder, fr: Frame) => void) {
     const cx = Math.floor(s.gx / CH), cz = Math.floor(s.gz / CH);
     const b = new Builder(new LightCtx(s.f, cx, cz)).cell(s.gx, s.gz);
     b.ox = s.x;
@@ -591,54 +678,118 @@ export class Quests {
     return mesh;
   }
 
-  private addItem(q: QId, s: Spot, label: string, fn: (b: Builder, fr: Frame) => void) {
-    if (this.quests.find((x) => x.id === q)?.done) return;
-    const mesh = this.build(s, fn);
-    const obj: Obj = {
-      quest: q, f: s.f, mesh, x: s.x, y: s.y + 0.1, z: s.z, label, alive: true,
-      use: () => {
-        obj.alive = false;
-        this.root.remove(mesh);
-        this.complete(q);
-      },
-    };
-    this.objs.push(obj);
+  private unbuild(m: THREE.Mesh) {
+    this.root.remove(m);
+    m.geometry.dispose();
   }
 
-  private spawnJan() {
-    const j = this.jan!;
-    if (j.obj) {
-      this.root.remove(j.obj.mesh);
-      j.obj.alive = false;
-      this.objs = this.objs.filter((o) => o !== j.obj);
-      j.obj = null;
+  // a job came in: build what it needs, and find its phone
+  private add(job: Job) {
+    const def = DEFS.get(job.q);
+    if (!def || this.live.has(job.j)) return; // (a job this version doesn't know)
+    const l: Live = { job, def, spot: null, hint: () => "", rings: new Map(), meshes: [], objs: [], chairs: [], toilets: [], ghost: null, box: null, slot: -1 };
+    this.live.set(job.j, l);
+    const where = (s: Spot | null) => (s ? `${s.label}, ${floorName(s.f).toLowerCase()}` : "ergens in het gebouw");
+    if (job.q === "jan") {
+      l.hint = () => `Laatst gezien: ${where(l.spot)}. Hij blijft niet lang op één plek.`;
+      this.moveJan(l);
+    } else if (job.q === "felice") {
+      const s = this.placeChairs(job.j);
+      l.spot = s;
+      l.hint = () => `${where(s)} · ${l.chairs.filter((c) => c.target === 1).length}/${l.chairs.length} stoelen`;
+      if (s) this.buildChairs(l, s);
+    } else if (job.q === "kak") {
+      const loos = this.placeToilets(job.j);
+      l.spot = loos?.spot ?? null;
+      l.hint = () => `Iemand heeft niet doorgetrokken. ${where(l.spot)} · ${l.toilets.filter((t) => t.flushed).length}/${l.toilets.length}`;
+      if (loos) this.buildToilets(l, loos.spot, loos.seats);
+    } else {
+      const d = ITEMS.find((x) => x.id === job.q)!;
+      const s = this.placeItem(d, job.j);
+      l.spot = s;
+      l.hint = () => d.hint(where(s));
+      if (s) this.addItem(l, s, d.short, d.model);
     }
-    if (this.quests.find((q) => q.id === "jan")?.done) return;
-    const mesh = this.build(j.spot, (b, fr) => person(b, fr, [0.13, 0.15, 0.24], [0.9, 0.9, 0.88], [0.55, 0.08, 0.1], true));
+  }
+
+  private remove(l: Live, linger = 0) {
+    this.live.delete(l.job.j);
+    const all = [...l.meshes, ...l.objs.map((o) => o.mesh as THREE.Mesh), ...l.chairs.map((c) => c.mesh), ...l.toilets.map((t) => t.mesh)];
+    for (const r of l.rings.values()) if (r) this.unbuild(r.lamp);
+    if (l.ghost) this.root.remove(l.ghost);
+    if (l.box) {
+      const i = this.world.extraBoxes.indexOf(l.box);
+      if (i >= 0) this.world.extraBoxes.splice(i, 1);
+    }
+    if (linger) setTimeout(() => all.forEach((m) => this.unbuild(m)), linger);
+    else all.forEach((m) => this.unbuild(m));
+  }
+
+  private addItem(l: Live, s: Spot, label: string, fn: (b: Builder, fr: Frame) => void) {
+    const mesh = this.build(s, fn);
     const obj: Obj = {
-      quest: "jan", f: j.spot.f, mesh, x: j.spot.x, y: j.spot.y + 1.2, z: j.spot.z, label: "Jan Becaus", alive: true,
+      quest: l.job.q, f: s.f, mesh, x: s.x, y: s.y + 0.1, z: s.z, label, alive: true,
+      use: () => {
+        obj.alive = false;
+        this.finish(l);
+      },
+    };
+    l.objs.push(obj);
+  }
+
+  // Jan moves on every JAN_EVERY_MS, counted from when the phone first rang
+  private moveJan(l: Live) {
+    const slot = Math.max(0, Math.floor((this.now() - l.job.at) / JAN_EVERY_MS));
+    if (slot === l.slot) return;
+    const first = l.slot < 0;
+    l.slot = slot;
+    for (const o of l.objs) this.unbuild(o.mesh as THREE.Mesh);
+    l.objs = [];
+    const s = this.pickJanSpot(new Rng(hash(901, l.job.j, slot)));
+    l.spot = s;
+    const mesh = this.build(s, (b, fr) => person(b, fr, [0.13, 0.15, 0.24], [0.9, 0.9, 0.88], [0.55, 0.08, 0.1], true));
+    const obj: Obj = {
+      quest: "jan", f: s.f, mesh, x: s.x, y: s.y + 1.2, z: s.z, label: "Jan Becaus", alive: true,
       use: () => {
         this.sound.say("Ah, goeiendag! Ik kwam gewoon nog eens kijken hoe het met het nieuws gaat.", 0.8, 0.95);
         obj.alive = false;
-        this.complete("jan");
-        setTimeout(() => this.root.remove(mesh), 2500);
+        this.finish(l);
       },
     };
-    j.obj = obj;
-    this.objs.push(obj);
+    l.objs.push(obj);
+    if (!first && this.mine?.j === l.job.j) this.toast("JAN BECAUS IS WEER OP WANDEL", `Gezien: ${s.label}, ${floorName(s.f).toLowerCase()}`);
   }
 
-  private buildChairs(s: Spot) {
-    const rng = new Rng(hash(914, 1));
-    const done = this.quests.find((q) => q.id === "felice")?.done;
+  private buildToilets(l: Live, s: Spot, seats: { x: number; y: number; z: number }[]) {
+    const rng = new Rng(hash(916, l.job.j));
+    seats.forEach((seat, i) => {
+      const spot: Spot = { ...s, x: seat.x, y: seat.y, z: seat.z, rot: rng.range(0, 6.28) };
+      const mesh = this.build(spot, (b) => {
+        // the water, and what floats in it
+        b.hrect(-0.14, -0.17, 0.14, 0.17, 0.002, true, sp(L.PUDDLE, [0.55, 0.45, 0.25]), 0);
+        const brown = sp(L.WHITE, [0.34, 0.2, 0.08]);
+        const n = rng.int(2, 4);
+        for (let k = 0; k < n; k++) {
+          const r = 0.06 - k * 0.012;
+          b.geom(BLOB, rng.range(-0.03, 0.03), 0.02 + k * 0.035, rng.range(-0.03, 0.03), rng.range(0, 6), r * 1.2, r * 0.7, r, brown);
+        }
+      });
+      const done = l.job.st.includes(i);
+      l.toilets.push({ mesh, x: seat.x, y: seat.y, z: seat.z, flushed: done, k: done ? 1 : 0 });
+    });
+  }
+
+  private buildChairs(l: Live, s: Spot) {
+    const rng = new Rng(hash(914, l.job.j));
     // table
-    this.build(s, (b, fr) => {
+    l.meshes.push(this.build(s, (b, fr) => {
       fbox(b, fr, 0, 0.72, 0, 2.2, 0.04, 0.9, sp(L.WOOD_FLOOR, [0.8, 0.72, 0.62]));
       for (const x of [-1.0, 1.0]) for (const z of [-0.38, 0.38]) fbox(b, fr, x, 0, z, 0.05, 0.72, 0.05, sp(L.WHITE, [0.2, 0.2, 0.22]));
-    });
+    }));
     const c = Math.cos(s.rot), sn = Math.sin(s.rot);
     const ext = (Math.abs(c) * 2.2 + Math.abs(sn) * 0.9) / 2, ezz = (Math.abs(sn) * 2.2 + Math.abs(c) * 0.9) / 2;
-    this.world.extraBoxes.push({ f: s.f, box: [s.x - ext, s.z - ezz, s.x + ext, s.z + ezz] });
+    l.box = { f: s.f, box: [s.x - ext, s.z - ezz, s.x + ext, s.z + ezz] };
+    this.world.extraBoxes.push(l.box);
     const toWorld = (lx: number, lz: number) => new THREE.Vector3(s.x + lx * c + lz * sn, s.y, s.z - lx * sn + lz * c);
     for (const side of [1, -1])
       for (const lx of [-0.7, 0, 0.7]) {
@@ -648,20 +799,113 @@ export class Quests {
         const fromRot = toRot + rng.range(-0.7, 0.7);
         const spot: Spot = { ...s, x: from.x, z: from.z, rot: fromRot };
         const mesh = this.build(spot, (b, fr) => chair(b, fr, 0, 0, 0));
-        const ch: Chair = { mesh, from, fromRot, to, toRot, k: done ? 1 : 0, target: done ? 1 : 0 };
-        this.chairs.push(ch);
+        const done = l.job.st.includes(l.chairs.length) ? 1 : 0;
+        const ch: Chair = { mesh, from, fromRot, to, toRot, k: done, target: done };
+        l.chairs.push(ch);
         this.placeChair(ch);
       }
     const ghost = new Builder(new LightCtx(s.f, 0, 0, "outdoor"));
     person(ghost, new Frame(0, 0, 0, 0), [1, 1, 1], [1, 1, 1], [1, 1, 1], false);
-    this.ghost = new THREE.Mesh(this.world.geometry(ghost.finish()), this.ghostMat);
-    this.root.add(this.ghost);
+    l.ghost = new THREE.Mesh(this.world.geometry(ghost.finish()), this.ghostMat);
+    this.root.add(l.ghost);
   }
 
   private placeChair(ch: Chair) {
     const k = ch.k * ch.k * (3 - 2 * ch.k);
     ch.mesh.position.lerpVectors(ch.from, ch.to, k);
     ch.mesh.rotation.y = ch.fromRot + (ch.toRot - ch.fromRot) * k;
+  }
+
+  // --- the room -----------------------------------------------------------------
+
+  receive(m: FromRoom) {
+    switch (m.t) {
+      case "jobs": {
+        // (on joining, and again after every reconnect)
+        this.clock = m.now - Date.now();
+        const ids = new Set(m.jobs.map((x) => x.j));
+        for (const l of [...this.live.values()]) if (!ids.has(l.job.j)) this.remove(l);
+        for (const job of m.jobs) {
+          const l = this.live.get(job.j);
+          if (!l) this.add(job);
+          else for (const i of job.st) this.step(l, i, false);
+        }
+        this.pts = m.pts;
+        this.top = m.top;
+        // a new line knows nothing of your job: tell it again
+        if (this.mine && ids.has(this.mine.j)) this.send({ t: "up", j: this.mine.j });
+        else if (this.mine) this.mine = null;
+        this.reached();
+        break;
+      }
+      case "ring":
+        this.add(m.job);
+        break;
+      case "gone": {
+        const l = this.live.get(m.j);
+        if (!l) break;
+        if (this.mine?.j === m.j) {
+          this.mine = null;
+          this.sound.wrong();
+          this.big("OPGEHANGEN", "bad");
+          this.toast("DE BELLER HEEFT INGEHAAKT", "Niemand was op tijd.", "bad");
+        }
+        this.remove(l);
+        break;
+      }
+      case "up": {
+        const l = this.live.get(m.j);
+        if (l) this.onFeed(this.nameOf(m.id), `nam op voor ${l.def.caller}`);
+        break;
+      }
+      case "top":
+        this.top = m.top;
+        break;
+      case "rip":
+        this.onFeed(this.nameOf(m.id), "is van de honger bezweken");
+        break;
+      case "st": {
+        const l = this.live.get(m.j);
+        if (l) this.step(l, m.i, false);
+        break;
+      }
+      case "won": {
+        this.top = m.top;
+        const l = this.live.get(m.j);
+        const me = m.id === this.me();
+        if (me) {
+          const secs = this.mine ? this.mine.limit - (this.mine.until - this.t) : 0;
+          this.mine = null;
+          this.pts = m.pts;
+          this.wins++;
+          this.sound.success();
+          this.big("OPDRACHT GESLAAGD", "ok", `+€${m.pay}`);
+          if (l) this.toast(l.def.caller.toUpperCase(), l.def.done, "ok");
+          track("job_won", { job: m.q, seconds: Math.round(secs), pay: m.pay, total: m.pts });
+          this.reached();
+        } else {
+          this.onFeed(m.n, `won ${l ? `voor ${l.def.caller}` : "een opdracht"} · +€${m.pay}`);
+          if (this.mine?.j === m.j) {
+            this.mine = null;
+            this.sound.wrong();
+            this.big("TE LAAT", "bad");
+            this.toast("IEMAND WAS JE VOOR", `${esc(m.n)} was sneller.`, "bad");
+            track("job_lost", { job: m.q });
+          }
+        }
+        // (Jan stays a moment to finish his sentence)
+        if (l) this.remove(l, me && l.job.q === "jan" ? 2500 : 0);
+        break;
+      }
+    }
+  }
+
+  // the money reached: the floor gives way (once)
+  private reached() {
+    if (this.finished || this.pts < TARGET) return;
+    this.finished = true;
+    track("target_reached", { pts: this.pts, wins: this.wins });
+    setTimeout(() => this.onFinish(this.t - this.startedAt), 2500);
   }
 
   // --- flow -------------------------------------------------------------------
@@ -676,132 +920,157 @@ export class Quests {
     setTimeout(() => el.remove(), 6000);
   }
 
-  private questOf(id: QId) {
-    return this.quests.find((q) => q.id === id)!;
+  // the big letters in the middle, GTA style
+  big(text: string, kind: "ok" | "bad" | "new", sub = "") {
+    const el = this.bigEl;
+    el.className = kind;
+    el.innerHTML = `${text}${sub ? `<small>${sub}</small>` : ""}`;
+    void el.offsetWidth;
+    el.classList.add("show");
+    clearTimeout(this.bigTimer);
+    this.bigTimer = window.setTimeout(() => el.classList.remove("show"), 3200);
   }
 
-  private complete(id: QId) {
-    const q = this.questOf(id);
-    q.done = true;
-    localStorage.setItem(this.store, JSON.stringify(this.quests.filter((x) => x.done).map((x) => x.id)));
-    this.sound.success();
-    this.toast("QUEST GEHAALD", q.doneText, "ok");
-    const done = this.quests.filter((x) => x.done).length;
-    track("quest_completed", { quest: id, seconds: Math.round(this.t - this.startedAt), completed: done });
-    if (done === this.quests.length) track("all_quests_completed", { seconds: Math.round(this.t - this.startedAt) });
-    if (this.active === id) this.active = null;
-    this.pickNext();
-    if (this.quests.every((x) => x.done) && !this.finished) {
-      this.finished = true;
-      setTimeout(() => this.onFinish(this.t - this.startedAt), 2500);
+  // what the caller says, under the picture (for when there's no sound, or no Dutch voice)
+  private subtitle(who: string, text: string) {
+    const el = this.subEl;
+    el.innerHTML = `<b>${esc(who)}</b>${esc(text)}`;
+    el.classList.add("show");
+    clearTimeout(this.subTimer);
+    this.subTimer = window.setTimeout(() => el.classList.remove("show"), this.talkSecs(text) * 1000);
+  }
+
+  // how long someone takes to say this (about)
+  private talkSecs(text: string) {
+    return 4 + text.length * 0.055;
+  }
+
+  // you answer the phone: the caller tells you what's up, and the clock starts
+  private pickUp(l: Live, p: Phone) {
+    if (!this.send({ t: "up", j: l.job.j })) {
+      this.sound.wrong();
+      return this.toast("GEEN VERBINDING", "De lijn is dood.", "bad");
     }
+    const s = l.spot!;
+    // walking there and back to the stairs, a floor at a time, and some looking around
+    const limit = Math.round(60 + (Math.abs(s.x - p.x) + Math.abs(s.z - p.z)) / 1.8 + Math.abs(s.f - p.f) * 25 + (l.job.q === "jan" ? 30 : 0) + (l.chairs.length + l.toilets.length) * 6);
+    this.mine = { j: l.job.j, until: this.t + limit, limit, pending: 0 };
+    this.sound.pickup();
+    this.onCall(this.talkSecs(l.def.call));
+    this.sound.say(l.def.call, l.def.voice[0], l.def.voice[1], true);
+    this.subtitle(l.def.caller, l.def.call);
+    this.big(l.def.title.toUpperCase(), "new");
+    track("job_picked_up", { job: l.job.q, limit });
   }
 
-  private pickNext() {
-    if (this.active && !this.questOf(this.active).done) return;
-    this.active = this.quests.find((q) => q.launched && !q.done)?.id ?? null;
+  // you did it: tell the room, and wait for its answer (someone may have been quicker)
+  private finish(l: Live) {
+    if (this.mine?.j !== l.job.j || this.mine.pending) return;
+    this.mine.pending = this.t;
+    if (!this.send({ t: "dn", j: l.job.j })) this.fail("Geen verbinding.");
+  }
+
+  private fail(why: string) {
+    const m = this.mine;
+    if (!m) return;
+    this.mine = null;
+    this.send({ t: "dr" });
+    const l = this.live.get(m.j);
+    if (l) for (const o of l.objs) o.alive = true;
+    this.sound.wrong();
+    this.big("OPDRACHT MISLUKT", "bad");
+    this.toast("OPDRACHT MISLUKT", why, "bad");
+    track("job_failed", { job: l?.job.q ?? "?", why });
+  }
+
+  // off the job without finishing it (a warp)
+  forfeit(why: string) {
+    if (this.mine) this.fail(why);
+  }
+
+  // off the job without a word (you dropped dead: the room already knows)
+  drop() {
+    const l = this.mine && this.live.get(this.mine.j);
+    if (l) for (const o of l.objs) o.alive = true;
+    this.mine = null;
+  }
+
+  private wrong(l: Live) {
+    track("quest_wrong_item", { item_of: l.job.q, on_job: this.mine ? 1 : 0 });
+    this.sound.wrong();
+    this.toast("TELT NIET", this.mine ? "Dit hoort bij een andere opdracht." : "Neem eerst de telefoon op.", "bad");
+  }
+
+  // a chair pushed in, a toilet flushed (by you, or by someone else on the job)
+  private step(l: Live, i: number, mine: boolean) {
+    if (l.job.q === "felice") {
+      const ch = l.chairs[i];
+      if (!ch || ch.target === 1) return;
+      ch.target = 1;
+      if (mine || ch.mesh.position.distanceTo(this.player.pos) < 12) this.sound.scrape();
+    } else if (l.job.q === "kak") {
+      const t = l.toilets[i];
+      if (!t || t.flushed) return;
+      t.flushed = true;
+      if (mine || Math.hypot(t.x - this.player.pos.x, t.z - this.player.pos.z) < 12) this.sound.flush();
+    } else return;
+    if (!l.job.st.includes(i)) l.job.st.push(i);
+    if (!mine) return;
+    this.send({ t: "st", j: l.job.j, i });
+    if (l.chairs.every((c) => c.target === 1) && l.toilets.every((t) => t.flushed)) this.finish(l);
+  }
+
+  // the phones ringing on your floor, for the HUD and the maps
+  ringing() {
+    const now = this.now(), f = this.player.floor, out: { x: number; z: number; f: number; label: string }[] = [];
+    for (const l of this.live.values()) {
+      const r = now >= l.job.at && this.ringOn(l, f);
+      if (r) out.push({ x: r.phone.x, z: r.phone.z, f, label: l.def.caller });
+    }
+    return out;
   }
 
   activeTarget() {
-    const q = this.active ? this.questOf(this.active) : null;
-    return q?.target() ?? null;
+    const l = this.mine && this.live.get(this.mine.j);
+    return l?.spot ?? null;
   }
 
-  cycle() {
-    const open = this.quests.filter((q) => q.launched && !q.done);
-    if (!open.length) return;
-    const i = open.findIndex((q) => q.id === this.active);
-    this.active = open[(i + 1) % open.length]!.id;
-    this.listUntil = this.t + 4;
-    this.sound.beep(1);
+  // what goes on the plattegrond: your job, or the phones
+  pins() {
+    const t = this.activeTarget();
+    if (t) return [{ ...t, col: QUEST_COL, label: "OPDRACHT" }];
+    return this.ringing().map((r) => ({ ...r, col: PHONE_COL, label: "TELEFOON" }));
   }
 
-  private wrong(label: string) {
-    const owner = this.quests.find((q) => q.item === label)?.id ?? "?";
-    track("quest_wrong_item", { active: this.active ?? "none", item_of: owner });
-    this.sound.wrong();
-    this.toast("TELT NIET", `Dit hoort bij een andere quest (${label}).`, "bad");
+  // and on the minimap
+  marks() {
+    const t = this.activeTarget();
+    if (t) return [{ ...t, col: QUEST_COL }];
+    return this.ringing().map((r) => ({ ...r, col: PHONE_COL, r: 6 }));
+  }
+
+  // the nearest phone ringing on your floor (for the warp menu)
+  nearestPhone(x: number, z: number) {
+    let best: { x: number; z: number; f: number } | null = null, bd = Infinity;
+    for (const r of this.ringing()) {
+      const d = Math.hypot(r.x - x, r.z - z);
+      if (d < bd) [bd, best] = [d, r];
+    }
+    return best;
   }
 
   update(dt: number, interact: boolean): boolean {
     this.t += dt;
     const P = this.player;
     const pf = P.floor;
+    const now = this.now();
     let consumed = false;
+    const ready = (f: number, x: number, z: number) => this.world.isReady(f, Math.floor(x / (CH * CELL)), Math.floor(z / (CH * CELL)));
 
-    if (this.running) {
-      for (const q of this.quests)
-        if (!q.launched && this.t - this.startedAt >= q.launchAt) {
-          q.launched = true;
-          if (!q.done) {
-            this.sound.chime();
-            this.toast("NIEUWE QUEST", q.title, "new");
-            this.listUntil = this.t + 5;
-          }
-          this.pickNext();
-        }
-    }
-
-    // visibility follows the streamed chunks
-    for (const o of this.objs) o.mesh.visible = o.alive && this.world.isReady(o.f, Math.floor(o.x / (CH * CELL)), Math.floor(o.z / (CH * CELL)));
-    if (this.toiletSpot) {
-      const ready = this.world.isReady(this.toiletSpot.f, Math.floor(this.toiletSpot.x / (CH * CELL)), Math.floor(this.toiletSpot.z / (CH * CELL)));
-      for (const t of this.toilets) t.mesh.visible = ready && t.k < 1;
-    }
-
-    // Jan wanders off every few minutes (never while you are looking at him)
-    const j = this.jan!;
-    const janQ = this.questOf("jan");
-    if (this.running && !janQ.done) {
-      j.timer -= dt;
-      const near = j.spot.f === pf && Math.hypot(j.spot.x - P.pos.x, j.spot.z - P.pos.z) < 14;
-      if (j.timer <= 0 && !near) {
-        j.timer = 140 + Math.random() * 80;
-        const cx = Math.floor(P.pos.x / (CH * CELL)), cz = Math.floor(P.pos.z / (CH * CELL));
-        j.spot = this.pickJanSpot(cx, cz, Math.max(0, Math.min(FLOOR_MAX - 1, pf)), new Rng((Math.random() * 1e9) | 0));
-        this.spawnJan();
-        if (janQ.launched) this.toast("JAN BECAUS IS WEER OP WANDEL", `Gezien: ${j.spot.label}, ${floorName(j.spot.f).toLowerCase()}`);
-      } else if (j.obj && near) {
-        // turn towards you
-        const a = Math.atan2(P.pos.x - j.spot.x, P.pos.z - j.spot.z);
-        let d = a - j.obj.mesh.rotation.y;
-        d = Math.atan2(Math.sin(d), Math.cos(d));
-        j.obj.mesh.rotation.y += d * Math.min(1, dt * 2);
-      }
-    }
-
-    // Felice's ghost drifts around the table and pulls chairs back out
-    const cs = this.chairSpot;
-    const felQ = this.questOf("felice");
-    if (this.ghost && cs) {
-      const vis = pf === cs.f && !felQ.done;
-      this.ghost.visible = vis;
-      if (vis) {
-        const a = this.t * 0.25;
-        this.ghost.position.set(cs.x + Math.cos(a) * 2.2, cs.y + 0.1 + Math.sin(this.t * 1.3) * 0.08, cs.z + Math.sin(a) * 2.2);
-        this.ghost.rotation.y = -a;
-        this.ghostMat.opacity = 0.1 + 0.08 * Math.max(0, Math.sin(this.t * 2.3) * Math.sin(this.t * 0.7 + 1)) + (Math.random() < 0.02 ? 0.1 : 0);
-      }
-      if (this.running && felQ.launched && !felQ.done && this.ghostPulls < 3) {
-        this.ghostTimer -= dt;
-        const pushed = this.chairs.filter((c) => c.target === 1);
-        const far = pushed.filter((c) => Math.hypot(c.to.x - P.pos.x, c.to.z - P.pos.z) > 5 || pf !== cs.f);
-        if (this.ghostTimer <= 0 && far.length && pushed.length < this.chairs.length) {
-          this.ghostTimer = 40 + Math.random() * 30;
-          this.ghostPulls++;
-          far[Math.floor(Math.random() * far.length)]!.target = 0;
-          if (pf === cs.f && Math.hypot(cs.x - P.pos.x, cs.z - P.pos.z) < 30) {
-            this.sound.creak();
-            this.toast("ERGENS SCHUIFT EEN STOEL", "Felice is niet tevreden.", "bad");
-          }
-        }
-      }
-    }
-    for (const ch of this.chairs) {
-      if (ch.k === ch.target) continue;
-      ch.k += Math.sign(ch.target - ch.k) * Math.min(Math.abs(ch.target - ch.k), dt * 1.8);
-      this.placeChair(ch);
-    }
+    // out of time, or no answer from the room
+    const mine = this.mine;
+    if (mine?.pending && this.t - mine.pending > 6) this.fail("Geen antwoord van het gebouw.");
+    else if (mine && !mine.pending && this.t > mine.until) this.fail("De tijd is om.");
 
     // what can we touch?
     this.prompt = "";
@@ -818,51 +1087,85 @@ export class Quests {
       if (facing < 0.35 && d > 0.7) return;
       if (!best || d < best.d) best = { d, label, action };
     };
-    for (const o of this.objs) {
-      if (!o.alive) continue;
-      const isActive = this.active === o.quest;
-      consider(o.x, o.y, o.z, o.f, isActive ? `E · ${o.quest === "jan" ? "Aanspreken" : "Oprapen"}: ${o.label}` : `E · ${o.label}`, () => {
-        if (this.active === o.quest) o.use();
-        else this.wrong(this.questOf(o.quest).item);
-      }, o.quest === "jan" ? 2.4 : 1.8);
-    }
-    if (cs && !felQ.done)
-      for (const ch of this.chairs) {
-        if (ch.target === 1) continue;
-        const p = ch.mesh.position;
-        consider(p.x, p.y + 0.5, p.z, cs.f, this.active === "felice" ? "E · Stoel aanschuiven" : "E · Stoel", () => {
-          if (this.active !== "felice") return this.wrong(this.questOf("felice").item);
-          ch.target = 1;
-          this.sound.scrape();
-          if (this.chairs.every((c) => c.target === 1)) setTimeout(() => this.chairs.every((c) => c.target === 1) && !felQ.done && this.complete("felice"), 700);
-        });
-      }
-    const kakQ = this.quests.find((x) => x.id === "kak");
-    if (kakQ && !kakQ.done && this.toiletSpot) {
-      let near = 99;
-      for (const t of this.toilets) {
-        if (t.flushed) {
-          if (t.k < 1) {
-            t.k = Math.min(1, t.k + dt * 0.6);
-            t.mesh.scale.setScalar(Math.max(0.01, 1 - t.k));
-            t.mesh.rotation.y += dt * 8;
-            if (t.k >= 1) t.mesh.visible = false;
-          }
-          continue;
+
+    let ring: { d: number; x: number; z: number } | null = null;
+    for (const l of this.live.values()) {
+      const onIt = this.mine?.j === l.job.j && !this.mine.pending;
+      // the phone on your floor: rings until someone wins the job (the ones on the other floors are dark)
+      for (const [f, r] of l.rings) if (r && f !== pf) r.lamp.visible = false;
+      const rg = this.ringOn(l, pf);
+      if (rg) {
+        const ph = rg.phone, ringing = now >= l.job.at;
+        rg.lamp.visible = ringing && Math.floor(this.t * 4) % 2 === 0 && ready(ph.f, ph.x, ph.z);
+        if (ringing && this.mine?.j !== l.job.j) {
+          const d = Math.hypot(ph.x - P.pos.x, ph.z - P.pos.z);
+          if (!ring || d < ring.d) ring = { d, x: ph.x, z: ph.z };
+          const hx = ph.x + Math.sin(ph.rot) * 0.1, hz = ph.z + Math.cos(ph.rot) * 0.1;
+          if (!this.mine) consider(hx, ph.y - 0.02, hz, ph.f, `E · Opnemen: ${l.def.caller}`, () => this.pickUp(l, ph));
+          else consider(hx, ph.y - 0.02, hz, ph.f, "Je bent al met een opdracht bezig", () => this.sound.wrong());
         }
-        if (this.toiletSpot.f === pf) near = Math.min(near, Math.hypot(t.x - P.pos.x, t.z - P.pos.z));
-        consider(t.x, t.y, t.z, this.toiletSpot.f, this.active === "kak" ? "E · Doortrekken" : "E · Toilet", () => {
-          if (this.active !== "kak") return this.wrong(kakQ.item);
-          t.flushed = true;
-          this.sound.flush();
-          if (this.toilets.every((x) => x.flushed)) setTimeout(() => !kakQ.done && this.complete("kak"), 1600);
-        }, 2.5);
       }
-      // flies
-      this.flyT -= dt;
-      if (near < 5 && this.flyT <= 0) {
-        this.flyT = 1.5 + Math.random() * 3;
-        this.sound.fly(1 - near / 5);
+      // Jan walks on (the same for everyone), and turns to look at you
+      if (l.job.q === "jan") {
+        this.moveJan(l);
+        const j = l.objs[0], s = l.spot;
+        if (j && s && s.f === pf && Math.hypot(s.x - P.pos.x, s.z - P.pos.z) < 14) {
+          const a = Math.atan2(P.pos.x - s.x, P.pos.z - s.z);
+          let d = a - j.mesh.rotation.y;
+          d = Math.atan2(Math.sin(d), Math.cos(d));
+          j.mesh.rotation.y += d * Math.min(1, dt * 2);
+        }
+      }
+      for (const o of l.objs) {
+        o.mesh.visible = o.alive && ready(o.f, o.x, o.z);
+        if (!o.alive) continue;
+        consider(o.x, o.y, o.z, o.f, onIt ? `E · ${o.quest === "jan" ? "Aanspreken" : "Oprapen"}: ${o.label}` : `E · ${o.label}`, () => (onIt ? o.use() : this.wrong(l)), o.quest === "jan" ? 2.4 : 1.8);
+      }
+      // Felice's ghost drifts around the table
+      const cs = l.spot;
+      if (l.ghost && cs) {
+        const vis = pf === cs.f && ready(cs.f, cs.x, cs.z);
+        l.ghost.visible = vis;
+        if (vis) {
+          const a = this.t * 0.25;
+          l.ghost.position.set(cs.x + Math.cos(a) * 2.2, cs.y + 0.1 + Math.sin(this.t * 1.3) * 0.08, cs.z + Math.sin(a) * 2.2);
+          l.ghost.rotation.y = -a;
+          this.ghostMat.opacity = 0.1 + 0.08 * Math.max(0, Math.sin(this.t * 2.3) * Math.sin(this.t * 0.7 + 1)) + (Math.random() < 0.02 ? 0.1 : 0);
+        }
+      }
+      for (const m of l.meshes) m.visible = !!cs && ready(cs.f, cs.x, cs.z);
+      l.chairs.forEach((ch, i) => {
+        ch.mesh.visible = !!cs && ready(cs.f, cs.x, cs.z);
+        if (ch.k !== ch.target) {
+          ch.k += Math.sign(ch.target - ch.k) * Math.min(Math.abs(ch.target - ch.k), dt * 1.8);
+          this.placeChair(ch);
+        }
+        if (ch.target === 1 || !cs) return;
+        const p = ch.mesh.position;
+        consider(p.x, p.y + 0.5, p.z, cs.f, onIt ? "E · Stoel aanschuiven" : "E · Stoel", () => (onIt ? this.step(l, i, true) : this.wrong(l)));
+      });
+      if (l.toilets.length && cs) {
+        const vis = ready(cs.f, cs.x, cs.z);
+        let near = 99;
+        l.toilets.forEach((t, i) => {
+          t.mesh.visible = vis && t.k < 1;
+          if (t.flushed) {
+            if (t.k < 1) {
+              t.k = Math.min(1, t.k + dt * 0.6);
+              t.mesh.scale.setScalar(Math.max(0.01, 1 - t.k));
+              t.mesh.rotation.y += dt * 8;
+            }
+            return;
+          }
+          if (cs.f === pf) near = Math.min(near, Math.hypot(t.x - P.pos.x, t.z - P.pos.z));
+          consider(t.x, t.y, t.z, cs.f, onIt ? "E · Doortrekken" : "E · Toilet", () => (onIt ? this.step(l, i, true) : this.wrong(l)), 2.5);
+        });
+        // flies
+        this.flyT -= dt;
+        if (near < 5 && this.flyT <= 0) {
+          this.flyT = 1.5 + Math.random() * 3;
+          this.sound.fly(1 - near / 5);
+        }
       }
     }
     if (best) {
@@ -874,9 +1177,18 @@ export class Quests {
       }
     }
 
-    // signal meter + beeps for the active quest
-    const q = this.active ? this.questOf(this.active) : null;
-    const tgt = q?.target();
+    // the nearest ringing phone: louder as you come closer, from the side it's on
+    this.ringT -= dt;
+    const rg = ring as { d: number; x: number; z: number } | null;
+    if (rg && this.running && rg.d < EARSHOT && this.ringT <= 0) {
+      this.ringT = 3;
+      const dx = rg.x - P.pos.x, dz = rg.z - P.pos.z, len = Math.max(0.01, Math.hypot(dx, dz));
+      const pan = Math.max(-0.8, Math.min(0.8, (dx * Math.cos(P.yaw) - dz * Math.sin(P.yaw)) / len));
+      this.sound.ring(0.15 + 0.85 * (1 - rg.d / EARSHOT) ** 2, pan);
+    }
+
+    // signal meter + beeps for your job
+    const tgt = this.activeTarget();
     let bars = 0;
     if (tgt) {
       const d = Math.hypot(tgt.x - P.pos.x, tgt.z - P.pos.z) + Math.abs(tgt.f - pf) * 18;
@@ -889,50 +1201,48 @@ export class Quests {
         }
       }
     }
-    this.renderHud(q, bars);
+    this.renderHud(bars);
     return consumed;
   }
 
   private hudKey = "";
-  extra = ""; // a line under the quest count (the places found)
-  listUntil = 0;
-  private renderHud(q: Quest | null, bars: number) {
-    const list = this.quests.filter((x) => x.launched);
-    const showList = this.t < this.listUntil;
-    const key = `${this.active}|${bars}|${showList}|${list.map((x) => x.id + x.done).join()}|${q?.hint()}|${this.extra}`;
-    if (key === this.hudKey) return;
-    this.hudKey = key;
+  private renderHud(bars: number) {
     const box = document.getElementById("quest")!;
-    if (!list.length) {
+    if (!this.running) {
       box.style.display = "none";
       return;
     }
+    const P = this.player;
+    const l = this.mine ? this.live.get(this.mine.j) : undefined;
+    const left = this.mine ? Math.max(0, Math.ceil(this.mine.until - this.t)) : 0;
+    const phones = l ? [] : this.ringing().map((r) => ({ ...r, d: Math.round(Math.hypot(r.x - P.pos.x, r.z - P.pos.z)) }));
+    const key = `${this.online}|${this.mine?.j}|${this.mine?.pending}|${left}|${bars}|${l?.hint()}|${phones.map((p) => `${p.label}${p.d}`).join()}|${this.top.map((s) => s.n + s.pts).join()}`;
+    if (key === this.hudKey) return;
+    this.hudKey = key;
     box.style.display = "";
     const sig = Array.from({ length: 5 }, (_, i) => `<i class="${i < bars ? "on" : ""}"></i>`).join("");
-    box.innerHTML =
-      (q
-        ? `<div class="qa"><div class="qt">${q.goal}</div><div class="qh">${q.hint()}</div><div class="sig">SIGNAAL ${sig}</div></div>`
-        : `<div class="qa"><div class="qt">Geen actieve quest</div></div>`) +
-      (showList ? `<ul>${list.map((x) => `<li class="${x.done ? "done" : x.id === this.active ? "act" : ""}">${x.done ? "✓" : x.id === this.active ? "▶" : "·"} ${x.title}</li>`).join("")}</ul>` : "") +
-      `<div class="qk">${this.quests.filter((x) => x.done).length}/${this.quests.length} gehaald${list.filter((x) => !x.done).length > 1 ? ` · <kbd>TAB</kbd><span class="mob">QUEST</span> andere quest` : ""}</div>` +
-      (this.extra ? `<div class="qk">${this.extra}</div>` : "");
+    let head: string;
+    if (l)
+      head = `<div class="qa"><div class="qt">${l.def.goal}</div><div class="qh">${l.hint()}</div><div class="sig">SIGNAAL ${sig}</div>` +
+        `<div class="clock${left <= 15 ? " low" : ""}">${this.mine!.pending ? "…" : mmss(left)}</div></div>`;
+    else if (!this.online) head = `<div class="qa"><div class="qt">Geen verbinding</div><div class="qh">De telefoons zijn stil.</div></div>`;
+    else if (phones.length)
+      head = `<div class="qa ph"><ul>${phones
+        .map((p) => `<li>☎ ${p.label} · ${p.d} m</li>`)
+        .join("")}</ul></div>`;
+    else head = `<div class="qa"><div class="qt">Even geen telefoon</div><div class="qh">Er belt zo meteen iemand.</div></div>`;
+    box.innerHTML = head + (this.top.length ? `<ol class="top">${this.top.slice(0, 3).map((s) => `<li>${esc(s.n)} · €${s.pts}</li>`).join("")}</ol>` : "");
   }
 
   private resumeAt = 0;
-  private resumeActive: string | null = null;
-  // continuing a saved game: the quests' clock picks up where it was, without the fanfare
-  restore(elapsed: number, active: string | null) {
+  // continuing a saved game: the clock picks up where it was
+  restore(elapsed: number) {
     this.resumeAt = Math.max(0, elapsed);
-    this.resumeActive = active;
   }
 
   start() {
     if (this.running) return;
     this.running = true;
     this.startedAt = this.t - this.resumeAt;
-    for (const q of this.quests) if (q.launchAt <= this.resumeAt) q.launched = true;
-    const a = this.resumeActive && this.quests.find((q) => q.id === this.resumeActive && q.launched && !q.done);
-    if (a) this.active = a.id;
-    this.pickNext();
   }
 }

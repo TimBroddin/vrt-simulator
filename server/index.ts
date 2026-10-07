@@ -1,9 +1,10 @@
 // The Cloudflare Worker: the static site, plus /ws, the one room everyone is in.
 // The room is a Durable Object using the hibernation API, so it isn't billed
-// while nobody's moving. Each socket keeps its state (id, name, last position)
-// in its attachment, which survives hibernation.
+// while nobody's moving. Each socket keeps its state (id, name, last position,
+// its job) in its attachment, which survives hibernation; each world's jobs and
+// scores are in the object's storage, read back when it wakes up.
 import { DurableObject } from "cloudflare:workers";
-import { MAX_PLAYERS, fresh, handle, parseToRoom, who, type FromRoom, type State } from "../src/protocol";
+import { MAX_PLAYERS, fresh, freshWorld, handle, parseToRoom, route, who, type FromRoom, type State, type WorldState } from "../src/protocol";
 
 interface Env {
   ASSETS: Fetcher;
@@ -11,6 +12,8 @@ interface Env {
 }
 
 export class Lobby extends DurableObject<Env> {
+  private worlds = new Map<number, WorldState>();
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     // (keepalives are answered without waking the room)
@@ -30,14 +33,31 @@ export class Lobby extends DurableObject<Env> {
     return new Response(null, { status: 101, webSocket: client });
   }
 
+  private async world(s: number) {
+    let w = this.worlds.get(s);
+    if (!w) {
+      w = (await this.ctx.storage.get<WorldState>(`w:${s}`)) ?? freshWorld();
+      this.worlds.set(s, w);
+    }
+    return w;
+  }
+
   override async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer) {
     const m = parseToRoom(raw);
     if (!m) return;
     const st = ws.deserializeAttachment() as State;
-    const out = handle(st, m, Date.now());
-    if (!out) return;
+    // (positions and chat don't need the world)
+    const s = m.t === "n" ? m.s : st.s;
+    const w = s !== null && m.t !== "p" && m.t !== "c" && m.t !== "x" ? await this.world(s) : null;
+    const rev = w?.rev;
+    const out = handle(st, m, Date.now(), w);
     ws.serializeAttachment(st);
-    this.broadcast(ws, out);
+    if (w && w.rev !== rev) this.ctx.storage.put(`w:${s}`, w);
+    route(out, ws, this.ctx.getWebSockets(), (x) => x.deserializeAttachment() as State | null, (x, msg) => {
+      try {
+        x.send(msg);
+      } catch {}
+    });
   }
 
   override async webSocketClose(ws: WebSocket, code: number) {
@@ -53,17 +73,11 @@ export class Lobby extends DurableObject<Env> {
 
   private gone(ws: WebSocket) {
     const st = ws.deserializeAttachment() as State | null;
-    if (st) this.broadcast(ws, { t: "bye", id: st.id });
-  }
-
-  private broadcast(from: WebSocket, msg: FromRoom) {
-    const s = JSON.stringify(msg);
-    for (const ws of this.ctx.getWebSockets()) {
-      if (ws === from) continue;
+    if (st) route([{ to: "others", m: { t: "bye", id: st.id } }], ws, this.ctx.getWebSockets(), () => null, (x, msg) => {
       try {
-        ws.send(s);
+        x.send(msg);
       } catch {}
-    }
+    });
   }
 }
 

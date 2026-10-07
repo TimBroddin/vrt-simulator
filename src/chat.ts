@@ -1,8 +1,9 @@
 // What the others are up to, bottom left: who came in, who left, what they
-// said. C opens a line to say something yourself (Enter sends, Esc closes).
+// said, who picked up a phone and who won. C opens a line to say something
+// yourself (Enter sends, Esc closes).
 import { CHAT_MAX } from "./protocol";
 
-export type FeedKind = "join" | "leave" | "chat" | "me" | "note";
+export type FeedKind = "join" | "leave" | "chat" | "me" | "note" | "job";
 
 export class Chat {
   open = false;

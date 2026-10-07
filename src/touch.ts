@@ -5,7 +5,6 @@ export const isTouch = () => matchMedia("(pointer: coarse)").matches || (navigat
 
 export interface TouchActions {
   use: () => void;
-  quest: () => void;
   lamp: () => void;
   pause: () => void;
   photo: () => void;
@@ -99,7 +98,6 @@ export function setupTouch(player: Player, actions: TouchActions) {
     el.addEventListener("touchend", () => el.classList.remove("down"));
   };
   btn("t-use", actions.use);
-  btn("t-quest", actions.quest);
   btn("t-lamp", actions.lamp);
   btn("t-pause", actions.pause);
   btn("t-photo", actions.photo);

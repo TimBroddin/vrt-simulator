@@ -53,6 +53,8 @@ export class Sound {
       this.ctx.resume();
       return;
     }
+    // (Chrome only loads its voices once someone asks: ask now, so they're there when a phone rings)
+    if ("speechSynthesis" in window) speechSynthesis.getVoices();
     const ctx = new AudioContext();
     this.ctx = ctx;
     this.master = ctx.createGain();
@@ -446,22 +448,66 @@ export class Sound {
     this.burst(0.02 + Math.random() * 0.04, "highpass", 2500 + Math.random() * 3000, 0.7, 0.05 + Math.random() * 0.08, 0, Math.random() * 1.4 - 0.7, 0.8);
   }
 
+  // a phone ringing nearby (once: about a second of bell)
+  ring(vol: number, pan = 0) {
+    if (!this.ctx || this.muted) return;
+    for (let i = 0; i < 18; i++) this.tone(i % 2 ? 1100 : 1400, 0.05, 0.05 * vol, i * 0.055, "square", pan, 0.8);
+  }
+
+  // an empty stomach
+  growl() {
+    if (!this.ctx || this.muted) return;
+    for (let i = 0; i < 5; i++) this.burst(0.35 + Math.random() * 0.3, "lowpass", 90 + Math.random() * 60, 6, 0.3, i * 0.22, 0, 0.3);
+  }
+
+  // something to eat (or drink)
+  eat() {
+    if (!this.ctx) return;
+    for (let i = 0; i < 4; i++) this.burst(0.06, "bandpass", 1200 + Math.random() * 1500, 2, 0.12, i * 0.18 + Math.random() * 0.05, 0, 0.3);
+  }
+
+  // you drop
+  dead() {
+    if (!this.ctx) return;
+    [392, 330, 262, 196].forEach((f, k) => this.tone(f, 0.9, 0.08, k * 0.32, "triangle", 0, 1.2));
+    this.burst(1.2, "lowpass", 160, 1, 0.5, 1.1, 0, 0.8);
+  }
+
+  // the handset off the hook
+  pickup() {
+    if (!this.ctx) return;
+    this.burst(0.03, "highpass", 2000, 0.7, 0.3, 0, 0, 0.2);
+    this.burst(0.08, "bandpass", 600, 2, 0.25, 0.03, 0, 0.2);
+  }
+
   beep(k: number) {
     if (!this.ctx || this.muted) return;
     this.tone(1800 + k * 600, 0.05, 0.02 + k * 0.02, 0, "sine", 0, 0.1);
   }
 
-  say(text: string, pitch = 0.9, rate = 0.95) {
+  // someone talking, in Flemish if there's a Dutch voice (and in whatever there is if not);
+  // now: before anything already queued (a phone call), which also gets a stuck Chrome going again
+  say(text: string, pitch = 0.9, rate = 0.95, now = false) {
     if (this.muted || !("speechSynthesis" in window)) return;
-    const voices = speechSynthesis.getVoices().filter((v) => v.lang.toLowerCase().startsWith("nl"));
-    if (!voices.length) return;
-    const u = new SpeechSynthesisUtterance(text);
-    u.voice = voices.find((v) => v.lang.toLowerCase() === "nl-be") ?? voices[0]!;
-    u.lang = u.voice.lang;
-    u.pitch = pitch;
-    u.rate = rate;
-    u.volume = 0.6;
-    speechSynthesis.speak(u);
+    const go = () => {
+      const voices = speechSynthesis.getVoices().filter((v) => v.lang.toLowerCase().startsWith("nl"));
+      const u = new SpeechSynthesisUtterance(text);
+      const voice = voices.find((v) => v.lang.toLowerCase() === "nl-be") ?? voices[0];
+      if (voice) u.voice = voice;
+      u.lang = voice?.lang ?? "nl-BE";
+      u.pitch = pitch;
+      u.rate = rate;
+      u.volume = 0.6;
+      if (now) speechSynthesis.cancel();
+      speechSynthesis.resume();
+      speechSynthesis.speak(u);
+    };
+    if (speechSynthesis.getVoices().length) return go();
+    // (the voices aren't in yet: wait for them, a second at most)
+    let done = false;
+    const once = () => !done && ((done = true), go());
+    speechSynthesis.addEventListener("voiceschanged", once, { once: true });
+    setTimeout(once, 1000);
   }
 
   flickerBuzz(amount: number) {

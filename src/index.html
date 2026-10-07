@@ -31,7 +31,17 @@
       <div id="quest" style="display:none"></div>
       <div id="waypoint"><span class="arr">▲</span><span class="txt"></span></div>
       <div id="toasts"></div>
+      <div id="big"></div>
+      <div id="sub"></div>
+      <!-- your card: who you are, your health, your money -->
+      <div id="card" style="display:none">
+        <div class="c-top"><span class="c-logo">vrt</span><b id="c-name">BEZOEKER</b><span id="c-ziek" hidden>ZIEK</span></div>
+        <div class="c-row"><span>GEZONDHEID</span><i class="c-bar"><b id="c-hp"></b></i></div>
+        <div class="c-row cash"><b id="c-money">€ 0</b><span>/ € 1000</span></div>
+      </div>
     </div>
+    <div id="dood"><b>DOOD</b><span>van de honger bezweken</span></div>
+    <div id="ziek"></div>
 
     <div id="touch" style="display:none">
       <div id="stick"><div id="knob"></div></div>
@@ -40,7 +50,6 @@
       <div id="t-map" class="tbtn small kaart">KAART</div>
       <div class="tbtns">
         <div id="t-lamp" class="tbtn">LAMP</div>
-        <div id="t-quest" class="tbtn">QUEST</div>
         <div id="t-use" class="tbtn big">E</div>
       </div>
     </div>
@@ -96,6 +105,7 @@
                   <input id="name" maxlength="20" autocomplete="nickname" spellcheck="false" enterkeyhint="go" />
                   <span class="b-meta">Reyerslaan 52</span>
                   <span class="b-meta"><span id="b-date"></span> · wereld <a id="seedlink" onclick="event.stopPropagation()"><span id="seed"></span></a></span>
+                  <span class="b-meta" id="b-stats"></span>
                 </div>
               </div>
               <div class="b-code" id="b-code" aria-hidden="true"></div>
@@ -110,16 +120,14 @@
         <div class="keys mob">
           <span>linkerduim lopen (ver duwen = rennen)</span>
           <span>rechterduim kijken</span>
-          <span><kbd>E</kbd> gebruiken</span>
-          <span><kbd>QUEST</kbd> wisselen</span>
+          <span><kbd>E</kbd> gebruiken, telefoon opnemen</span>
           <span><kbd>KAART</kbd> plattegrond &amp; bestemming</span>
           <span class="rot">liggend spelen werkt het best</span>
         </div>
         <div class="keys desk">
           <span><kbd>WASD</kbd>/<kbd>ZQSD</kbd> lopen</span>
           <span><kbd>SHIFT</kbd> rennen</span>
-          <span><kbd>E</kbd> gebruiken</span>
-          <span><kbd>TAB</kbd> quest</span>
+          <span><kbd>E</kbd> gebruiken, telefoon opnemen</span>
           <span><kbd>F</kbd> lamp</span>
           <span><kbd>SCROLL</kbd> zoom</span>
           <span><kbd>M</kbd> plattegrond</span>
@@ -138,7 +146,7 @@
         <div class="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
         <h1>Proficiat!</h1>
         <p class="won">Je hebt VRT simulator uitgespeeld</p>
-        <p class="sub">Alle quests gehaald: brooddoos, veter, paraplu, sleutels, een Pano-tape, sokken, koersboekje, Boma-worst, een ruggengraat, de badge van Karen, een koffiebeker, Jan Becaus, zes stoelen en geen kak in de toiletten. Tijd: <span id="endtime"></span> · <span id="endsteps"></span></p>
+        <p class="sub">€ 1000 op zak: elke telefoon opgenomen, elke brooddoos, veter, sok en ruggengraat terug, en sneller dan de anderen. Tijd: <span id="endtime"></span> · <span id="endsteps"></span></p>
         <p class="sub dim">De uitgang bestond toch. Ze komt uit bij de concurrent.</p>
         <p class="go2">klik om verder te dwalen</p>
       </div>

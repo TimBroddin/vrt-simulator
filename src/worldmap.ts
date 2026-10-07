@@ -20,6 +20,14 @@ export interface Person {
 }
 export const PERSON_COL = "#ffd23f";
 
+export interface Pin {
+  x: number;
+  z: number;
+  f: number;
+  col: string;
+  label: string;
+}
+
 export interface Waypoint {
   x: number;
   z: number;
@@ -256,7 +264,7 @@ export class WorldMap {
   private vz = 0;
   private s = window.innerWidth < 900 ? 2.2 : 3.0; // px per m
   private player = { x: 0, z: 0, f: 0, yaw: 0 };
-  private quest: { x: number; z: number; f: number } | null = null;
+  private pins: Pin[] = []; // your job, or the ringing phones
   private note = "";
   private found = new Map<string, Found | null>();
   private buttons: { name: string; find: Finder; el: HTMLButtonElement; head: HTMLElement }[] = [];
@@ -302,11 +310,11 @@ export class WorldMap {
     this.input();
   }
 
-  show(px: number, pz: number, pf: number, yaw: number, quest: { x: number; z: number; f: number } | null) {
+  show(px: number, pz: number, pf: number, yaw: number, pins: Pin[]) {
     this.open = true;
     this.el.classList.add("show");
     this.player = { x: px, z: pz, f: pf, yaw };
-    this.quest = quest;
+    this.pins = pins;
     this.note = this.waypoint ? `Bestemming: ${this.waypoint.label}` : "";
     this.s = Math.max(this.s, this.minScale());
     this.centre();
@@ -575,7 +583,7 @@ export class WorldMap {
       g.fillRect(wx - r, wy - r, r * 2, r * 2);
     }
     g.globalAlpha = 1;
-    // the quest target, the waypoint, you
+    // your job or the phones, the waypoint, you
     const pin = (x: number, z: number, pf: number, col: string, label = "") => {
       const [X, Y] = scr(x, z);
       const here = pf === f;
@@ -615,7 +623,7 @@ export class WorldMap {
       g.fillText(o.f === f ? o.name : `${o.name} · ${o.f > f ? "▲" : "▼"}`, X, Y - 13);
     }
     g.globalAlpha = 1;
-    if (this.quest && inSight(P.x, P.z, P.f, this.quest.x, this.quest.z, this.quest.f)) pin(this.quest.x, this.quest.z, this.quest.f, "#ff2e7e", "QUEST");
+    for (const q of this.pins) if (inSight(P.x, P.z, P.f, q.x, q.z, q.f)) pin(q.x, q.z, q.f, q.col, q.label);
     if (this.waypoint) pin(this.waypoint.x, this.waypoint.z, this.waypoint.f, "#35d6ff", this.waypoint.label);
     g.save();
     g.translate(fx, fy);

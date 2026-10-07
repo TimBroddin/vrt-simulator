@@ -12,15 +12,15 @@ URL options: `?seed=1234` (another building; without it everyone is in the same 
 
 ## De debug console
 
-The key left of 1 (`` ` `` or `²`) opens a console at the top of the screen. `help` lists the commands (`pos`, `seed`, `fps`, `wie`, `plekken`, `clear`, `exit`), but not all of them: `warp` opens the warp menu. It lists every plek (and the active quest); type to filter, ↑↓ and Enter (or click) to go. It finds the nearest one on any floor, well beyond what the plattegrond shows, and puts you just inside its door, clear of the furniture. `warp sport` opens the menu already filtered. See `src/devconsole.ts` and `src/warp.ts`. Not on phones and tablets (no keyboard).
+The key left of 1 (`` ` `` or `²`) opens a console at the top of the screen. `help` lists the commands (`pos`, `seed`, `fps`, `wie`, `plekken`, `clear`, `exit`), but not all of them: `warp` opens the warp menu. It lists every plek (and the nearest ringing phone); type to filter, ↑↓ and Enter (or click) to go. It finds the nearest one on any floor, well beyond what the plattegrond shows, and puts you just inside its door, clear of the furniture. `warp sport` opens the menu already filtered. Warping while you're on a job forfeits it ("Gewarpt: telt niet"). See `src/devconsole.ts` and `src/warp.ts`. Not on phones and tablets (no keyboard).
 
-On phones and tablets: left thumb walks (push far to run), right thumb looks, plus buttons for E, QUEST, LAMP, FOTO, KAART (the plattegrond) and pause. Play in landscape.
+On phones and tablets: left thumb walks (push far to run), right thumb looks, plus buttons for E, LAMP, FOTO, KAART (the plattegrond) and pause. Play in landscape.
 
 The HUD also has a pedometer: the steps you've taken and how far you've walked.
 
-The game saves itself every few seconds (the world, where you are, the quests, the pedometer) and continues there next time; OPNIEUW BEGINNEN on the start or pause screen starts over, back at the start of the shared world. The places you've found are kept either way. See `src/save.ts`.
+The game saves itself every few seconds (the world, where you are, your health, the pedometer) and continues there next time; your money is kept by the room; OPNIEUW BEGINNEN on the start or pause screen starts over, back at the start of the shared world. The places you've found are kept either way. See `src/save.ts`.
 
-Controls: WASD / ZQSD to walk, Shift to run, mouse to look, E to use things (lifts, quest items, closed doors), Tab to switch quests, M for the map (plattegrond), K for the minimap, F for the camera lamp, P for a photo, C to chat, scroll to zoom, N to mute, H to hide the HUD.
+Controls: WASD / ZQSD to walk, Shift to run, mouse to look, E to use things (lifts, phones, quest items, food, closed doors), M for the map (plattegrond), K for the minimap, F for the camera lamp, P for a photo, C to chat, scroll to zoom, N to mute, H to hide the HUD.
 
 ## Doors
 
@@ -34,9 +34,9 @@ The button on the start screen is the loading bar: the script, de kunst ophangen
 
 Everyone is in one room and, unless the URL picks another seed, in one world, the same building, starting in the same corridor. You see the others walking around as camera operators, on your floor, within 60 m. Positions go round 5 times a second while you move, nothing while you stand still.
 
-The start screen asks your name on a visitor's badge (a random one is filled in, like "Stagiair 42"; whatever you pick is remembered). The HUD shows how many others are in the building, bottom left, with a feed of who came in, who left and what they said. C opens a line to chat with everyone in your world (Enter sends, Esc closes). The others are yellow dots on the minimap (on your floor) and on the plattegrond (in sight, with their names); the plattegrond also lists everyone under ANDEREN, and clicking a name sets a waypoint to where they are. In the console, `wie` tells you how many others there are.
+The start screen asks your name on a visitor's badge (a random one is filled in, like "Stagiair 42"; whatever you pick is remembered). The HUD shows how many others are in the building, bottom left, with a feed of who came in, who left, what they said, who picked up a phone, who won and who starved. C opens a line to chat with everyone in your world (Enter sends, Esc closes). The others are yellow dots on the minimap (on your floor) and on the plattegrond (in sight, with their names); the plattegrond also lists everyone under ANDEREN, and clicking a name sets a waypoint to where they are. In the console, `wie` tells you how many others there are.
 
-In production the room is a Cloudflare Durable Object (`server/index.ts`, bound in `wrangler.jsonc`), using the hibernation API, so it isn't billed while nobody moves. With `bun run dev`, the dev server in `index.ts` plays the room. Both speak the protocol in `src/protocol.ts` and share its room logic; the client is `src/visitors.ts`, the feed and chat line `src/chat.ts`. `bun run deploy` builds and deploys the Worker.
+In production the room is a Cloudflare Durable Object (`server/index.ts`, bound in `wrangler.jsonc`), using the hibernation API, so it isn't billed while nobody moves. With `bun run dev`, the dev server in `index.ts` plays the room. Both speak the protocol in `src/protocol.ts` and share its room logic (tested in `src/protocol.test.ts`: `bun test`); each world's jobs and everyone's money are in the Durable Object's storage (the dev server keeps them in memory); the client is `src/visitors.ts`, the feed and chat line `src/chat.ts`. `bun run deploy` builds and deploys the Worker.
 
 ## De plattegrond
 
@@ -44,17 +44,31 @@ M (or KAART) opens a misty map of what's around you, turned so the way you're fa
 
 ## Quests
 
-Quests arrive one by one while you wander. Only the active quest counts: pick up another quest's object and you get "telt niet". The signal meter and beeps get stronger as you get closer.
+Quests work like the jobs in GTA 2. Old internal phones hang on the corridor walls (`wallphone` in `src/furnish.ts`, placed by hash on bare walls so nothing else moves). Three jobs are open at a time, and each rings on one phone on every floor (around the start), so wherever you are there's a phone for each job: you hear the nearest one on your floor ringing (louder as you come closer, from the side it's on), and only the ones on your floor are shown: green dots on the minimap, pins on the plattegrond, and the HUD lists them with their distance. Walk up and E picks up: the caller tells you what they've lost (read out by the browser's Dutch voice, with subtitles), and the clock starts, worked out from how far away the thing is. Run out of time and it's "OPDRACHT MISLUKT"; go back to a ringing phone to try again. One job at a time: while you're on one, the other phones won't let you pick up, and picking up another job's thing gets "telt niet". The signal meter and beeps get stronger as you get closer.
+
+Everyone in the world races for the same jobs. Anyone can pick up a ringing phone, and the phone keeps ringing until the job is won: the first to finish gets the money, and for everyone else on it the job is over ("TE LAAT · Iemand was je voor"). For the chairs and the toilets everyone's pushes and flushes count, and whoever does the last one wins. Twenty seconds later another phone rings, for another job, with its thing somewhere new (the job's number is its variant, so it's in the same spot for everyone). Jan Becaus walks on every two and a half minutes, on the room's clock, so he's in the same spot for everyone too. A job nobody manages in 20 minutes is hung up and another phone rings. The room decides all of this (`src/protocol.ts`); the jobs and what they pay are in `src/jobs.ts`.
 
 Ben Crabbé's lunchbox, Tom Waes' shoelace, Jan Becaus (who wanders off every few minutes), Felice's ghost and the chairs, flushing every toilet in one of the bathrooms ("geen kak in de toiletten"), Frank Deboosere's umbrella (on the roof), Frank from Thuis' garage keys (in the parking), a misfiled Pano tape from 1987, Peter Van de Veire's socks (in an MNM studio), Michel Wuyts' koersboekje (on a Sporza desk), Boma's worst (in De Mess or a canteen), the CEO's spine (on a boardroom table), Karen François' badge (in the VIP-bar, where else) and the coffee cup of the intern who's been looking for the coffee machine since 2019.
 
-Add a quest by adding an entry to `ITEMS` in `src/quests.ts`. Progress is saved per seed in localStorage.
+Add a quest by adding an entry to `ITEMS` in `src/quests.ts` (with who calls and what they say) and to `JOBS` in `src/jobs.ts` (what it pays). The top three are in the HUD under the jobs.
+
+## Geld en honger
+
+Your money is your score, like in GTA 2: jobs pay it, food costs it, and having € 1000 on hand is what ends the game. You start with € 50, and OPNIEUW BEGINNEN puts you back there (the room hears it on your next join). The room keeps it per world, under a key your browser makes up the first time (`vrt-key`), and it takes the money when you buy something, so the prices (`FOOD` in `src/jobs.ts`) can't be changed in the browser.
+
+Your health drops while you play: from full to nothing in twelve minutes of walking, twice as fast when you run, not while the game is paused. At 30 you're hungry (a toast, a growling stomach, the bar turns red and blinks), at 10 about to faint. Food brings it back: water from the coolers in the corridors (free, once a minute), a koffie at the coffee machines in de koffiekamer (€ 2), a snoepreep from a vending machine (€ 4), a broodje at the broodjesbar (€ 7), the dagschotel at the counter in De Mess (€ 12). Walk up and E. You can always keep eating, but on a full stomach (less than half of it still fits: a koffie above 95, a dagschotel above 60) the prompt warns you ("je zit al vol"), and one time in two you get sick from it. Water never hurts.
+
+One dagschotel in three goes wrong (and so can stuffing yourself): eight seconds later "Oei… die dagschotel", JE BENT ZIEK, and your health goes ten times as fast (a minute from full) until you find a toilet. The screen turns green at the edges, your stomach keeps rumbling, your card says ZIEK and the nearest toilet is on the minimap. At a toilet stall E ("Naar het toilet", only when you're sick) and you're cured; what you lost stays lost. A toilet comes before everything else then, even the dirty ones of the "geen kak" job.
+
+At zero you're dead: the screen goes red (DOOD), you lose your job, the ambulance costs half your money, and a few seconds later you wake up at the entrance with full health. The others read in the feed that you starved.
+
+Your card, bottom right (top right on phones), shows your name, your health and your money; the badge on the pause screen too. See `src/food.ts`.
 
 ## Het einde
 
-When the last quest is done the floor shakes, cracks, and you fall through it into a giant hall under the building: the entrance of DPG Media (VTM) on the Medialaan, indoors under a painted sky, with the glass front, the dpg media logo, the row of flags (Willy, Joe, Q, vtm, ...), the clipped hedges, the sign on the lawn and the arrow on the bricks. Ten steps in: "Proficiat! Je hebt VRT simulator uitgespeeld". See `src/finale.ts`.
+When you have € 1000 on hand (`TARGET` in `src/jobs.ts`), the floor shakes, cracks, and you fall through it into a giant hall under the building: the entrance of DPG Media (VTM) on the Medialaan, indoors under a painted sky, with the glass front, the dpg media logo, the row of flags (Willy, Joe, Q, vtm, ...), the clipped hedges, the sign on the lawn and the arrow on the bricks. Ten steps in: "Proficiat! Je hebt VRT simulator uitgespeeld". See `src/finale.ts`.
 
-To test it without doing every quest: open `?finale` (e.g. `http://localhost:3000/?finale`) and click to start; the floor gives way after 1.5 s. From the console, `__vrt.finale.start()` does the same at any moment. A finished world that never reached the hall (say, the tab closed mid-fall) goes there on the next visit.
+To test it without winning all those jobs: open `?finale` (e.g. `http://localhost:3000/?finale`) and click to start; the floor gives way after 1.5 s. From the console, `__vrt.finale.start()` does the same at any moment. Enough money but never in the hall (say, the tab closed mid-fall): you go there as soon as the room tells you how much you have. After the hall, you just keep playing.
 
 ## How it works
 

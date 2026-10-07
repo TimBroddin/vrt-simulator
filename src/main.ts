@@ -31,6 +31,7 @@ import { PLACES, Places, placeAt } from "./places";
 import { layPostcards } from "./postcards";
 import { track, trackOnce } from "./analytics";
 import { Quests } from "./quests";
+import { Food, TOILET_COL } from "./food";
 import { Finale } from "./finale";
 import { ago, clearSave, loadSave, writeSave } from "./save";
 import { Visitors } from "./visitors";
@@ -175,14 +176,21 @@ function surfaceAt(f: number, gx: number, gz: number): { s: Surface; wet: number
   return { s: "concrete", wet: 0.3 };
 }
 
-const quests = new Quests(world, player, sound, startFloor);
-// (the quests are placed around where the world started; then back to where you were)
+// (the jobs are placed around where the world starts, on the ground floor: the same for everyone in it)
+const start0 = spawn(0);
+const quests = new Quests(world, player, sound, start0);
+// hunger: your health drops while you play, food costs money (your money is your score)
+const food = new Food(player, sound, resume?.hp ?? 100, !!resume?.sick);
+food.money = () => quests.pts;
+food.onMoney = (pts) => (quests.pts = pts);
+food.toast = (title, body, kind) => quests.toast(title, body, kind);
+food.big = (text, kind, sub) => quests.big(text, kind, sub);
 if (resume) {
   player.pos.set(resume.x, resume.y, resume.z);
   player.viewY = resume.y;
   player.yaw = resume.yaw;
   player.pitch = resume.pitch;
-  quests.restore(resume.elapsed, resume.active);
+  quests.restore(resume.elapsed);
 }
 const radio = new GhostRadio(sound);
 // the station on the air: its studios light up ON AIR, and its logo flashes up in the HUD
@@ -213,6 +221,15 @@ const chat = new Chat();
 visitors.onJoin = (n) => chat.line("join", " kwam binnen", n);
 visitors.onLeave = (n) => chat.line("leave", " is vertrokken", n);
 visitors.onChat = (n, m) => chat.line("chat", m, n);
+// the phones: the room deals the jobs and says who won, the quests play them; it keeps the money too
+visitors.onJob = (m) => (m.t === "paid" || m.t === "broke" || m.t === "dood" ? food.receive(m) : quests.receive(m));
+quests.send = (m) => visitors.sendJob(m);
+food.send = (m) => visitors.sendJob(m);
+quests.me = () => visitors.id;
+quests.nameOf = (id) => visitors.nameOf(id);
+quests.onFeed = (who, text) => chat.line("job", text, who);
+// on the phone: the radio goes off while the caller talks
+quests.onCall = (secs) => radio.hush(secs);
 chat.onSend = (m) => {
   if (visitors.say(m)) chat.line("me", m, visitors.name!);
   else chat.line("note", visitors.online ? "Niets verstuurd" : "Niet verbonden: niemand hoort je");
@@ -297,12 +314,14 @@ function dashNear(): boolean {
   return false;
 }
 scene.add(quests.root);
-// the end: all quests done, the floor gives way, and ten steps later you've finished the game
+// the end: € 1000 on hand, the floor gives way, and ten steps later you've finished the game
 const finale = new Finale(player, sound, !touch);
 scene.add(finale.root);
 const doneKey = `vrt-uitgespeeld-${seed}`;
 let finishSecs = 0;
 quests.onFinish = (secs) => {
+  // (been to the hall already: you just keep going)
+  if (localStorage.getItem(doneKey) || finale.active) return;
   finishSecs = secs;
   finale.start();
 };
@@ -394,10 +413,8 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (letter(e, "e")) interact = true;
-  if (e.code === "Tab") {
-    e.preventDefault();
-    quests.cycle();
-  }
+  // keep focus off the (invisible) overlay buttons
+  if (e.code === "Tab") e.preventDefault();
   if (letter(e, "f")) lampTarget = lampTarget ? 0 : 1;
   if (letter(e, "n")) sound.setMuted(!sound.muted);
   if (letter(e, "m")) openMap();
@@ -461,7 +478,7 @@ function openMap() {
   player.keys.clear();
   touchUi?.reset();
   worldmap.people = visitors.people();
-  worldmap.show(player.pos.x, player.pos.z, player.floor, player.yaw, quests.activeTarget());
+  worldmap.show(player.pos.x, player.pos.z, player.floor, player.yaw, quests.pins());
   track("worldmap_opened", { device: touch ? "touch" : "desktop" });
   if (!touch) document.exitPointerLock?.();
 }
@@ -487,7 +504,7 @@ worldmap.onChange = (w, how) => {
 
 // --- the debug console (` or ², the key left of 1), and the warp menu behind `warp`
 const dev = new DevConsole();
-const warpMenu = new WarpMenu([{ id: "quest", name: "De actieve quest" }]);
+const warpMenu = new WarpMenu([{ id: "phone", name: "Een rinkelende telefoon" }]);
 function openDev() {
   if (dev.open || warpMenu.open || worldmap.open || !started || finale.active) return;
   player.keys.clear();
@@ -526,6 +543,7 @@ dev.add("warp", null, (args) => {
 // Teleport, and stand still until the building around you has loaded.
 let warping = false;
 function warpTo(s: WarpSpot, label: string) {
+  quests.forfeit("Gewarpt: telt niet.");
   cars.leave(true);
   player.pos.set(s.x, s.y, s.z);
   player.viewY = s.y;
@@ -540,14 +558,53 @@ warpMenu.onPick = (id, name) => {
   warpMenu.setNote("Zoeken…");
   // (a moment for the note to show: finding something far away takes a while)
   setTimeout(() => {
-    const P = player.pos, q = quests.activeTarget();
-    const s = id === "quest" ? q && warpNear(q.f, q.x, q.z) : findWarp(id, P.x, P.z, player.floor);
-    if (!s) return warpMenu.setNote(id === "quest" ? "Geen actieve quest" : `${name}: niets gevonden in de buurt`);
+    const P = player.pos, q = quests.nearestPhone(P.x, P.z);
+    const s = id === "phone" ? q && warpNear(q.f, q.x, q.z) : findWarp(id, P.x, P.z, player.floor);
+    if (!s) return warpMenu.setNote(id === "phone" ? "Er gaat geen telefoon op deze verdieping" : `${name}: niets gevonden in de buurt`);
     dev.print(`warp → ${name} · ${floorName(s.f)} · ${s.x.toFixed(1)}, ${s.z.toFixed(1)}`);
     warpTo(s, name);
     warpMenu.hide();
   }, 30);
 };
+
+// starved: everything goes red, and a few seconds later you wake up at the entrance
+let deadT = 0;
+food.onDeath = () => {
+  $("dood").lastElementChild!.textContent = !food.sick ? "van de honger bezweken" : food.cause === "vol" ? "te veel gegeten" : "die dagschotel was te veel";
+  quests.drop();
+  cars.leave(true);
+  player.keys.clear();
+  sound.dead();
+  deadT = 4.5;
+  document.body.classList.add("dood");
+};
+function wakeUp() {
+  player.pos.set(start0.x, 0, start0.z);
+  player.viewY = 0;
+  player.yaw = start0.yaw;
+  player.pitch = 0;
+  player.vx = player.vz = 0;
+  warping = true;
+  food.revive();
+  document.body.classList.remove("dood");
+  quests.toast("WAKKER", "Iemand van de bewaking heeft je gevonden. Eet iets.", "new");
+}
+
+// your card: name, health, money (and the same on the badge, for the pause screen)
+let cardShown = "";
+function showCard() {
+  const hp = Math.ceil(food.hp), key = `${visitors.name}|${hp}|${quests.pts}|${food.sick}`;
+  if (key === cardShown) return;
+  cardShown = key;
+  $("c-ziek").hidden = !food.sick;
+  document.body.classList.toggle("ziek", food.sick && !food.dead);
+  $("card").style.display = visitors.name ? "" : "none";
+  $("c-name").textContent = visitors.name ?? "";
+  $("c-hp").style.width = `${hp}%`;
+  $("c-money").textContent = `€ ${quests.pts}`;
+  $("card").classList.toggle("low", hp < 30);
+  $("b-stats").textContent = visitors.name ? `€ ${quests.pts} · gezondheid ${hp}` : "";
+}
 
 // the waypoint line: direction, distance, and the way up or down
 let guideT = 0;
@@ -589,7 +646,6 @@ let playing = false; // touch devices: no pointer lock, the overlay decides
 const touchUi = touch
   ? setupTouch(player, {
       use: () => (interact = true),
-      quest: () => quests.cycle(),
       lamp: () => (lampTarget = lampTarget ? 0 : 1),
       photo: () => (photoRequested = true),
       map: () => (worldmap.open ? closeMap() : openMap()),
@@ -615,8 +671,8 @@ function begin() {
   sound.start();
   radio.unlock();
   quests.start();
-  // ?finale skips to the end; a game that was finished but never reached the hall goes there too
-  if (!started && (params.has("finale") || (quests.quests.every((q) => q.done) && !localStorage.getItem(doneKey))))
+  // ?finale skips to the end (enough money but never in the hall: the quests see to that when the room says so)
+  if (!started && params.has("finale"))
     setTimeout(() => {
       finishSecs = quests.t - quests.startedAt;
       finale.start();
@@ -746,14 +802,20 @@ function frame() {
     finale.update(dt);
     if (warping && world.readyAround(player.pos.x, player.pos.z, player.floor, 1) >= 1) warping = false;
     if (finale.walking) player.update(dt, finale, active);
-    else if (!finale.active && !warping && !cars.driving) player.update(dt, world, active && !lifts.ride?.phase.startsWith("clos") && !lifts.panelOpen);
+    else if (!finale.active && !warping && !cars.driving) player.update(dt, world, active && !food.dead && !lifts.ride?.phase.startsWith("clos") && !lifts.panelOpen);
     if (active) pedMeters += Math.min(player.speed * dt, 1);
     if (!finale.inHall) {
       if (finale.active) cars.leave(true);
       const inCar = cars.update(dt, interact && !finale.active, active) || !!cars.driving;
-      const used = quests.update(dt, interact && active && !finale.active && !inCar);
-      const opened = !inCar && !finale.active && doors.update(interact && active && !used);
-      lifts.update(t, dt, interact && !used && !opened && !inCar && !finale.active);
+      // (sick, a toilet comes before anything else: even the toilets of the "geen kak" job)
+      const can = interact && active && !inCar && !finale.active, playingNow = active && started && !finale.active;
+      const sickFirst = food.sick;
+      let ate = sickFirst && food.update(dt, can, playingNow);
+      const used = quests.update(dt, can && !ate && !food.dead);
+      if (!sickFirst) ate = food.update(dt, can && !used, playingNow);
+      const opened = !inCar && !finale.active && doors.update(interact && active && !used && !ate);
+      lifts.update(t, dt, interact && !used && !ate && !opened && !inCar && !finale.active);
+      if (deadT > 0 && (deadT -= dt) <= 0) wakeUp();
     }
   }
   interact = false;
@@ -762,7 +824,7 @@ function frame() {
     playSecs += dt;
     walked += Math.min(player.speed * dt, 1);
     for (const m of [5, 15, 30, 60])
-      if (playSecs >= m * 60) trackOnce(`play${m}`, "playtime", { minutes: m, meters: Math.round(walked), quests_done: quests.quests.filter((q) => q.done).length });
+      if (playSecs >= m * 60) trackOnce(`play${m}`, "playtime", { minutes: m, meters: Math.round(walked), quests_done: quests.wins, money: quests.pts, hp: Math.round(food.hp) });
   }
   radio.update(dt, sound.env.roof);
   if (ready && !finale.inHall && (nearT -= dt) <= 0) {
@@ -776,6 +838,8 @@ function frame() {
   if (ready && started && !finale.inHall) weer.update(dt);
   if (ready && !finale.inHall) bareels.update(dt);
   showOthers();
+  showCard();
+  quests.online = visitors.online;
   visitors.update(dt, started && ready && !finale.inHall ? { s: seed, x: player.pos.x, y: player.pos.y, z: player.pos.z, a: player.yaw } : null);
 
   if (flickNear > 0 && t - lastFlickBuzz > 0.12 && Math.random() < flickNear * 0.25) {
@@ -803,11 +867,12 @@ function frame() {
   tower.position.set(camera.position.x + 430, -30, camera.position.z - 330);
 
   if (ready && !finale.inHall) {
-    const qt = quests.activeTarget(), wp = worldmap.waypoint;
+    const wp = worldmap.waypoint;
     const ppl = visitors.people();
     minimap.draw(player.floor, player.pos.x, player.pos.z, player.yaw, [
       ...ppl.map((o) => ({ ...o, col: PERSON_COL, r: 5, near: true })),
-      ...(qt ? [{ ...qt, col: "#ff2e7e" }] : []),
+      ...quests.marks(),
+      ...(food.toilet() ? [{ ...food.toilet()!, col: TOILET_COL }] : []),
       ...(wp ? [{ ...wp, col: "#35d6ff" }] : []),
     ]);
     worldmap.people = ppl;
@@ -837,7 +902,8 @@ function frame() {
   if (locked || playing || api.auto) {
     $("tc").textContent = timecode(recT);
     $("rec").style.visibility = Math.floor(t * 1.4) % 2 ? "hidden" : "visible";
-    $("prompt").textContent = finale.active ? "" : cars.prompt || quests.prompt || lifts.prompt || doors.prompt;
+    const eatPrompt = food.sick ? food.prompt || quests.prompt : quests.prompt || food.prompt;
+    $("prompt").textContent = finale.active || food.dead ? "" : cars.prompt || eatPrompt || lifts.prompt || doors.prompt;
     const disp = lifts.display;
     $("liftdisp").style.display = disp !== null ? "" : "none";
     if (disp !== null) $("liftnum").textContent = disp === String(FLOOR_MAX) ? "D" : disp;
@@ -865,7 +931,7 @@ function save() {
   const P = player.pos, gx = Math.floor(P.x / CELL), gz = Math.floor(P.z / CELL);
   writeSave({
     v: 1, seed, of: startFloor, f: player.floor, x: P.x, y: P.y, z: P.z, yaw: player.yaw, pitch: player.pitch,
-    steps, meters: pedMeters, elapsed: quests.t - quests.startedAt, active: quests.active, rec: recT, at: Date.now(),
+    steps, meters: pedMeters, elapsed: quests.t - quests.startedAt, hp: food.dead ? 100 : food.hp, sick: food.sick && !food.dead, rec: recT, at: Date.now(),
     where: `${cellLabel(player.floor, gx, gz)} · ${floorName(player.floor, isRtbf(Math.floor(gz / CH))).toLowerCase()}`,
   });
 }
@@ -895,7 +961,7 @@ $("restart").addEventListener("click", (e) => {
 });
 
 // expose for automation / debugging
-const api = { player, world, visitors, chat, openChat, doors, camera, lifts, bareels, sound, quests, finale, minimap, worldmap, openMap, closeMap, radio, live, cctv, weer, cars, places, dev, warpMenu, dash, findWarp, warpTo, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
+const api = { player, world, visitors, chat, openChat, doors, camera, lifts, bareels, sound, quests, food, finale, minimap, worldmap, openMap, closeMap, radio, live, cctv, weer, cars, places, dev, warpMenu, dash, findWarp, warpTo, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
 (window as any).__vrt = api;
 if (debug) $("debug").style.display = "block";
 frame();

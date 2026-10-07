@@ -1,6 +1,5 @@
-// Autosave: where you are in which world, the quests' clock, the pedometer.
-// Quest progress is kept per world by the quests themselves, the places you've
-// found across all worlds.
+// Autosave: where you are in which world, the quests' clock, your health, the
+// pedometer. Your money is kept by the room, the places you've found across all worlds.
 export interface Save {
   v: 1;
   seed: number;
@@ -14,7 +13,8 @@ export interface Save {
   steps: number;
   meters: number;
   elapsed: number; // seconds on the quests' clock
-  active: string | null;
+  hp?: number; // your health (older saves: full)
+  sick?: boolean; // (a dagschotel gone wrong: a reload doesn't cure it)
   rec: number;
   at: number; // when it was saved
   where: string;
@@ -37,7 +37,11 @@ export function writeSave(s: Save) {
   } catch {}
 }
 
+// starting over: the room puts your money back to the start on your next join (see visitors.ts)
+export const OVER_KEY = "vrt-opnieuw";
+
 export function clearSave(seed: number) {
+  localStorage.setItem(OVER_KEY, "1");
   localStorage.removeItem(KEY);
   localStorage.removeItem(`vrt-quests-${seed}`);
   localStorage.removeItem(`vrt-deuren-${seed}`);
