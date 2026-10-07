@@ -1039,14 +1039,14 @@ export class Quests {
   pins() {
     const t = this.activeTarget();
     if (t) return [{ ...t, col: QUEST_COL, label: "OPDRACHT" }];
-    return this.ringing().map((r) => ({ ...r, col: PHONE_COL, label: "TELEFOON" }));
+    return this.ringing().map((r) => ({ ...r, col: PHONE_COL, label: "", icon: "phone" as const }));
   }
 
   // and on the minimap
   marks() {
     const t = this.activeTarget();
     if (t) return [{ ...t, col: QUEST_COL }];
-    return this.ringing().map((r) => ({ ...r, col: PHONE_COL, r: 6 }));
+    return this.ringing().map((r) => ({ ...r, col: PHONE_COL, icon: "phone" as const }));
   }
 
   // the nearest phone ringing on your floor (for the warp menu)

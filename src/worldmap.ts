@@ -3,7 +3,8 @@
 // set a waypoint, or pick a place from the list and it finds the nearest one in sight.
 import { CELL, CH, CHUNK, FLOOR_MAX, FLOOR_MIN, MID_CZ, MID_FLOOR, floorName, isRtbf } from "./config";
 import { K, RT, SK, cellLabel, getPlan, getStructure, mazeAt, messFloors, radioStation, roomLabel, setIsThuis, type Plan, type Room, type Structure } from "./layout";
-import { paintCells } from "./minimap";
+import { paintCells, waysIn } from "./minimap";
+import { liftIcon, phoneIcon, stairIcon } from "./mapicons";
 import { STATIONS } from "./stations";
 
 const PX = 8; // tile pixels per cell
@@ -26,6 +27,7 @@ export interface Pin {
   f: number;
   col: string;
   label: string;
+  icon?: "phone"; // (drawn as the icon, without a label)
 }
 
 export interface Waypoint {
@@ -538,6 +540,17 @@ export class WorldMap {
         g.drawImage(this.tile(f, cx, cz), (cx * CHUNK - this.vx) * s, (cz * CHUNK - this.vz) * s, CHUNK * s + 0.5, CHUNK * s + 0.5);
       }
     g.restore();
+    // the stairs and the lifts, upright, a little bigger as you zoom in
+    const ir = Math.max(8, Math.min(13, s * 2.4));
+    for (let cz = cz0; cz <= cz1; cz++)
+      for (let cx = cx0; cx <= cx1; cx++) {
+        if (!this.tiles.has(`${f}:${cx},${cz}`)) continue;
+        for (const w of waysIn(f, cx, cz)) {
+          if (Math.hypot(w.x - P.x, w.z - P.z) > SIGHT) continue;
+          const [X, Y] = scr(w.x, w.z);
+          (w.kind === "stair" ? stairIcon : liftIcon)(g, X, Y, ir);
+        }
+      }
     // landmarks: the big places always, the rest when zoomed in, never on top of each other
     g.textAlign = "center";
     g.textBaseline = "middle";
@@ -623,7 +636,17 @@ export class WorldMap {
       g.fillText(o.f === f ? o.name : `${o.name} · ${o.f > f ? "▲" : "▼"}`, X, Y - 13);
     }
     g.globalAlpha = 1;
-    for (const q of this.pins) if (inSight(P.x, P.z, P.f, q.x, q.z, q.f)) pin(q.x, q.z, q.f, q.col, q.label);
+    const now = performance.now() / 1000;
+    for (const q of this.pins) {
+      if (!inSight(P.x, P.z, P.f, q.x, q.z, q.f)) continue;
+      if (q.icon !== "phone") pin(q.x, q.z, q.f, q.col, q.label);
+      else {
+        const [X, Y] = scr(q.x, q.z);
+        g.globalAlpha = q.f === f ? 1 : 0.45;
+        phoneIcon(g, X, Y, 11, q.col, now, q.f === f);
+        g.globalAlpha = 1;
+      }
+    }
     if (this.waypoint) pin(this.waypoint.x, this.waypoint.z, this.waypoint.f, "#35d6ff", this.waypoint.label);
     g.save();
     g.translate(fx, fy);
