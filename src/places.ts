@@ -28,6 +28,8 @@ export const PLACES: { id: string; name: string }[] = [
   { id: "bos", name: "Het VRT-bos" },
   { id: "bareel", name: "De bareel" },
   { id: "meiser", name: "Station Meiser" },
+  { id: "mortsel", name: "Station Mortsel-Oude-God" },
+  { id: "leopoldlei", name: "Prins Leopoldlei 1 bus 6" },
   { id: "nieuwsstudio", name: "Een nieuwsstudio" },
   { id: "journaal", name: "De journaalstudio" },
   { id: "weer", name: "De weerstudio" },

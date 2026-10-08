@@ -86,6 +86,7 @@ kbd { font: 600 11px var(--osd); border: 1px solid rgba(255, 255, 255, 0.4); bor
 #big { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%) scale(0.92); font: 800 clamp(26px, 4.6vw, 52px) var(--osd); letter-spacing: 0.12em; text-align: center; white-space: nowrap; opacity: 0; transition: opacity 0.35s, transform 0.35s; text-shadow: 0 0 3px #000, 3px 3px 0 #000; }
 #big.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 #big small { display: block; margin-top: 6px; font-size: 0.4em; letter-spacing: 0.25em; }
+#big.day { color: #fff; }
 #big.ok { color: #5be07c; } #big.bad { color: #ff5a4f; } #big.new { color: #fff; font-size: clamp(16px, 2.4vw, 28px); white-space: normal; width: min(80vw, 760px); }
 /* your card: name, health, money */
 #card { position: absolute; right: 52px; bottom: 84px; width: 200px; background: rgba(244, 244, 240, 0.93); color: #15161a; text-shadow: none; border-radius: 6px; overflow: hidden; font-size: 10px; letter-spacing: 0.08em; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45); }
@@ -336,6 +337,8 @@ body.atmic #t-mic { display: grid; }
 #chat-in::placeholder { color: rgba(255, 255, 255, 0.35); }
 @media (max-width: 900px), (max-height: 520px) { #anderen { font-size: 10px; margin-top: 0; } #feed { font-size: 11px; margin-bottom: 6px; } #feed .join, #feed .leave, #feed .note { font-size: 9px; } }
 body.finale #anderen { display: none; }
+/* at home in Mortsel: no plattegrond, no jobs */
+body.mortsel #minimap, body.mortsel #quest, body.mortsel #waypoint, body.mortsel #station, body.mortsel #liftdisp, body.mortsel #t-map, body.mortsel #t-mic { display: none !important; }
 
 /* autosave: continue, or start over */
 #savebar { display: none; margin: -12px auto 24px; font: 12px var(--osd); letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.6); cursor: default; }

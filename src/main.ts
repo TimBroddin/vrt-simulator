@@ -36,6 +36,7 @@ import { track, trackOnce } from "./analytics";
 import { Quests } from "./quests";
 import { Food, TOILET_COL } from "./food";
 import { Finale } from "./finale";
+import { Mortsel } from "./mortsel";
 import { ago, clearSave, loadSave, writeSave } from "./save";
 import { Visitors } from "./visitors";
 import { Doors } from "./doors";
@@ -373,6 +374,44 @@ finale.onDone = () => {
 };
 $("endcard").addEventListener("click", () => $("endcard").classList.remove("show"));
 
+// home: a train at Meiser takes you to Mortsel-Oude-God; go in at Prins Leopoldlei 1,
+// sleep, and the next morning the train takes you back to work
+const mortsel = new Mortsel(player, sound, world, !touch);
+scene.add(mortsel.root);
+let awayFrom: THREE.Object3D[] = []; // what was drawn in the building
+trains.onBoard = (x, y, z, yaw) => {
+  quests.forfeit("Naar huis: telt niet.");
+  save();
+  mortsel.board({ x, y, z, yaw });
+  track("train_boarded", { day: mortsel.day });
+};
+mortsel.onEnter = () => {
+  awayFrom = scene.children.filter((c) => c !== mortsel.root && c.visible);
+  for (const c of awayFrom) c.visible = false;
+  renderer.shadowMap.enabled = !touch;
+  document.body.classList.add("mortsel");
+  touchUi?.reset();
+  intercom.release();
+  if (worldmap.waypoint) worldmap.setWaypoint(null, "mortsel");
+  $("floor").textContent = "MORTSEL";
+  places.visit("mortsel");
+  track("mortsel_reached", { day: mortsel.day });
+};
+mortsel.onSlept = (day) => {
+  food.revive();
+  places.visit("leopoldlei");
+  track("slept", { day });
+};
+mortsel.onLeave = () => {
+  for (const c of awayFrom) c.visible = true;
+  awayFrom = [];
+  renderer.shadowMap.enabled = false;
+  document.body.classList.remove("mortsel");
+  warping = true;
+};
+mortsel.onBig = (text, sub) => quests.big(text, "day", sub);
+mortsel.onToast = (title, body) => quests.toast(title, body, "new");
+
 // the pedometer: every footstep you hear, and how far you've walked
 let steps = resume?.steps ?? 0, pedMeters = resume?.meters ?? 0;
 let stepsShown = "";
@@ -382,6 +421,7 @@ player.onStep = (run) => {
     sound.footstep(finale.surface(player.pos.x, player.pos.z), run);
     return finale.step();
   }
+  if (mortsel.here) return sound.footstep(mortsel.surface(player.pos.x, player.pos.z), run);
   const gx = Math.floor(player.pos.x / CELL), gz = Math.floor(player.pos.z / CELL);
   sound.footstep(surfaceAt(player.floor, gx, gz).s, run);
 };
@@ -450,7 +490,7 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     openChat();
   }
-  if (letter(e, "v") && !e.repeat && !finale.inHall) intercom.press();
+  if (letter(e, "v") && !e.repeat && !finale.inHall && !mortsel.here) intercom.press();
   if (letter(e, "h")) {
     hudOn = !hudOn;
     $("hud").style.display = hudOn ? "" : "none";
@@ -503,7 +543,7 @@ chat.onClose = relock;
 
 // --- de plattegrond
 function openMap() {
-  if (worldmap.open || !started || finale.active) return;
+  if (worldmap.open || !started || finale.active || mortsel.active) return;
   player.keys.clear();
   touchUi?.reset();
   worldmap.people = visitors.people();
@@ -535,7 +575,7 @@ worldmap.onChange = (w, how) => {
 const dev = new DevConsole();
 const warpMenu = new WarpMenu([{ id: "phone", name: "Een rinkelende telefoon" }]);
 function openDev() {
-  if (dev.open || warpMenu.open || worldmap.open || !started || finale.active) return;
+  if (dev.open || warpMenu.open || worldmap.open || !started || finale.active || mortsel.active) return;
   player.keys.clear();
   touchUi?.reset();
   dev.show();
@@ -588,6 +628,15 @@ function warpTo(s: WarpSpot, label: string) {
 }
 warpMenu.onPick = (id, name) => {
   if (lifts.ride) return warpMenu.setNote("Niet tijdens een liftrit");
+  // (home is a train ride away)
+  if (id === "mortsel" || id === "leopoldlei") {
+    warpMenu.hide();
+    cars.leave(true);
+    quests.forfeit("Naar huis: telt niet.");
+    save();
+    const P = player.pos;
+    return mortsel.board({ x: P.x, y: P.y, z: P.z, yaw: player.yaw });
+  }
   warpMenu.setNote("Zoeken…");
   // (a moment for the note to show: finding something far away takes a while)
   setTimeout(() => {
@@ -682,7 +731,7 @@ const touchUi = touch
       lamp: () => (lampTarget = lampTarget ? 0 : 1),
       photo: () => (photoRequested = true),
       map: () => (worldmap.open ? closeMap() : openMap()),
-      talk: (on) => (on && !finale.inHall ? intercom.press() : intercom.release()),
+      talk: (on) => (on && !finale.inHall && !mortsel.here ? intercom.press() : intercom.release()),
       pause: () => {
         places.render($("places"));
         playing = false;
@@ -814,7 +863,7 @@ function frame() {
   last = now;
   renderer.info.reset();
   t += dt;
-  if (!finale.inHall) world.update(player.pos.x, player.pos.z, player.floor);
+  if (!finale.inHall && !mortsel.here) world.update(player.pos.x, player.pos.z, player.floor);
 
   if (!ready) {
     const r = world.readyAround(player.pos.x, player.pos.z, player.floor, 1);
@@ -835,21 +884,26 @@ function frame() {
   if (ready) {
     const active = (locked || playing || api.auto) && !menuOpen();
     finale.update(dt);
+    mortsel.update(dt, interact && active && mortsel.walking);
     if (warping && world.readyAround(player.pos.x, player.pos.z, player.floor, 1) >= 1) warping = false;
     if (finale.walking) player.update(dt, finale, active);
-    else if (!finale.active && !warping && !cars.driving) player.update(dt, world, active && !food.dead && !lifts.ride?.phase.startsWith("clos") && !lifts.panelOpen);
+    else if (mortsel.here) player.update(dt, mortsel, active && mortsel.walking);
+    else if (!finale.active && !mortsel.active && !warping && !cars.driving) player.update(dt, world, active && !food.dead && !lifts.ride?.phase.startsWith("clos") && !lifts.panelOpen);
     if (active) pedMeters += Math.min(player.speed * dt, 1);
-    if (!finale.inHall) {
+    if (!finale.inHall && !mortsel.here) {
       if (finale.active) cars.leave(true);
-      const inCar = cars.update(dt, interact && !finale.active, active) || !!cars.driving;
+      const trip = finale.active || mortsel.active;
+      const inCar = cars.update(dt, interact && !trip, active) || !!cars.driving;
       // (sick, a toilet comes before anything else: even the toilets of the "geen kak" job)
-      const can = interact && active && !inCar && !finale.active, playingNow = active && started && !finale.active;
+      const can = interact && active && !inCar && !trip, playingNow = active && started && !trip;
       const sickFirst = food.sick;
       let ate = sickFirst && food.update(dt, can, playingNow);
       const used = quests.update(dt, can && !ate && !food.dead);
       if (!sickFirst) ate = food.update(dt, can && !used, playingNow);
-      const opened = !inCar && !finale.active && doors.update(interact && active && !used && !ate);
-      lifts.update(t, dt, interact && !used && !ate && !opened && !inCar && !finale.active);
+      const opened = !inCar && !trip && doors.update(interact && active && !used && !ate);
+      // a train at Meiser, doors open: in you get
+      const boarded = trains.update(dt, interact && active && !inCar && !trip && !used && !ate && !opened);
+      lifts.update(t, dt, interact && !used && !ate && !opened && !boarded && !inCar && !trip);
       if (deadT > 0 && (deadT -= dt) <= 0) wakeUp();
     }
   }
@@ -863,7 +917,7 @@ function frame() {
       if (playSecs >= m * 60) trackOnce(`play${m}`, "playtime", { minutes: m, meters: Math.round(walked), quests_done: quests.wins, money: quests.pts, hp: Math.round(food.hp) });
   }
   radio.update(dt, sound.env.roof);
-  if (ready && !finale.inHall && (nearT -= dt) <= 0) {
+  if (ready && !finale.inHall && !mortsel.here && (nearT -= dt) <= 0) {
     nearT = 0.4;
     nearStudio = studioNear();
     intercom.near = started && !cars.driving && micNear();
@@ -871,16 +925,25 @@ function frame() {
     dash.active = dashNear();
   }
   live.update(dt, started ? (radio.station >= 0 ? radio.station : nearStudio) : -1);
-  if (ready && !finale.inHall) updateEnv(dt);
-  if (ready && started && !finale.inHall) cctv.update(dt);
-  if (ready && started && !finale.inHall) weer.update(dt);
-  if (ready && !finale.inHall) bareels.update(dt);
-  if (ready && !finale.inHall) trains.update(dt);
+  const inBuilding = !finale.inHall && !mortsel.here;
+  if (ready && inBuilding) updateEnv(dt);
+  else if (ready && mortsel.here && (envTimer -= dt) <= 0) {
+    // home: where you are, and how it sounds (outdoors, or down at the platforms)
+    envTimer = 0.3;
+    const [loc, addr] = mortsel.where(), under = player.pos.y < -0.5;
+    $("loc").textContent = loc;
+    $("addr").textContent = addr;
+    $("floor").textContent = "MORTSEL";
+    sound.setEnv({ roof: !under, garage: false, light: under ? 0.8 : 0.3, wet: under ? 0.65 : 0.1 });
+  }
+  if (ready && started && inBuilding) cctv.update(dt);
+  if (ready && started && inBuilding) weer.update(dt);
+  if (ready && inBuilding) bareels.update(dt);
   showOthers();
-  tutorial.update(dt, { meters: pedMeters, onCall: !!quests.mine, mapOpen: worldmap.open, active: started && ready && (locked || playing || api.auto || worldmap.open) && !finale.active });
+  tutorial.update(dt, { meters: pedMeters, onCall: !!quests.mine, mapOpen: worldmap.open, active: started && ready && (locked || playing || api.auto || worldmap.open) && !finale.active && !mortsel.active });
   showCard();
   quests.online = visitors.online;
-  visitors.update(dt, started && ready && !finale.inHall ? { s: seed, x: player.pos.x, y: player.pos.y, z: player.pos.z, a: player.yaw } : null);
+  visitors.update(dt, started && ready && inBuilding ? { s: seed, x: player.pos.x, y: player.pos.y, z: player.pos.z, a: player.yaw } : null);
 
   if (flickNear > 0 && t - lastFlickBuzz > 0.12 && Math.random() < flickNear * 0.25) {
     lastFlickBuzz = t;
@@ -906,7 +969,7 @@ function frame() {
   sky.position.copy(camera.position);
   tower.position.set(camera.position.x + 430, -30, camera.position.z - 330);
 
-  if (ready && !finale.inHall) {
+  if (ready && inBuilding) {
     const wp = worldmap.waypoint;
     const ppl = visitors.people();
     minimap.draw(player.floor, player.pos.x, player.pos.z, player.yaw, [
@@ -921,15 +984,15 @@ function frame() {
   }
   post.cam.uniforms.time!.value = t;
   post.cam.uniforms.glitch!.value = finale.glitch || (lifts.ride?.phase === "moving" ? 0.15 + Math.random() * 0.1 : Math.random() < 0.002 ? 0.6 : 0);
-  post.cam.uniforms.fade!.value = finale.fade;
+  post.cam.uniforms.fade!.value = Math.min(finale.fade, mortsel.fade);
   post.composer.render(dt);
   if (photoRequested) {
     // read the canvas right after rendering, before the browser clears it
     photoRequested = false;
     const gx = Math.floor(player.pos.x / CELL), gz = Math.floor(player.pos.z / CELL);
-    const loc = finale.inHall ? "DPG MEDIA" : cellLabel(player.floor, gx, gz);
+    const loc = finale.inHall ? "DPG MEDIA" : mortsel.here ? mortsel.where()[0] : cellLabel(player.floor, gx, gz);
     track("photo_taken", { floor: player.floor, location: loc });
-    takePhoto(renderer.domElement, { hud: hudOn, tc: timecode(recT), floor: finale.inHall ? "MEDIALAAN 1" : floorName(player.floor, isRtbf(Math.floor(gz / CH))), loc });
+    takePhoto(renderer.domElement, { hud: hudOn, tc: timecode(recT), floor: finale.inHall ? "MEDIALAAN 1" : mortsel.here ? "MORTSEL" : floorName(player.floor, isRtbf(Math.floor(gz / CH))), loc });
     sound.shutter();
     const fl = $("flash");
     fl.classList.remove("go");
@@ -943,7 +1006,7 @@ function frame() {
     $("tc").textContent = timecode(recT);
     $("rec").style.visibility = Math.floor(t * 1.4) % 2 ? "hidden" : "visible";
     const eatPrompt = food.sick ? food.prompt || quests.prompt : quests.prompt || food.prompt;
-    $("prompt").textContent = finale.active || food.dead ? "" : cars.prompt || eatPrompt || lifts.prompt || doors.prompt || intercom.prompt(touch);
+    $("prompt").textContent = finale.active || food.dead ? "" : mortsel.active ? mortsel.prompt : cars.prompt || eatPrompt || lifts.prompt || doors.prompt || trains.prompt || intercom.prompt(touch);
     const disp = lifts.display;
     $("liftdisp").style.display = disp !== null ? "" : "none";
     if (disp !== null) $("liftnum").textContent = disp === String(FLOOR_MAX) ? "D" : disp;
@@ -967,7 +1030,7 @@ function frame() {
 let restarting = false;
 function save() {
   // (not while falling or in the hall: a save keeps you in the building)
-  if (!started || !ready || restarting || finale.active) return;
+  if (!started || !ready || restarting || finale.active || mortsel.active) return;
   const P = player.pos, gx = Math.floor(P.x / CELL), gz = Math.floor(P.z / CELL);
   writeSave({
     v: 1, seed, of: startFloor, f: player.floor, x: P.x, y: P.y, z: P.z, yaw: player.yaw, pitch: player.pitch,
@@ -1001,7 +1064,7 @@ $("restart").addEventListener("click", (e) => {
 });
 
 // expose for automation / debugging
-const api = { player, world, visitors, chat, openChat, intercom, doors, camera, lifts, bareels, trains, tutorial, sound, quests, food, finale, minimap, worldmap, openMap, closeMap, radio, live, cctv, weer, cars, places, dev, warpMenu, dash, findWarp, warpTo, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
+const api = { player, world, visitors, mortsel, chat, openChat, intercom, doors, camera, lifts, bareels, trains, tutorial, sound, quests, food, finale, minimap, worldmap, openMap, closeMap, radio, live, cctv, weer, cars, places, dev, warpMenu, dash, findWarp, warpTo, auto: false, setLamp: (v: number) => (lampTarget = v), press: () => (interact = true), stairFrame, getStructure, getPlan, getFurnished, mazeAt };
 (window as any).__vrt = api;
 if (debug) $("debug").style.display = "block";
 frame();

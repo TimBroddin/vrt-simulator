@@ -287,9 +287,9 @@ export class Sound {
 
   // a train coming through station Meiser: the horn now, then (after `delay`) the
   // rumble swelling and fading, the wheels clacking over the joints
-  train(vol: number, pan: number, delay: number) {
+  train(vol: number, pan: number, delay: number, horn = true) {
     if (!this.ctx || this.muted || vol < 0.02) return;
-    for (const [w, d] of [[0, 0.9], [1.15, 0.6]] as const) {
+    if (horn) for (const [w, d] of [[0, 0.9], [1.15, 0.6]] as const) {
       this.tone(311, d, 0.05 * vol, w, "sawtooth", pan, 0.8);
       this.tone(370, d, 0.04 * vol, w, "sawtooth", pan, 0.8);
     }
@@ -299,6 +299,37 @@ export class Sound {
       const t = delay + 0.6 + k * 0.27 + (k % 2) * 0.08, e = env(k, 28);
       this.burst(0.06, "bandpass", 2200, 3, 0.06 * vol * e, t, pan, 0.5);
     }
+  }
+
+  // a train braking: the squeal of the blocks and the last of the rumble
+  brake(vol: number, pan: number) {
+    if (!this.ctx || this.muted || vol < 0.02) return;
+    for (let k = 0; k < 4; k++) this.burst(1.1, "lowpass", 140, 0.8, 0.2 * vol * (1 - k / 4), k * 0.7, pan, 0.6);
+    this.burst(2.2, "bandpass", 3100, 18, 0.09 * vol, 0.6, pan, 0.6);
+    this.tone(2950, 1.6, 0.012 * vol, 0.9, "sine", pan, 0.6);
+    this.burst(0.7, "highpass", 2500, 0.6, 0.05 * vol, 2.9, pan, 0.4); // the air let out
+  }
+
+  // the doors of a Belgian train closing: quick high beeps, then the thud
+  trainDoors(vol = 1, pan = 0) {
+    if (!this.ctx || this.muted || vol < 0.02) return;
+    for (let k = 0; k < 6; k++) this.tone(1780, 0.09, 0.05 * vol, k * 0.2, "square", pan, 0.3);
+    this.burst(0.25, "lowpass", 220, 1, 0.3 * vol, 1.35, pan, 0.4);
+    this.burst(0.4, "highpass", 2000, 0.6, 0.04 * vol, 1.35, pan, 0.3);
+  }
+
+  // the alarm clock, the morning after
+  alarm() {
+    if (!this.ctx || this.muted) return;
+    for (let r = 0; r < 3; r++) for (let k = 0; k < 4; k++) this.tone(2100, 0.07, 0.06, r * 0.9 + k * 0.12, "square", 0, 0.1);
+  }
+
+  // a front door, shut behind you
+  frontDoor() {
+    if (!this.ctx || this.muted) return;
+    this.burst(0.08, "bandpass", 1800, 2, 0.12, 0, 0, 0.3); // the key
+    this.burst(0.3, "lowpass", 180, 1, 0.45, 0.5, 0, 0.6);
+    this.tone(70, 0.3, 0.12, 0.5, "sine", 0, 0.6);
   }
 
   // the floor giving way: a long low rumble, then the crack

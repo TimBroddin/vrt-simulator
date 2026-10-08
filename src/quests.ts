@@ -921,7 +921,7 @@ export class Quests {
   }
 
   // the big letters in the middle, GTA style
-  big(text: string, kind: "ok" | "bad" | "new", sub = "") {
+  big(text: string, kind: "ok" | "bad" | "new" | "day", sub = "") {
     const el = this.bigEl;
     el.className = kind;
     el.innerHTML = `${text}${sub ? `<small>${sub}</small>` : ""}`;

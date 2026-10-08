@@ -19,7 +19,7 @@ const G = 9.8;
 type Box = [number, number, number, number];
 type Draw = (g: CanvasRenderingContext2D, w: number, h: number) => void;
 
-function canvasTex(w: number, h: number, draw: Draw, repeat = false) {
+export function canvasTex(w: number, h: number, draw: Draw, repeat = false) {
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
@@ -30,7 +30,7 @@ function canvasTex(w: number, h: number, draw: Draw, repeat = false) {
   return t;
 }
 
-function speckle(g: CanvasRenderingContext2D, w: number, h: number, amt: number) {
+export function speckle(g: CanvasRenderingContext2D, w: number, h: number, amt: number) {
   const d = g.getImageData(0, 0, w, h);
   for (let i = 0; i < d.data.length; i += 4) {
     const n = (Math.random() - 0.5) * amt;
@@ -40,7 +40,7 @@ function speckle(g: CanvasRenderingContext2D, w: number, h: number, amt: number)
 }
 
 // box UVs in metres (divided by `scale`), so one repeating texture fits any size
-function metreUV(geo: THREE.BufferGeometry, scale: number) {
+export function metreUV(geo: THREE.BufferGeometry, scale: number) {
   const p = geo.attributes.position!, n = geo.attributes.normal!, uv = geo.attributes.uv!;
   for (let i = 0; i < p.count; i++) {
     const ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i));
