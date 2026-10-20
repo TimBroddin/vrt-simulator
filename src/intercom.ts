@@ -70,7 +70,9 @@ export class Intercom {
   private mic: MediaStream | null = null;
   private src: MediaStreamAudioSourceNode | null = null;
   private tap: AudioWorkletNode | null = null;
-  private loaded = false;
+  private own: AudioContext | null = null; // (when the microphone needs a context of its own)
+  private rate = 48000; // the microphone's context's sample rate
+  private loaded = new WeakSet<BaseAudioContext>();
   private asking = false;
   private idle = 0;
   private pos = 0; // (resampling) where the next 8 kHz sample falls in the input
@@ -97,31 +99,65 @@ export class Intercom {
     if (!this.mic) {
       this.asking = true;
       try {
-        if (!this.loaded) {
-          const url = URL.createObjectURL(new Blob([TAP], { type: "text/javascript" }));
-          await ctx.audioWorklet.addModule(url);
-          URL.revokeObjectURL(url);
-          this.loaded = true;
-        }
+        await this.module(ctx);
         this.mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       } catch (e) {
         this.talking = false;
+        this.asking = false;
         this.onNote((e as Error)?.name === "NotAllowedError" ? "Geen microfoon: niet toegestaan" : "Geen microfoon gevonden");
         return;
-      } finally {
-        this.asking = false;
       }
-      this.src = ctx.createMediaStreamSource(this.mic);
-      // (nothing above 3.4 kHz: it would only fold back down at 8 kHz)
-      const lp = ctx.createBiquadFilter();
-      lp.type = "lowpass";
-      lp.frequency.value = 3400;
-      this.tap = new AudioWorkletNode(ctx, "intercom-tap");
-      this.tap.port.onmessage = (e) => this.capture(e.data as Float32Array);
-      const sink = ctx.createGain();
-      sink.gain.value = 0;
-      this.src.connect(lp).connect(this.tap).connect(sink).connect(ctx.destination);
+      try {
+        this.wire(ctx, this.mic);
+      } catch {
+        // (Firefox won't take a microphone at another rate than the speakers: a context of its own, at the microphone's)
+        try {
+          const rate = this.mic.getAudioTracks()[0]?.getSettings().sampleRate;
+          this.own = new AudioContext(rate ? { sampleRate: rate } : {});
+          await this.module(this.own);
+          this.wire(this.own, this.mic);
+        } catch {
+          this.off();
+          this.talking = false;
+          this.onNote("De microfoon werkt niet in deze browser");
+        }
+      }
+      this.asking = false;
     }
+  }
+
+  private async module(ctx: BaseAudioContext) {
+    if (this.loaded.has(ctx)) return;
+    const url = URL.createObjectURL(new Blob([TAP], { type: "text/javascript" }));
+    await ctx.audioWorklet.addModule(url);
+    URL.revokeObjectURL(url);
+    this.loaded.add(ctx);
+  }
+
+  // the microphone into the tap
+  private wire(ctx: AudioContext, mic: MediaStream) {
+    const src = ctx.createMediaStreamSource(mic);
+    // (nothing above 3.4 kHz: it would only fold back down at 8 kHz)
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 3400;
+    const tap = new AudioWorkletNode(ctx, "intercom-tap");
+    tap.port.onmessage = (e) => this.capture(e.data as Float32Array);
+    const sink = ctx.createGain();
+    sink.gain.value = 0;
+    src.connect(lp).connect(tap).connect(sink).connect(ctx.destination);
+    this.src = src;
+    this.tap = tap;
+    this.rate = ctx.sampleRate;
+  }
+
+  // the microphone off (the browser stops showing it)
+  private off() {
+    for (const t of this.mic?.getTracks() ?? []) t.stop();
+    this.src?.disconnect();
+    this.tap?.disconnect();
+    void this.own?.close();
+    this.mic = this.src = this.tap = this.own = null;
   }
 
   // what to show at the desk
@@ -139,7 +175,7 @@ export class Intercom {
 
   private capture(b: Float32Array) {
     if (!this.talking) return;
-    const step = this.sound.ctx!.sampleRate / VOICE_RATE;
+    const step = this.rate / VOICE_RATE;
     let p = this.pos;
     for (; p < b.length; p += step) {
       this.out[this.n++] = ulawEnc(b[Math.floor(p)]!);
@@ -277,18 +313,13 @@ export class Intercom {
         // (right next to you it's in the middle, further off it's to one side)
         t.pan.pan.setTargetAtTime(Math.max(-0.8, Math.min(0.8, (dx * Math.cos(me.yaw) - dz * Math.sin(me.yaw)) / len)) * Math.min(1, len / 2), now, 0.05);
       }
-      if (g > 0 && t.next > now - 0.2) loud.push(t.name);
+      if (t.next > now - 0.2) loud.push(t.name);
     }
     this.hiss?.gain.setTargetAtTime(on.length ? 0.02 : 0, now, 0.08);
     // (the microphone off a while after you let go, so the browser stops showing it)
-    if (this.mic && !this.talking && !this.asking && (this.idle += dt) > MIC_IDLE) {
-      for (const t of this.mic.getTracks()) t.stop();
-      this.src?.disconnect();
-      this.tap?.disconnect();
-      this.mic = this.src = this.tap = null;
-    }
+    if (this.mic && !this.talking && !this.asking && (this.idle += dt) > MIC_IDLE) this.off();
     const mine = this.kind === 1 ? "OP DE INTERCOM" : this.audience() ? "JE PRAAT" : "JE PRAAT · NIEMAND IN DE BUURT";
-    const txt = this.talking ? (this.asking ? "MICROFOON…" : mine) : on.length ? on.join(", ") : loud.join(", ");
+    const txt = this.talking ? (this.asking ? "MICROFOON…" : mine) : on.length ? on.join(", ") : loud.length ? `${loud.join(", ")} ${loud.length > 1 ? "praten" : "praat"}` : "";
     const near = !this.talking && !on.length && loud.length > 0;
     const key = `${this.talking}|${near}|${txt}`;
     if (key === this.shown) return;
