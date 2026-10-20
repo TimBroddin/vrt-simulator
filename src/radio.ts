@@ -92,7 +92,7 @@ export class GhostRadio {
     const token = ++this.token;
     this.el.play().catch(() => this.stop(true));
     const now = ctx.currentTime;
-    const vol = 0.13 + Math.random() * 0.07;
+    const vol = 0.22 + Math.random() * 0.12;
     this.out.gain.cancelScheduledValues(now);
     this.out.gain.setValueAtTime(0, now);
     // it fades in once the stream actually starts
@@ -137,10 +137,10 @@ export class GhostRadio {
     this.next = Math.max(this.next, secs + 5);
   }
 
-  // down under the voices (someone talking, you or the others), back up after
+  // silent while someone's talking (you or the others), back up after
   duck(on: boolean) {
     const ctx = this.sound.ctx;
-    if (ctx && this.ducker) this.ducker.gain.setTargetAtTime(on ? 0.3 : 1, ctx.currentTime, on ? 0.1 : 0.8);
+    if (ctx && this.ducker) this.ducker.gain.setTargetAtTime(on ? 0 : 1, ctx.currentTime, on ? 0.08 : 0.8);
   }
 
   update(dt: number, onRoof: boolean) {
