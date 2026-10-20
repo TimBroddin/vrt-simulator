@@ -23,6 +23,7 @@ export class GhostRadio {
   private src: MediaElementAudioSourceNode | null = null;
   private out: GainNode | null = null;
   private pan: StereoPannerNode | null = null;
+  private ducker: GainNode | null = null;
   private next = 10 + Math.random() * 35;
   private until = 0;
   private t = 0;
@@ -73,7 +74,8 @@ export class GhostRadio {
     this.out = ctx.createGain();
     this.out.gain.value = 0;
     this.pan = ctx.createStereoPanner();
-    this.src.connect(hp).connect(lp).connect(drive).connect(wow).connect(this.out).connect(this.pan);
+    this.ducker = ctx.createGain();
+    this.src.connect(hp).connect(lp).connect(drive).connect(wow).connect(this.out).connect(this.ducker).connect(this.pan);
     this.pan.connect(this.sound.dry);
     const send = ctx.createGain();
     send.gain.value = 1.4;
@@ -90,7 +92,7 @@ export class GhostRadio {
     const token = ++this.token;
     this.el.play().catch(() => this.stop(true));
     const now = ctx.currentTime;
-    const vol = 0.22 + Math.random() * 0.12;
+    const vol = 0.13 + Math.random() * 0.07;
     this.out.gain.cancelScheduledValues(now);
     this.out.gain.setValueAtTime(0, now);
     // it fades in once the stream actually starts
@@ -133,6 +135,12 @@ export class GhostRadio {
   hush(secs: number) {
     this.stop(true);
     this.next = Math.max(this.next, secs + 5);
+  }
+
+  // down under the voices (someone talking, you or the others), back up after
+  duck(on: boolean) {
+    const ctx = this.sound.ctx;
+    if (ctx && this.ducker) this.ducker.gain.setTargetAtTime(on ? 0.3 : 1, ctx.currentTime, on ? 0.1 : 0.8);
   }
 
   update(dt: number, onRoof: boolean) {

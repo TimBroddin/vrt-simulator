@@ -59,6 +59,7 @@ const loudness = (me: At, o: At) => (Math.abs(o.y - me.y) < 2 ? Math.max(0, 1 - 
 
 export class Intercom {
   talking = false;
+  voices = false; // someone else is on, the intercom or nearby
   near = false; // (main sets it) at a desk with microphones
   send: (ulaw: Uint8Array, kind: 1 | 2) => boolean = () => false;
   where: (id: string) => At | null = () => null; // (main sets it) where someone is, if they're in your world
@@ -318,6 +319,7 @@ export class Intercom {
     this.hiss?.gain.setTargetAtTime(on.length ? 0.02 : 0, now, 0.08);
     // (the microphone off a while after you let go, so the browser stops showing it)
     if (this.mic && !this.talking && !this.asking && (this.idle += dt) > MIC_IDLE) this.off();
+    this.voices = on.length > 0 || loud.length > 0;
     const mine = this.kind === 1 ? "OP DE INTERCOM" : this.audience() ? "JE PRAAT" : "JE PRAAT · NIEMAND IN DE BUURT";
     const txt = this.talking ? (this.asking ? "MICROFOON…" : mine) : on.length ? on.join(", ") : loud.length ? `${loud.join(", ")} ${loud.length > 1 ? "praten" : "praat"}` : "";
     const near = !this.talking && !on.length && loud.length > 0;

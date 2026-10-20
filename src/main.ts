@@ -919,6 +919,7 @@ function frame() {
     for (const m of [5, 15, 30, 60])
       if (playSecs >= m * 60) trackOnce(`play${m}`, "playtime", { minutes: m, meters: Math.round(walked), quests_done: quests.wins, money: quests.pts, hp: Math.round(food.hp) });
   }
+  radio.duck(intercom.talking || intercom.voices);
   radio.update(dt, sound.env.roof);
   if (ready && !finale.inHall && !mortsel.here && (nearT -= dt) <= 0) {
     nearT = 0.4;
