@@ -103,7 +103,7 @@ export function setupTouch(player: Player, actions: TouchActions) {
   btn("t-pause", actions.pause);
   btn("t-photo", actions.photo);
   btn("t-map", actions.map);
-  // the intercom: on while the thumb's on it
+  // talking (the intercom, at a desk): on while the thumb's on it
   const mic = document.getElementById("t-mic")!;
   mic.addEventListener(
     "touchstart",

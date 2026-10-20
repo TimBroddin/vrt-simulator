@@ -237,12 +237,15 @@ quests.nameOf = (id) => visitors.nameOf(id);
 quests.onFeed = (who, text) => chat.line("job", text, who);
 // on the phone: the radio goes off while the caller talks
 quests.onCall = (secs) => radio.hush(secs);
-// the intercom (hold V): your voice over the speakers, for everyone in your world
+// your voice (hold V): out loud for the ones near you; at a radio studio's desk, the
+// intercom: over the speakers, for everyone in your world
 const intercom = new Intercom(sound);
-intercom.send = (b) => visitors.sendVoice(b);
+intercom.send = (b, k) => visitors.sendVoice(b, k);
+intercom.where = (id) => visitors.where(id);
+intercom.audience = () => visitors.earshot(player.pos);
 intercom.onNote = (m) => chat.line("note", m);
 intercom.onStart = (n) => chat.line("talk", " op de intercom", n);
-visitors.onVoice = (id, n, b) => intercom.hear(id, n, b);
+visitors.onVoice = (id, n, b, k) => intercom.hear(id, n, b, k);
 chat.onSend = (m) => {
   if (visitors.say(m)) chat.line("me", m, visitors.name!);
   else chat.line("note", visitors.online ? "Niets verstuurd" : "Niet verbonden: niemand hoort je");
@@ -909,7 +912,7 @@ function frame() {
   }
   interact = false;
   sound.update(dt);
-  intercom.update(dt);
+  intercom.update(dt, started && !finale.inHall && !mortsel.here ? player : null);
   if (started && (locked || playing)) {
     playSecs += dt;
     walked += Math.min(player.speed * dt, 1);

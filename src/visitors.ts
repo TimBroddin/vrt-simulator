@@ -8,7 +8,7 @@ import { CHUNK, H } from "./config";
 import { Builder, LightCtx, type Spec } from "./builder";
 import { L } from "./layers";
 import { floorDiv, hash } from "./rng";
-import { CHAT_MAX, NAME_MAX, clean, type FromRoom, type Pos, type ToRoom, type Who } from "./protocol";
+import { CHAT_MAX, NAME_MAX, VOICE_NEAR, clean, type FromRoom, type Pos, type ToRoom, type Who } from "./protocol";
 import type { World } from "./world";
 import { OVER_KEY } from "./save";
 
@@ -86,7 +86,7 @@ export class Visitors {
   onLeave: (name: string) => void = () => {};
   onChat: (name: string, text: string) => void = () => {};
   onJob: (m: FromRoom) => void = () => {}; // what the room says about the jobs and the money
-  onVoice: (id: string, name: string, ulaw: Uint8Array) => void = () => {}; // someone on the intercom
+  onVoice: (id: string, name: string, ulaw: Uint8Array, kind: 1 | 2) => void = () => {}; // someone talking (1: on the intercom, 2: out loud)
   private key = playerKey();
   private ws: WebSocket | null = null;
   private retry = 1;
@@ -133,6 +133,20 @@ export class Visitors {
     return true;
   }
 
+  // where someone in your world is (where they're drawn), if they're in the building
+  where(id: string) {
+    const o = this.others.get(id);
+    return o?.n && o.s === this.seed && o.target ? o.pos : null;
+  }
+
+  // how many of the others would hear you out loud from here
+  earshot(me: { x: number; y: number; z: number }) {
+    let n = 0;
+    for (const o of this.others.values())
+      if (o.n && o.s === this.seed && o.target && Math.abs(o.pos.y - me.y) < 2 && Math.hypot(o.pos.x - me.x, o.pos.z - me.z) < VOICE_NEAR) n++;
+    return n;
+  }
+
   nameOf(id: string) {
     return this.others.get(id)?.n ?? "Iemand";
   }
@@ -145,11 +159,11 @@ export class Visitors {
     return true;
   }
 
-  // a bit of your voice for the intercom (μ-law); false if there's no line
-  sendVoice(ulaw: Uint8Array) {
+  // a bit of your voice (μ-law; kind 1: the intercom, 2: out loud); false if there's no line
+  sendVoice(ulaw: Uint8Array, kind: 1 | 2) {
     if (!this.name || this.ws?.readyState !== WebSocket.OPEN) return false;
     const b = new Uint8Array(1 + ulaw.length);
-    b[0] = 1;
+    b[0] = kind;
     b.set(ulaw, 1);
     this.ws.send(b);
     return true;
@@ -251,12 +265,13 @@ export class Visitors {
     }
   }
 
-  // [1, id × 8, ...μ-law]: only from the ones in your world
+  // [k, id × 8, ...μ-law]: only from the ones in your world
   private voice(b: Uint8Array) {
-    if (b.length < 10 || b[0] !== 1) return;
+    const k = b[0];
+    if (b.length < 10 || (k !== 1 && k !== 2)) return;
     const id = String.fromCharCode(...b.subarray(1, 9)).trim();
     const o = this.others.get(id);
-    if (o?.n && o.s === this.seed) this.onVoice(id, o.n, b.subarray(9));
+    if (o?.n && o.s === this.seed) this.onVoice(id, o.n, b.subarray(9), k);
   }
 
   private add(w: Who) {

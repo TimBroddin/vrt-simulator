@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { FOOD, JOB_TTL_MS, OPEN_JOBS, RING_AFTER_MS, START_MONEY, payOf } from "./jobs";
-import { VOICE_MAX, VOICE_RATE, fresh, freshWorld, handle, parseToRoom, peersOf, route, voice, type FromRoom, type Parsed, type Send, type State, type WorldState } from "./protocol";
+import { VOICE_MAX, VOICE_NEAR, VOICE_RATE, fresh, freshWorld, handle, listenersOf, parseToRoom, peersOf, route, voice, type FromRoom, type Parsed, type Send, type State, type WorldState } from "./protocol";
 import { ulawDec, ulawEnc } from "./intercom";
 
 // a fixed sequence of "random" numbers, so the deals are the same every run
@@ -271,7 +271,7 @@ describe("the intercom", () => {
   test("not before you've come in, and nothing that isn't a frame", () => {
     expect(voice(fresh(), frame(10), 0)).toBeNull();
     const a = inWorld();
-    expect(voice(a, new Uint8Array([2, 1, 2]), 0)).toBeNull();
+    expect(voice(a, new Uint8Array([3, 1, 2]), 0)).toBeNull();
     expect(voice(a, new Uint8Array([1]), 0)).toBeNull();
     expect(voice(a, frame(VOICE_MAX + 1), 0)).toBeNull();
   });
@@ -290,6 +290,23 @@ describe("the intercom", () => {
   test("only the others in the sender's world hear it", () => {
     const a = inWorld(), b = inWorld(), c = inWorld(7), d = fresh();
     expect([...peersOf(a, [a, b, c, d], (x) => x)]).toEqual([b]);
+  });
+
+  test("out loud, it keeps its kind", () => {
+    const out = voice(inWorld(), new Uint8Array([2, 0x7f, 0x7f]), 1000)!;
+    expect(out[0]).toBe(2);
+    expect(out.length).toBe(11);
+  });
+
+  test("out loud, only the ones nearby on your floor hear it", () => {
+    const at = (x: number, y = 0, s = 1953) => Object.assign(inWorld(s), { pos: { s, x, y, z: 0, a: 0 } });
+    const a = at(0), near = at(3), far = at(VOICE_NEAR + 10), up = at(1, 3.6), other = at(1, 0, 7), nowhere = inWorld();
+    const all = [a, near, far, up, other, nowhere];
+    const loud = new Uint8Array([2, 0x7f]), intercom = new Uint8Array([1, 0x7f]);
+    expect([...listenersOf(a, all, (x) => x, loud)]).toEqual([near]);
+    expect([...listenersOf(a, all, (x) => x, intercom)]).toEqual([near, far, up, nowhere]);
+    // (not in the building: nobody's near you)
+    expect([...listenersOf(nowhere, all, (x) => x, loud)]).toEqual([]);
   });
 
   test("μ-law gets there and back", () => {

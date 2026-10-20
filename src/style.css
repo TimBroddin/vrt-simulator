@@ -320,11 +320,12 @@ body.touch #waypoint { bottom: 12px; }
 #feed .fl.job b { color: #3ddc84; }
 #feed .leave::before { content: "← "; }
 body.chatting #feed .fl.out { opacity: 1; }
-#t-mic { display: none; }
-body.atmic #t-mic { display: grid; }
+body.atmic #t-mic { color: #ffd84a; }
 #intercom { margin-bottom: 8px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #ffd84a; }
 #intercom:empty { display: none; }
 #intercom::before { content: "🔊 "; }
+#intercom.near { color: #fff; }
+#intercom.near::before { content: "🗣 "; }
 #intercom.me { color: var(--pink); }
 #intercom.me::before { content: "● "; animation: blink 1s steps(1) infinite; }
 #feed .talk { font-size: 11px; letter-spacing: 0.08em; opacity: 0.85; }

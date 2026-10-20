@@ -4,7 +4,7 @@
 // its job) in its attachment, which survives hibernation; each world's jobs and
 // scores are in the object's storage, read back when it wakes up.
 import { DurableObject } from "cloudflare:workers";
-import { MAX_PLAYERS, fresh, freshWorld, handle, parseToRoom, peersOf, route, voice, who, type FromRoom, type State, type WorldState } from "../src/protocol";
+import { MAX_PLAYERS, fresh, freshWorld, handle, listenersOf, parseToRoom, route, voice, who, type FromRoom, type State, type WorldState } from "../src/protocol";
 
 interface Env {
   ASSETS: Fetcher;
@@ -61,14 +61,14 @@ export class Lobby extends DurableObject<Env> {
     });
   }
 
-  // a bit of someone's voice, straight on to the others in their world
+  // a bit of someone's voice, straight on to the others in their world (out loud: the ones nearby)
   private intercom(ws: WebSocket, raw: ArrayBuffer) {
     const st = ws.deserializeAttachment() as State | null;
     const out = st && voice(st, raw, Date.now());
     if (!st) return;
     ws.serializeAttachment(st);
     if (!out) return;
-    for (const x of peersOf(ws, this.ctx.getWebSockets(), (o) => o.deserializeAttachment() as State | null))
+    for (const x of listenersOf(ws, this.ctx.getWebSockets(), (o) => o.deserializeAttachment() as State | null, out))
       try {
         x.send(out);
       } catch {}

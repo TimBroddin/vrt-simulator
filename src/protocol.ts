@@ -14,7 +14,8 @@
 //                { t: "buy", f }               I'm buying food f (see FOOD in jobs.ts)
 //                { t: "dood" }                 I starved (half my money goes to the ambulance)
 //                "ping"                        keepalive (answered "pong")
-//                binary: [1, ...μ-law]         the intercom: a bit of my voice (8 kHz, see VOICE_* and voice())
+//                binary: [k, ...μ-law]         a bit of my voice (8 kHz, see VOICE_* and voice()); k = 1: the intercom
+//                                              (everyone in my world), 2: out loud (only the ones nearby)
 // room → client: { t: "hi", id, all }          you're id; everyone already here
 //                { t: "j", id, n, s }          someone came in
 //                { t: "p", id, s, x, y, z, a }
@@ -32,7 +33,7 @@
 //                { t: "dood", lost, pts }      (to you) the ambulance took `lost`
 //                { t: "rip", id }              someone starved
 //                { t: "top", top }             the board changed (someone spent, or died)
-//                binary: [1, id × 8, ...μ-law] someone on the intercom
+//                binary: [k, id × 8, ...μ-law] someone on the intercom (k = 1) or talking nearby (k = 2)
 import { FOOD, JOBS, JOB_TTL_MS, OPEN_JOBS, RING_AFTER_MS, START_MONEY, payOf } from "./jobs";
 
 export interface Pos {
@@ -98,6 +99,7 @@ export const CHAT_MAX = 140;
 export const MAX_STEPS = 64;
 export const VOICE_RATE = 8000; // the intercom: 8 kHz μ-law, a byte a sample
 export const VOICE_MAX = 1600; // bytes in one frame (clients send 0.1 s)
+export const VOICE_NEAR = 20; // m: how far you're heard out loud (on your own floor)
 const VOICE_BURST = VOICE_RATE; // what may come in at once (a second's worth), refilled a bit faster than real time
 const TOP_N = 5;
 const MAX_SCORES = 1000;
@@ -343,19 +345,19 @@ function prune(w: WorldState, keep: string) {
   for (const k of keys.slice(0, keys.length - MAX_SCORES + 1)) delete w.scores[k];
 }
 
-// A bit of someone's voice on the intercom, for the others in their world: the
-// frame with their id put in front, or null if it's not one, they haven't come
-// in, or they're sending faster than anyone can talk.
+// A bit of someone's voice, on the intercom or out loud: the frame with their id
+// put in front, or null if it's not one, they haven't come in, or they're sending
+// faster than anyone can talk.
 export function voice(st: State, raw: ArrayBuffer | Uint8Array, now: number): Uint8Array | null {
   const b = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
-  if (b.length < 2 || b.length > VOICE_MAX + 1 || b[0] !== 1 || !st.n || st.s == null) return null;
+  if (b.length < 2 || b.length > VOICE_MAX + 1 || (b[0] !== 1 && b[0] !== 2) || !st.n || st.s == null) return null;
   const n = b.length - 1;
   st.vb = Math.min(VOICE_BURST, (st.vb ?? VOICE_BURST) + ((now - (st.vt ?? now)) / 1000) * VOICE_RATE * 1.25);
   st.vt = now;
   if (n > st.vb) return null;
   st.vb -= n;
   const out = new Uint8Array(9 + n);
-  out[0] = 1;
+  out[0] = b[0]!;
   for (let i = 0; i < 8; i++) out[1 + i] = st.id.charCodeAt(i) || 32;
   out.set(b.subarray(1), 9);
   return out;
@@ -366,6 +368,21 @@ export function* peersOf<T>(me: T, all: Iterable<T>, stOf: (x: T) => State | nul
   const s = stOf(me)?.s;
   if (s == null) return;
   for (const x of all) if (x !== me && stOf(x)?.s === s) yield x;
+}
+
+// who hears a voice frame: the intercom, the others in the sender's world; out
+// loud, only the ones on their floor and within earshot (with a bit to spare, as
+// positions come in 5 times a second)
+export function* listenersOf<T>(me: T, all: Iterable<T>, stOf: (x: T) => State | null, frame: Uint8Array) {
+  const p = stOf(me)?.pos;
+  if (frame[0] === 2 && !p) return;
+  for (const x of peersOf(me, all, stOf)) {
+    if (frame[0] !== 2) yield x;
+    else {
+      const q = stOf(x)?.pos;
+      if (q && Math.abs(q.y - p!.y) < 2 && Math.hypot(q.x - p!.x, q.z - p!.z) < VOICE_NEAR + 5) yield x;
+    }
+  }
 }
 
 // Hand out what handle() returned. `all` is everyone connected (the sender too).
